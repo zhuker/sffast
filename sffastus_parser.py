@@ -12,8 +12,56 @@ import struct
 import os
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 
 SFFASTUS_PATH = "sffastus"
+
+# Valid Subaru VIN prefixes
+# 4S3 - US manufactured (Subaru of Indiana Automotive)
+# JF1 - Japan manufactured (Fuji Heavy Industries)
+# JF2 - Japan manufactured (Fuji Heavy Industries, newer)
+SUBARU_VIN_PREFIXES = ('4S3', '4S4', 'JF1', 'JF2')
+
+
+def is_valid_subaru_vin(vin: str) -> bool:
+    """
+    Check if a string looks like a valid Subaru VIN.
+
+    Valid Subaru VINs:
+    - Start with '4S3' (US manufactured - Indiana)
+    - Start with 'JF1' (Japan manufactured)
+    - Start with 'JF2' (Japan manufactured, newer)
+    - Are 17 characters long (standard VIN length)
+
+    Args:
+        vin: String to check
+
+    Returns:
+        True if it looks like a valid Subaru VIN
+    """
+    if not vin or len(vin) < 3:
+        return False
+    return vin.startswith(SUBARU_VIN_PREFIXES)
+
+
+def is_valid_subaru_vin_strict(vin: str) -> bool:
+    """
+    Strict VIN validation - checks length and character set.
+
+    Args:
+        vin: String to check (should be 17 chars)
+
+    Returns:
+        True if it's a properly formatted Subaru VIN
+    """
+    if not is_valid_subaru_vin(vin):
+        return False
+    if len(vin) != 17:
+        return False
+    # VINs use alphanumeric chars except I, O, Q
+    valid_chars = set('0123456789ABCDEFGHJKLMNPRSTUVWXYZ')
+    return all(c in valid_chars for c in vin.upper())
+
 
 def is_printable_text(data, threshold=0.7):
     """Check if data is mostly printable ASCII/extended ASCII text"""
@@ -91,10 +139,10 @@ def analyze_region(f, start, size, description=""):
             pass
         return result
 
-    # Check for VIN-like patterns (4S3 or JF1)
+    # Check for VIN-like patterns
     try:
         text = data.decode('latin-1', errors='ignore')
-        if '4S3' in text or 'JF1' in text:
+        if any(prefix in text for prefix in SUBARU_VIN_PREFIXES):
             result['type'] = 'vin_data'
             return result
     except:
@@ -245,7 +293,7 @@ def analyze_vin_section(f, start, count=10):
             vin2 = record[17:34].decode('latin-1').strip('\x00')
             ptr = struct.unpack('<I', record[34:38])[0]
 
-            if vin1 and (vin1.startswith('4S3') or vin1.startswith('JF1')):
+            if is_valid_subaru_vin(vin1):
                 print(f"  Record {i}: {vin1} - {vin2} -> 0x{ptr:08X}")
         except:
             print(f"  Record {i}: <parse error>")
@@ -338,6 +386,220 @@ def extract_record_at_offset(f, offset, record_size=256):
         print(f"  {offset+i:08X}: {hex_part:48s} {ascii_part}")
 
     return data
+
+
+@dataclass
+class VINRecord:
+    """Represents a VIN range record from sffastus"""
+    offset: int
+    vin_start: str
+    vin_end: str
+    section: int
+    index: int
+    raw_data: bytes
+
+
+def parse_vin_blocks(f, start_offset=0x800, max_records=None, verbose=False):
+    """
+    Parse VIN range records starting at given offset.
+
+    Each record is 38 bytes:
+    - Bytes 0-16: VIN range start (17 chars ASCII)
+    - Bytes 17-33: VIN range end (17 chars ASCII)
+    - Bytes 34-35: Section number (uint16 LE)
+    - Bytes 36-37: Index within section (uint16 LE)
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where VIN records begin (default 0x800)
+        max_records: Maximum records to parse (None = until invalid)
+        verbose: Print progress during parsing
+
+    Returns:
+        List of VINRecord objects
+    """
+    RECORD_SIZE = 38
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Parse fields
+        vin_start = data[0:17].decode('latin-1', errors='replace').strip('\x00')
+        vin_end = data[17:34].decode('latin-1', errors='replace').strip('\x00')
+        section = struct.unpack('<H', data[34:36])[0]
+        index = struct.unpack('<H', data[36:38])[0]
+
+        # Validate - must be a valid Subaru VIN
+        if not is_valid_subaru_vin(vin_start):
+            # End of VIN records
+            break
+
+        record = VINRecord(
+            offset=offset,
+            vin_start=vin_start,
+            vin_end=vin_end,
+            section=section,
+            index=index,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 100 == 0:
+            print(f"  Parsed {count} records at 0x{offset:06X}...")
+
+        count += 1
+
+    return records
+
+
+def analyze_vin_blocks(f, start_offset=0x800, max_records=2000):
+    """
+    Analyze VIN block structure and print statistics.
+
+    Returns dict with analysis results.
+    """
+    print(f"\n=== Analyzing VIN Blocks at 0x{start_offset:X} ===")
+
+    records = parse_vin_blocks(f, start_offset, max_records, verbose=True)
+
+    if not records:
+        print("  No valid VIN records found!")
+        return {}
+
+    # Collect statistics
+    sections = {}
+    for rec in records:
+        if rec.section not in sections:
+            sections[rec.section] = {'count': 0, 'min_idx': rec.index, 'max_idx': rec.index}
+        sections[rec.section]['count'] += 1
+        sections[rec.section]['min_idx'] = min(sections[rec.section]['min_idx'], rec.index)
+        sections[rec.section]['max_idx'] = max(sections[rec.section]['max_idx'], rec.index)
+
+    # Print results
+    print(f"\n  Total records: {len(records)}")
+    print(f"  Offset range: 0x{records[0].offset:06X} - 0x{records[-1].offset:06X}")
+    print(f"  First VIN: {records[0].vin_start}")
+    print(f"  Last VIN: {records[-1].vin_end}")
+
+    print(f"\n  Sections found: {len(sections)}")
+    for sec in sorted(sections.keys()):
+        info = sections[sec]
+        print(f"    Section {sec}: {info['count']} records, index {info['min_idx']}-{info['max_idx']}")
+
+    # Sample records
+    print(f"\n  First 5 records:")
+    for rec in records[:5]:
+        print(f"    0x{rec.offset:06X}: {rec.vin_start} - {rec.vin_end} [sec={rec.section}, idx={rec.index}]")
+
+    print(f"\n  Last 5 records:")
+    for rec in records[-5:]:
+        print(f"    0x{rec.offset:06X}: {rec.vin_start} - {rec.vin_end} [sec={rec.section}, idx={rec.index}]")
+
+    return {
+        'records': records,
+        'sections': sections,
+        'total': len(records)
+    }
+
+
+def scan_vin_blocks_2kb(f, min_contiguous=5):
+    """
+    Scan file for 2KB VIN blocks.
+
+    VIN data is organized in 2KB (2048 byte) blocks:
+    - Each block contains ~53 VIN records (38 bytes each)
+    - Blocks end with ~34 bytes of zero padding
+    - Uses is_valid_subaru_vin() to detect VIN blocks
+
+    Args:
+        f: File handle to sffastus
+        min_contiguous: Minimum contiguous blocks to report as region
+
+    Returns:
+        List of (start_offset, block_count, estimated_records) tuples
+    """
+    BLOCK_SIZE = 2048
+    RECORDS_PER_BLOCK = 53  # Approximate
+
+    f.seek(0, 2)
+    file_size = f.tell()
+
+    regions = []
+    current_start = None
+    current_count = 0
+
+    for offset in range(0, file_size, BLOCK_SIZE):
+        f.seek(offset)
+        data = f.read(17)
+        if len(data) < 17:
+            break
+
+        vin = data.decode('latin-1', errors='replace')
+
+        if is_valid_subaru_vin(vin):
+            if current_start is None:
+                current_start = offset
+                current_count = 1
+            else:
+                current_count += 1
+        else:
+            print(f"0x{offset:08X} - non vin '{vin}'")
+            if current_start is not None and current_count >= min_contiguous:
+                regions.append((current_start, current_count, current_count * RECORDS_PER_BLOCK))
+            current_start = None
+            current_count = 0
+
+    # Handle last region
+    if current_start is not None and current_count >= min_contiguous:
+        regions.append((current_start, current_count, current_count * RECORDS_PER_BLOCK))
+
+    return regions
+
+
+def analyze_vin_blocks_2kb(f, min_contiguous=5):
+    """
+    Analyze 2KB VIN block structure and print report.
+    """
+    f.seek(0, 2)
+    file_size = f.tell()
+
+    print(f"\n=== 2KB VIN Block Analysis ===")
+    print(f"File size: {file_size:,} bytes ({file_size/1024/1024:.1f} MB)")
+
+    regions = scan_vin_blocks_2kb(f, min_contiguous)
+
+    if not regions:
+        print("No VIN block regions found!")
+        return []
+
+    total_blocks = sum(r[1] for r in regions)
+    total_records = sum(r[2] for r in regions)
+
+    print(f"\nFound {len(regions)} contiguous VIN regions (>= {min_contiguous} blocks):")
+    print(f"{'Start':>12} {'End':>12} {'Blocks':>8} {'Records':>10}")
+    print("-" * 46)
+
+    for start, blocks, records in regions:
+        end = start + blocks * 2048
+        print(f"0x{start:08X}  0x{end:08X}  {blocks:8d}  ~{records:9d}")
+
+    print("-" * 46)
+    print(f"{'Total':>26}  {total_blocks:8d}  ~{total_records:9d}")
+    print(f"\nTotal VIN data: {total_blocks * 2048 / 1024 / 1024:.2f} MB")
+
+    return regions
+
 
 def main():
     if not os.path.exists(SFFASTUS_PATH):
