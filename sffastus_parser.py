@@ -554,7 +554,7 @@ def scan_vin_blocks_2kb(f, min_contiguous=5):
             else:
                 current_count += 1
         else:
-            print(f"0x{offset:08X} - non vin '{vin}'")
+            # print(f"0x{offset:08X} - non vin '{vin}'")
             if current_start is not None and current_count >= min_contiguous:
                 regions.append((current_start, current_count, current_count * RECORDS_PER_BLOCK))
             current_start = None

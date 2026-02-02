@@ -240,6 +240,74 @@ class TestVINBlocks2KB(unittest.TestCase):
         max_blocks = max(r[1] for r in regions)
         self.assertGreater(max_blocks, 100)
 
+    def test_print_block_interpretations(self):
+        """
+        Print interpretation of the first few 2KB blocks.
+        Useful for manual verification of block structure.
+        """
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Detailed VIN Block Inspection (First 2 Blocks) ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Start at known VIN region
+            start_addr = 0x800
+
+            for block_idx in range(2):
+                block_addr = start_addr + (block_idx * 2048)
+                f.seek(block_addr)
+                block = f.read(2048)
+
+                print(f"\n[Block {block_idx}] Offset: 0x{block_addr:06X} - 0x{block_addr+2048:06X}")
+
+                # Scan for records
+                rec_size = 38
+                record_count = 0
+                valid_records = []
+
+                for i in range(53): # Max theoretical records (2048 // 38 = 53)
+                    offset = i * rec_size
+                    rec_data = block[offset:offset+rec_size]
+
+                    # Check for zero/padding
+                    if all(b == 0 for b in rec_data):
+                        break
+
+                    # Parse
+                    try:
+                        p_start = rec_data[0:17].decode('latin-1').strip('\x00')
+                        p_end = rec_data[17:34].decode('latin-1').strip('\x00')
+
+                        # Section/Index or Pointer
+                        p_sec = int.from_bytes(rec_data[34:36], 'little')
+                        p_idx = int.from_bytes(rec_data[36:38], 'little')
+                        p_full = int.from_bytes(rec_data[34:38], 'little')
+
+                        if is_valid_subaru_vin(p_start):
+                            valid_records.append(
+                                f"  Rec {i:02d}: {p_start} -> {p_end} | "
+                                f"Ptr: 0x{p_full:08X} (Sec:{p_sec}, Idx:{p_idx})"
+                            )
+                            record_count += 1
+                    except:
+                        pass
+
+                # Check padding
+                last_byte_idx = 0
+                for i in range(2047, -1, -1):
+                    if block[i] != 0:
+                        last_byte_idx = i
+                        break
+
+                padding_size = 2047 - last_byte_idx
+
+                print(f"Status: {record_count} records found")
+                print(f"Padding: {padding_size} bytes at end")
+                print("Content:")
+                for line in valid_records:
+                    print(line)
+
 
 if __name__ == '__main__':
     # Run tests
