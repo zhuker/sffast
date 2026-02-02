@@ -65,16 +65,42 @@ def parse_model_index_record(f, offset):
         if val1 == 0 and val2 == 0:
             continue
             
-        entries.append({
-            'unknown': val1,
-            'block_idx': val2,
-            'offset_in_rec': 6 + i
-        })
-        
+    # Extract metadata fields from offset 186 (0xBA)
+    # 0xBA: Series (2)
+    # 0xBC: Model Name (15)
+    # 0xCB: Start Date (6)
+    # 0xD1: End Date (6)
+    # 0xD7: Features (14)
+    # 0xE5: Cat 1 (8)
+    # 0xED: Cat 2 (8)
+    # 0xF5: Cat 3 (8)
+    # 0xFD: Cat 4 (8)
+    # 0x105: Cat 5 (8)
+    # 0x10D: Cat 6 (8)
+    
+    metadata = {
+        'series': data[0xBA:0xBC].decode('latin-1').strip(),
+        'model_name': data[0xBC:0xCB].decode('latin-1').strip(),
+        'start_date': data[0xCB:0xD1].decode('latin-1').strip(),
+        'end_date': data[0xD1:0xD7].decode('latin-1').strip(),
+        'features': data[0xD7:0xDF].decode('latin-1').strip(),
+        'categories': [
+            data[0xDF:0xE5+1].decode('latin-1').strip(),
+            data[0xE5+1:0xED+1].decode('latin-1').strip(),
+            data[0xED+1:0xF5+1].decode('latin-1').strip(),
+            data[0xF5+1:0xFD+1].decode('latin-1').strip(),
+            data[0xFD+1:0x105+1].decode('latin-1').strip(),
+            data[0x105+1:0x10D+1].decode('latin-1').strip(),
+            data[0x10D+1:0x115+1].decode('latin-1').strip()
+        ]
+    }
+    
     return {
         'offset': offset,
         'model': model_code,
-        'entries': entries
+        'entries': entries,
+        'metadata': metadata,
+        'indices_raw': data[0x06:0xBA]
     }
 
 def main():
@@ -128,7 +154,22 @@ def main():
     # Print results
     for rec in records:
         print(f"\nModel: {rec['model']} (Offset 0x{rec['offset']:X})")
-        print(f"  Entries: {len(rec['entries'])}")
+        
+        md = rec['metadata']
+        print(f"  Name: {md['model_name']} ({md['series']})")
+        print(f"  Prod: {md['start_date']} - {md['end_date']}")
+        print(f"  Features: {md['features']}")
+        print(f"  Cats: {', '.join(filter(None, md['categories']))}")
+        
+        print(f"  Referenced Blocks: {len(rec['entries'])}")
+        
+        print("  Unknown Data (0x06-0xBA):")
+        raw = rec['indices_raw']
+        for i in range(0, len(raw), 16):
+            chunk = raw[i:i+16]
+            hex_s = ' '.join(f'{b:02X}' for b in chunk)
+            ascii_s = ''.join(chr(b) if 32 <= b <= 126 else '.' for b in chunk)
+            print(f"    {i:03X}: {hex_s:48} | {ascii_s}")
         
         # Print first few entries
         hex_dump = []
