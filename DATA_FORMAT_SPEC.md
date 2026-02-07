@@ -261,6 +261,38 @@ Offset  Size  Field
 
 **Validation:** Search for a known part number in the app, check if model code matches.
 
+### Model Specification Records (103-byte Type) (0x0CD4B800+) - **VALIDATED ✓**
+
+**Record size:** 103 bytes
+**Encoding:** CP437
+
+Defines detailed "Applied Model" specifications for Subaru vehicles. Fields are variable-length and padded with spaces.
+Located in blocks around `0x0CD4B800`.
+
+**Structure Overview:**
+```
+Offset  Size  Field               Examples
+------  ----  -----               --------
+0x00    6     Model Code          "B11", "G11", "B13"
+0x06    15    Production Period   "011199601199805"
+0x15    18    Applied Model       "BD7-Y3M", "GDF-YEH"
+0x27    8     Body Config         "S" (Sedan), "W" (Wagon), "WOBK" (Wagon Outback)
+0x2F    8     Engine Code         "EJ22EZ", "EJ25D", "255", "257"
+0x37    8     Drivetrain          "F4WD", "4W"
+0x3F    8     Transmission        "MT", "5MT", "6MT", "AT"
+0x47    8     Trim Level          "L", "BASE", "STI", "25GT"
+0x4F    6     Spec/Option         "N/S" (Non-Sunroof), "YAD"
+0x55    18    Padding/Reserved
+```
+
+**Notes:**
+- Fields use variable-length values with space padding (e.g., "MT" vs "5MT")
+- Parser uses wider capture windows to handle variations
+- Turbo engines identifiable by codes: 255, 257, 205, 207, or 'T' in engine code
+- Manual transmissions contain "MT" substring
+
+**Validation:** Parse records from known offsets and verify engine/transmission/trim combinations match known Subaru specifications.
+
 ### Part Range Records (24-byte Type) (0x0CD42800+) - **NEW**
 
 **Record size:** 24 bytes

@@ -468,6 +468,100 @@ class MultilingualPartRecord:
     raw_data: bytes
 
 
+@dataclass
+class ModelSpecRecord103:
+    """
+    Parsed representation of a Subaru Applied Model string.
+    Handles variable-length fields found in B11, B13, and G11 chassis codes.
+    """
+    # Metadata
+    offset: int
+    raw_data: bytes
+
+    # Identification
+    model_code: str  # e.g., "B11", "G11"
+    production_period: str  # e.g., "0111996..."
+    applied_model: str  # e.g., "BD7-Y3M", "GDF-YEH"
+
+    # Specs
+    body_config: str  # e.g., "S" (Sedan), "WOBK" (Wagon Outback)
+    engine: str  # e.g., "EJ22EZ", "257", "255"
+    drivetrain: str  # e.g., "F4WD", "4W"
+    transmission: str  # e.g., "MT", "5MT", "6MT"
+
+    # Trim & Options
+    trim_level: str  # e.g., "L", "25GT", "STI"
+    spec_option: str  # e.g., "N/S" (Non-Sunroof), "YAD"
+
+    # Unused / Reserved (kept for preservation)
+    _padding: str
+
+    @property
+    def is_turbo(self) -> bool:
+        """Heuristic check for turbo engines (EJ255, EJ257, or 'T' code)."""
+        turbo_codes = {'255', '257', '205', '207'}
+        return self.engine in turbo_codes or 'T' in self.engine
+
+    @property
+    def is_manual(self) -> bool:
+        return 'MT' in self.transmission
+
+    @staticmethod
+    def parse_103(data: bytes, offset: int = 0):
+        """
+        Parses fixed-width Subaru model data, automatically stripping whitespace padding.
+        Uses wider windows to capture variable length fields (e.g. '5MT' vs 'MT').
+        """
+
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        # Parsing Logic based on observed B11/G11/B13 offsets
+        return ModelSpecRecord103(
+            offset=offset,
+            raw_data=data,
+
+            # Fixed Header
+            model_code=clean(data[0:6]),
+            production_period=clean(data[6:21]),
+            applied_model=clean(data[21:39]),  # Expanded to catch long codes
+
+            # Variable Specs (Offsets adjusted for wider capture)
+            body_config=clean(data[39:47]),  # Window for "S", "W", "WOBK"
+            engine=clean(data[47:55]),  # Window for "EJ22EZ", "257"
+            drivetrain=clean(data[55:63]),  # Window for "F4WD", "4W"
+            transmission=clean(data[63:71]),  # Window for "MT", "5MT", "6MT"
+            trim_level=clean(data[71:79]),  # Window for "L", "STI", "25GT"
+            spec_option=clean(data[79:85]),  # Window for "N/S"
+
+            _padding=clean(data[85:])
+        )
+
+
+def is_model_spec_block_103(data: bytes) -> bool:
+    """
+    Check if data looks like a 103-byte model spec record block.
+
+    Detection heuristics:
+    - Consistent model codes every 103 bytes.
+    """
+    if len(data) < 103:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 206:
+            if not is_valid_model_code(data[103:103+6]):
+                return False
+
+        return True
+    except:
+        return False
+
 
 @dataclass
 class PartRangeRecord24:
@@ -675,6 +769,53 @@ def is_multilingual_part_block(data: bytes) -> bool:
         return False
 
 
+
+
+
+def parse_model_spec_records_103(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse model spec records (103 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of ModelSpecRecord103 objects
+    """
+    RECORD_SIZE = 103
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+
+        # Parse fields (cp437)
+        record = ModelSpecRecord103.parse_103(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_part_range_records_24(f, start_offset, max_records=None, verbose=False):
@@ -1309,17 +1450,17 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     if is_part_range_block_24(data):
         return 'part_range_24'
 
-    # 4. Multilingual part block - 192-byte records
     if is_multilingual_part_block(data):
         return 'multilingual_part'
 
-    # 4b. Multilingual part block (180-byte) - NEW
     if is_multilingual_part_block_180(data):
         return 'multilingual_part_180'
 
-    # 4c. Multilingual part block (167-byte) - NEW
     if is_multilingual_part_block_167(data):
         return 'multilingual_part_167'
+
+    if is_model_spec_block_103(data):
+        return 'model_spec_103'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start

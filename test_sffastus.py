@@ -15,10 +15,10 @@ from sffastus_parser import (
     parse_vin_blocks,
     parse_vin_model_records,
     parse_multilingual_part_records,
-    parse_multilingual_part_records,
     parse_multilingual_part_records_180,
     parse_multilingual_part_records_167,
     parse_part_range_records_24,
+    parse_model_spec_records_103,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -29,6 +29,7 @@ from sffastus_parser import (
     is_multilingual_part_block_180,
     is_multilingual_part_block_167,
     is_part_range_block_24,
+    is_model_spec_block_103,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -41,6 +42,7 @@ from sffastus_parser import (
     MultilingualPartRecord180,
     MultilingualPartRecord167,
     PartRangeRecord24,
+    ModelSpecRecord103,
 )
 
 # Test data paths
@@ -747,6 +749,57 @@ class TestPartRangeRecords24(unittest.TestCase):
         self.assertEqual(records[0].part_end, '12024')
 
 
+class TestModelSpecRecords103(unittest.TestCase):
+    """Tests for 103-byte model specification records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_model_spec_block_103(self):
+        """Test detection of 103-byte model spec block pattern"""
+        # Create fake 103-byte record
+        # Model(6) + Period(15) + BodySpec(15) + ... + Trailer(6) = 103
+        record = b'B11   ' + b'011199601199805' + b'BD7-Y3M        ' + b' ' * 26 + b'EJ25D  ' + b'F4WD   ' + b'AT     ' + b'LSI    ' + b'N/S    ' + b' ' * 6
+        self.assertEqual(len(record), 103)
+
+        # Block with 2 consistent records
+        data = (record * 2) + b'\x00' * (2048 - 206)
+        self.assertTrue(is_model_spec_block_103(data))
+
+    def test_detect_model_spec_block_103(self):
+        """Test detect_block_type identifies model_spec_103"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0CD4B800 which contains 103-byte records
+            f.seek(0x0CD4B800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0CD4B800)
+        self.assertEqual(block_type, 'model_spec_103')
+
+    def test_parse_model_spec_records_103_us2(self):
+        """Parse 103-byte records from 0x0CD4B800 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_model_spec_records_103(f, start_offset=0x0CD4B800, max_records=10)
+
+        for i, r in enumerate(records):
+            print(i, r)
+
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].trim_level, 'BASE')
+        self.assertEqual(records[3].model_code, 'B11')
+        self.assertIsInstance(records[3], ModelSpecRecord103)
+        self.assertEqual(records[3].engine, 'EJ25D')
+        self.assertEqual(records[3].drivetrain, 'F4WD')
+
+
 class TestBlockTypeScan(unittest.TestCase):
     """Tests for full file block type scanning"""
 
@@ -800,6 +853,16 @@ class TestBlockTypeScan(unittest.TestCase):
 
         with open(SFCDUS2_PATH, 'rb') as f:
             ranges = scan_block_types(f)
+
+        for r in ranges:
+            start, end, count, type = r
+            if type == 'model_spec_103':
+                print(start, end, count, type)
+                with open(SFCDUS2_PATH, 'rb') as f:
+                    for _start in range(start, end, 2048):
+                        records = parse_model_spec_records_103(f, start_offset=_start, max_records=2048//103)
+                        for i, r in enumerate(records):
+                            print(f"0x{start:08X} {i} {r}")
 
         self.assertGreater(len(ranges), 0)
 
