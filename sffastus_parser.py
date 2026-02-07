@@ -469,6 +469,74 @@ class MultilingualPartRecord:
 
 
 @dataclass
+class ColorRecord91:
+    """Represents a color/paint code record from sffastus (91 bytes)
+
+    Located at 0x0DE1F800+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6): Model Code (e.g., "B11   ")
+        0x06 (6): Paint Code (e.g., "AC 62 ")
+        0x0C (20): Color Name EN (e.g., "SILVER M")
+        0x20 (20): Color Name DE (e.g., "SILBER M")
+        0x34 (20): Color Name FR (e.g., "ARGENT M")
+        0x48 (20): Color Name ES (e.g., "PLATA M")
+        0x5C (15): Padding/Reserved
+    """
+    offset: int
+    model_code: str
+    paint_code: str
+    color_name_en: str
+    color_name_de: str
+    color_name_fr: str
+    color_name_es: str
+    raw_data: bytes
+
+    @staticmethod
+    def parse_91(data: bytes, offset: int = 0):
+        """Parse a 91-byte color record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return ColorRecord91(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            paint_code=clean(data[6:10]),  # 4 bytes
+            color_name_en=clean(data[10:30]),  # 20 bytes
+            color_name_de=clean(data[30:50]),  # 20 bytes
+            color_name_fr=clean(data[50:70]),  # 20 bytes
+            color_name_es=clean(data[70:90]),  # 20 bytes
+        )
+
+
+def is_color_record_block_91(data: bytes) -> bool:
+    """
+    Check if data looks like a 91-byte color record block.
+
+    Detection heuristics:
+    - Consistent model codes every 91 bytes.
+    """
+    if len(data) < 91:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 182:  # 91 * 2
+            if not is_valid_model_code(data[91:91+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class CatalogApplicabilityRecord466:
     offset: int
 
@@ -848,6 +916,51 @@ def is_multilingual_part_block(data: bytes) -> bool:
 
 
 
+
+
+
+def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse color records (91 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of ColorRecord91 objects
+    """
+    RECORD_SIZE = 91
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = ColorRecord91.parse_91(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_model_spec_records_103(f, start_offset, max_records=None, verbose=False):
@@ -1543,6 +1656,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4f. Catalog applicability block (466-byte) - NEW
     if is_catalog_applicability_block_466(data):
         return 'catalog_applicability_466'
+
+    # 4g. Color record block (91-byte) - NEW
+    if is_color_record_block_91(data):
+        return 'color_record_91'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start

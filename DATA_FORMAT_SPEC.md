@@ -288,6 +288,34 @@ Offset  Size  Field
 
 **Validation:** Parse records and verify part numbers match known Subaru part catalogs.
 
+### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
+
+**Record size:** 91 bytes
+**Encoding:** CP437
+
+Defines paint/color codes with multilingual color names.
+Located in blocks around `0x0DE1F800`.
+
+**Structure:**
+```
+Offset  Size  Field
+------  ----  -----
+0x00    6     Model Code (e.g., "B11   ")
+0x06    4     Paint Code (e.g., "AC 0")
+0x0A    20    Color Name EN (e.g., "LIGHT SILVER M")
+0x1E    20    Color Name DE (e.g., "HELLSILBER M")
+0x32    20    Color Name FR (e.g., "ARGENT CLAIR M")
+0x46    20    Color Name ES (e.g., "PLATA CLARO M")
+0x5A    1     Padding/Reserved
+```
+
+**Notes:**
+- Contains color names in 4 languages (English, German, French, Spanish)
+- Paint codes follow standard automotive format
+- Similar structure to 180-byte multilingual part records
+
+**Validation:** Cross-reference paint codes with known Subaru color catalogs.
+
 ### Model Specification Records (103-byte Type) (0x0CD4B800+) - **VALIDATED ✓**
 
 **Record size:** 103 bytes

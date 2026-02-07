@@ -19,6 +19,7 @@ from sffastus_parser import (
     parse_multilingual_part_records_167,
     parse_part_range_records_24,
     parse_model_spec_records_103,
+    parse_color_records_91,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -30,6 +31,7 @@ from sffastus_parser import (
     is_multilingual_part_block_167,
     is_part_range_block_24,
     is_model_spec_block_103,
+    is_color_record_block_91,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -43,6 +45,7 @@ from sffastus_parser import (
     MultilingualPartRecord167,
     PartRangeRecord24,
     ModelSpecRecord103, CatalogApplicabilityRecord466,
+    ColorRecord91,
 )
 
 # Test data paths
@@ -838,6 +841,54 @@ class TestPartDetailRecords466(unittest.TestCase):
         # Print for manual inspection
         for i, r in enumerate(records):
             print(f"Record {i}: {r}")
+
+
+class TestColorRecords91(unittest.TestCase):
+    """Tests for 91-byte color/paint code records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_color_record_block_91(self):
+        """Test detection of 91-byte color record block pattern"""
+        # Create fake 91-byte record
+        record = b'B11   ' + b'AC 62 ' + b'SILVER M' + b' ' * 12 + b'SILBER M' + b' ' * 12 + b'ARGENT M' + b' ' * 12 + b'PLATA M' + b' ' * 13 + b' ' * 15
+        self.assertEqual(len(record), 91)
+
+        # Block with 2 consistent records
+        data = (record * 2) + b'\x00' * (2048 - 182)
+        self.assertTrue(is_color_record_block_91(data))
+
+    def test_detect_color_record_block_91(self):
+        """Test detect_block_type identifies color_record_91"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DE1F800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DE1F800)
+        self.assertEqual(block_type, 'color_record_91')
+
+    def test_parse_color_records_91_us2(self):
+        """Parse 91-byte color records from 0x0DE1F800 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_color_records_91(f, start_offset=0x0DE1F800, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], ColorRecord91)
+        # Check that we have color names
+        self.assertTrue(len(records[0].color_name_en) > 0)
+        
+        # Print for inspection
+        for i, r in enumerate(records[:3]):
+            print(f"Record {i}: {r.paint_code} - {r.color_name_en}")
 
 
 class TestBlockTypeScan(unittest.TestCase):
