@@ -23,6 +23,7 @@ from sffastus_parser import (
     parse_color_records_91,
     parse_glossary_records_28,
     parse_code_index_records_33,
+    parse_fig_group_category_records_184,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -38,6 +39,7 @@ from sffastus_parser import (
     is_color_record_block_91,
     is_glossary_record_block_28,
     is_code_index_record_block_33,
+    is_fig_group_category_block_184,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -56,6 +58,7 @@ from sffastus_parser import (
     ColorRecord91,
     GlossaryRecord28,
     CodeIndexRecord33,
+    FIGGroupCategoryRecord184,
 )
 
 # Test data paths
@@ -1152,6 +1155,119 @@ class TestCodeIndexRecords33(unittest.TestCase):
         print("\n=== CodeIndexRecord33 structure validated successfully ===")
 
 
+class TestFIGGroupCategoryRecords184(unittest.TestCase):
+    """Tests for 184-byte FIG group category records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_fig_group_category_block_184(self):
+        """Test detection of 184-byte FIG group category block pattern"""
+        # Create fake 184-byte record
+        # Model(6) + FIGCode(2) + EN(40) + DE(40) + FR(40) + ES(40) + Trailer(16)
+        model_code = b'B11   '
+        fig_code1 = b'0A'
+        desc_en1 = b'ENGINE MAIN' + b' ' * 29  # 40 bytes
+        desc_de1 = b'MOTOR-HAUPTBAUGRUPPE' + b' ' * 20  # 40 bytes
+        desc_fr1 = b'MOTEUR, PRINCIPAL' + b' ' * 23  # 40 bytes
+        desc_es1 = b'UNIDAT PRINCIPAL DEL MOTOR' + b' ' * 14  # 40 bytes
+        trailer1 = b'\x00' * 16
+
+        record1 = model_code + fig_code1 + desc_en1 + desc_de1 + desc_fr1 + desc_es1 + trailer1
+        self.assertEqual(len(record1), 184)
+
+        # Create second record for detection validation
+        fig_code2 = b'0B'
+        desc_en2 = b'ENGINE AUXILIARIES' + b' ' * 22  # 40 bytes
+        desc_de2 = b'MOTOR-ZUSATZTEILE' + b' ' * 23  # 40 bytes
+        desc_fr2 = b'MOTEUR, AUXILIAIRES' + b' ' * 21  # 40 bytes
+        desc_es2 = b'UNIDADES AUXILIARES DEL MOTOR' + b' ' * 11  # 40 bytes
+        trailer2 = b'\x00' * 16
+
+        record2 = model_code + fig_code2 + desc_en2 + desc_de2 + desc_fr2 + desc_es2 + trailer2
+        self.assertEqual(len(record2), 184)
+
+        # Combine records and pad to 2KB block
+        data = record1 + record2 + b'\x00' * (2048 - 368)
+        self.assertTrue(is_fig_group_category_block_184(data))
+
+    def test_detect_fig_group_category_block_184(self):
+        """Test detect_block_type identifies fig_group_category_184"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DF9A000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DF9A000)
+        self.assertEqual(block_type, 'fig_group_category_184')
+
+    def test_parse_fig_group_category_records_184_us2(self):
+        """Parse 184-byte FIG group category records from 0x0DF9A000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=15)
+
+        self.assertEqual(len(records), 15)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], FIGGroupCategoryRecord184)
+
+        # Check first record is 0A (ENGINE MAIN)
+        self.assertEqual(records[0].fig_group_code, '0A')
+        self.assertEqual(records[0].desc_en, 'ENGINE MAIN')
+
+        # Check all 4 languages have content
+        self.assertTrue(len(records[0].desc_de) > 0)
+        self.assertTrue(len(records[0].desc_fr) > 0)
+        self.assertTrue(len(records[0].desc_es) > 0)
+
+        # Print for inspection - should show all FIG groups (0A-9B)
+        print("\n=== FIG Group Category Records ===")
+        for i, r in enumerate(records):
+            print(f"  {i:2d}. {r.model_code} | {r.fig_group_code} | {r.desc_en}")
+
+    def test_verify_fig_groups_match_documentation(self):
+        """Verify FIG group codes match WINDOWS_APP_GUIDE.md"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        # Expected FIG groups from WINDOWS_APP_GUIDE.md
+        expected_groups = {
+            '0A': 'ENGINE MAIN',
+            '0B': 'ENGINE AUXILIARIES',
+            '0C': 'ENGINE ELECTRICAL',
+            '1A': 'MANUAL TRANSMISSION',
+            '1B': 'AUTOMATIC TRANSMISSION',
+            '1C': 'DIFFERENTIAL',
+            '2A': 'SUSPENSION',
+            '3A': 'STEERING',
+            '4A': 'ENGINE MOUNTING',
+            '5A': 'BODY',
+            '6A': 'DOOR',
+            '6B': 'SEAT',
+            '7A': 'HEATER',
+            '8A': 'ELECTRICAL',
+            '8B': 'ELECTRICAL',
+            '9A': 'ACCESSORIES',
+            '9B': 'ACCESSORIES',
+        }
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=20)
+
+        # Check that we found expected groups
+        found_groups = {r.fig_group_code: r.desc_en for r in records}
+
+        for group_code, expected_keyword in expected_groups.items():
+            if group_code in found_groups:
+                # Check that the description contains the expected keyword
+                self.assertIn(expected_keyword, found_groups[group_code].upper())
+
+
 class TestBlockTypeScan(unittest.TestCase):
     """Tests for full file block type scanning"""
 
@@ -1254,6 +1370,71 @@ class TestBlockTypeScan(unittest.TestCase):
         self.assertGreater(ratio, 0.95)
         self.assertLess(ratio, 1.05)
 
+
+    def test_validate_all_fig_group_category_blocks(self):
+        """Validate all fig_group_category_184 blocks in the file"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        expected_categories = {
+            '0A': ['ENGINE MAIN'],
+            '0B': ['ENGINE AUXILIARIES'],
+            '0C': ['ENGINE ELECTRICAL PARTS'],
+            '1A': ['MANUAL TRANSMISSION'],
+            '1B': ['AUTOMATIC TRANSMISSION'],
+            '1C': ['DIFFERENTIAL & PROPELLER SHAFT'],
+            '2A': ['SUSPENSION, AXLE & BRAKE'],
+            '3A': ['STEERING', 'STEERING SYSTEM & CABLE'],
+            '4A': ['ENGINE MOUNT & COOLING', 'ENGINE MOUNTING & COOLING'],
+            '5A': ['BODY & BUMPER', 'BODY, KEY KIT & BUMPER'],
+            '6A': ['DOOR PARTS'],
+            '6B': ['SEAT & INSTRUMENT PANEL'],
+            '7A': ['HEATER & AIR CONDITIONER'],
+            '8A': ['ELECTRICAL PARTS (1)'],
+            '8B': ['ELECTRICAL PARTS (2)'],
+            '9A': ['ACCESSORIES (EXTERIOR)'],
+            '9B': ['ACCESSORIES (INTERIOR)']
+        }
+
+        print("\n=== Validating FIG Group Category Blocks ===")
+        
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+            
+            fig_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
+            self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
+            
+            print(f"Found {len(fig_ranges)} FIG group category blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
+            
+            validated_codes = set()
+            
+            for r_start, r_len, num_blocks, block_type in fig_ranges:
+                # Parse all records in this range
+                records = parse_fig_group_category_records_184(f, r_start)
+                
+                for rec in records:
+                    code = rec.fig_group_code
+                    desc_en = rec.desc_en
+                    
+                    if code in expected_categories:
+                        expected_descs = expected_categories[code]
+                        # Check if expected description is contained in the record's description
+                        # (allowing for minor padding or case differences if any)
+                        self.assertTrue(desc_en in expected_descs,
+                                       f"Mismatch for code {code} at 0x{rec.offset:08X}: "
+                                       f"Expected '{desc_en}' in '{expected_descs}'")
+                        validated_codes.add(code)
+                    else:
+                        # If we find a new code, we should at least note it
+                        print(f"Found unknown FIG group code: {code} ('{desc_en}') at 0x{rec.offset:08X}")
+
+            print(f"Validated {len(validated_codes)} unique FIG group codes: {sorted(list(validated_codes))}")
+            
+            # Ensure we found most of the core categories
+            # Some versions might not have all, but they should have at least the engine ones
+            self.assertIn('0A', validated_codes)
+            self.assertIn('5A', validated_codes)
+            self.assertGreater(len(validated_codes), 10)
 
 if __name__ == '__main__':
     # Run tests

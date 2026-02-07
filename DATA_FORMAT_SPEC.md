@@ -372,6 +372,41 @@ Offset  Size  Field
 
 **Validation:** Cross-reference terms with part descriptions and technical documentation.
 
+### FIG Group Category Records (184-byte Type) (0x0DF9A000+) - **VALIDATED ✓**
+
+**Record size:** 184 bytes
+**Encoding:** CP437
+
+Contains multilingual descriptions for FIG group codes (e.g., "0A", "1B"). These categories are used for top-level navigation in the FAST 2 application.
+Located in blocks around `0x0DF9A000`.
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    2     FIG Group Code      2-character code (e.g., "0A", "9B")
+0x08    40    Description (EN)    English category name
+0x30    40    Description (DE)    German category name
+0x58    40    Description (FR)    French category name
+0x80    40    Description (ES)    Spanish category name
+0xA8    16    Trailer/Metadata    LE reference pointers or flags
+```
+
+**Common FIG Group Codes (from [WINDOWS_APP_GUIDE.md](file:///Users/zhukov/subaru/SUBARU%20USA%200518/WINDOWS_APP_GUIDE.md)):**
+| Code | Category (EN) | Description |
+|------|---------------|-------------|
+| 0A | ENGINE MAIN | Engine internals, block, heads |
+| 1A | MANUAL TRANS | Clutch, gears, casing |
+| 1B | AUTO TRANS | Torque converter, planetary gears |
+| 5A | BODY/BUMPER | Body panels, bumpers, mirrors |
+| 9B | INNER ACCESSORIES | Floor mats, cargo nets, etc. |
+
+**Notes:**
+- Group codes are alphanumeric (typically digit + letter)
+- Multilingual strings are space-padded to 40 bytes
+- Validated by scanning the file and matching codes to application categories
+
 ### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
 
 **Record size:** 91 bytes
