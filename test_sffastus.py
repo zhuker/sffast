@@ -15,7 +15,9 @@ from sffastus_parser import (
     parse_vin_blocks,
     parse_vin_model_records,
     parse_multilingual_part_records,
+    parse_multilingual_part_records,
     parse_multilingual_part_records_180,
+    parse_multilingual_part_records_167,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -24,6 +26,7 @@ from sffastus_parser import (
     is_valid_model_code,
     is_multilingual_part_block,
     is_multilingual_part_block_180,
+    is_multilingual_part_block_167,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -34,6 +37,7 @@ from sffastus_parser import (
     VINModelRecord,
     MultilingualPartRecord,
     MultilingualPartRecord180,
+    MultilingualPartRecord167,
 )
 
 # Test data paths
@@ -636,6 +640,62 @@ class TestMultilingualPartRecords180(unittest.TestCase):
         self.assertEqual(rec.offset, 0x0CD45000)
         self.assertEqual(rec.model_code, "B11")
         self.assertEqual(rec.name_en, "BELT-TIMING")
+
+
+class TestMultilingualPartRecords167(unittest.TestCase):
+    """Tests for 167-byte multilingual part name records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_multilingual_part_block_167(self):
+        """Test detection of 167-byte multilingual part block pattern"""
+        # Create a fake 167-byte record
+        model_code = b'B11   '
+        spec_code = b'103TW      '  # 11 bytes
+        description = b'WAGON(STEP ROOF)' + b' ' * 9 # 25 bytes
+        trailer = b'\x00' * 125  # 125 bytes
+
+        # 6 + 11 + 25 + 125 = 167
+        record = model_code + spec_code + description + trailer
+        self.assertEqual(len(record), 167)
+
+        # Pad to 2KB block
+        # 2048 // 167 = 12 records
+        data = (record * 12) + b'\x00' * (2048 - (167 * 12))
+        self.assertTrue(is_multilingual_part_block_167(data))
+
+    def test_detect_multilingual_part_block_167(self):
+        """Test detect_block_type identifies multilingual_part_167"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0CD41000 which contains 167-byte records
+            f.seek(0x0CD41000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0CD41000)
+        self.assertEqual(block_type, 'multilingual_part_167')
+
+    def test_parse_multilingual_part_records_167_us2(self):
+        """Parse 167-byte records from 0x0CD41000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_multilingual_part_records_167(f, start_offset=0x0CD41000, max_records=10)
+
+        self.assertEqual(len(records), 10)
+
+        # First record should be B11 model
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], MultilingualPartRecord167)
+        
+        # Check spec and description
+        self.assertTrue(len(records[0].spec_code) > 0)
+        self.assertTrue(len(records[0].description) > 0)
 
 
 class TestBlockTypeScan(unittest.TestCase):

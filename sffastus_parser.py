@@ -470,6 +470,57 @@ class MultilingualPartRecord:
 
 
 @dataclass
+class MultilingualPartRecord167:
+    """Represents a multilingual part name record from sffastus (167 bytes)
+
+    Located at 0x0CD41000+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (11): Spec Code (e.g., "103TW      ")
+        0x11 (25): Description (e.g., "WAGON(STEP ROOF)         ")
+        0x2A (125): Trailer/Padding
+    """
+    offset: int
+    model_code: str
+    spec_code: str
+    description: str
+    trailer: bytes
+    raw_data: bytes
+
+
+def is_multilingual_part_block_167(data: bytes) -> bool:
+    """
+    Check if data looks like a 167-byte multilingual part record block.
+
+    Detection heuristics:
+    - Starts with valid model code (6 bytes)
+    - Spec code (11 bytes) typically alphanumeric
+    """
+    if len(data) < 167:
+        return False
+    if len(data) >= 167 * 2:
+        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[167:167 + 6])
+
+    try:
+        # Check model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # Spec code (offset 6, length 11)
+        # Often starts with digits
+        spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
+        if not spec_code:
+            # Allow empty spec? Maybe. But usually present.
+            pass
+            
+        return True
+    except:
+        return False
+
+
+@dataclass
 class MultilingualPartRecord180:
     """Represents a multilingual part name record from sffastus (180 bytes)
 
@@ -507,6 +558,9 @@ def is_multilingual_part_block_180(data: bytes) -> bool:
     """
     if len(data) < 180:
         return False
+    if len(data) >= 180 * 2:
+        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[180:180 + 6])
+
 
     try:
         # Check model code
@@ -545,6 +599,8 @@ def is_multilingual_part_block(data: bytes) -> bool:
     """
     if len(data) < 192:
         return False
+    if len(data) >= 192 * 2:
+        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[192:192 + 6])
 
     try:
         # Check model code
@@ -570,6 +626,64 @@ def is_multilingual_part_block(data: bytes) -> bool:
         return True
     except:
         return False
+
+
+
+def parse_multilingual_part_records_167(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse multilingual part name records (167 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse (None = until invalid)
+        verbose: Print progress during parsing
+
+    Returns:
+        List of MultilingualPartRecord167 objects
+    """
+    RECORD_SIZE = 167
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        # Parse fields (cp437 encoding)
+        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+        spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
+        description = data[17:42].decode(CHARSET, errors='replace').strip()
+        trailer = data[42:167]
+
+        record = MultilingualPartRecord167(
+            offset=offset,
+            model_code=model_code,
+            spec_code=spec_code,
+            description=description,
+            trailer=trailer,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_multilingual_part_records_180(f, start_offset, max_records=None, verbose=False):
@@ -1094,6 +1208,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4b. Multilingual part block (180-byte) - NEW
     if is_multilingual_part_block_180(data):
         return 'multilingual_part_180'
+
+    # 4c. Multilingual part block (167-byte) - NEW
+    if is_multilingual_part_block_167(data):
+        return 'multilingual_part_167'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start

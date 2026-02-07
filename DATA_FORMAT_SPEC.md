@@ -261,6 +261,23 @@ Offset  Size  Field
 
 **Validation:** Search for a known part number in the app, check if model code matches.
 
+### Multilingual Part Records (167-byte Type) (0x0CD41000+) - **NEW**
+
+**Record size:** 167 bytes
+**Encoding:** CP437
+
+Appears to be mono-lingual (English) descriptions with spec codes.
+Located in blocks around `0x0CD41000`.
+
+```
+Offset  Size  Field
+------  ----  -----
+0x00    6     Model Code (e.g., "B11   ")
+0x06    11    Spec Code (e.g., "103TW      ")
+0x11    25    Description (e.g., "WAGON(STEP ROOF)         ")
+0x2A    125   Trailer/Padding
+```
+
 ### Multilingual Part Records (180-byte Type) (0x0CD45000+) - **NEW**
 
 **Record size:** 180 bytes
