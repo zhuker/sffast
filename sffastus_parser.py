@@ -469,6 +469,83 @@ class MultilingualPartRecord:
 
 
 @dataclass
+class CodeIndexRecord33:
+    """Represents a code/ID index record from sffastus (33 bytes)
+
+    Located at 0x0DE42800+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6): Model Code (e.g., "B11   ")
+        0x06 (1): Category (single byte, e.g., 0x31='1', 0x30='0')
+        0x07 (15): Size/Variant/Modifier Code (e.g., "ASSEMBLY", "RIGHT", "FRONT", "ST")
+        0x16 (7): Part Code (e.g., "28391  ", "28491B ")
+        0x1D (4): Metadata/Flags
+
+    Total: 33 bytes (6+1+15+7+4)
+
+    Note: The 15-byte size/variant field contains meaningful multilingual data
+    such as part qualifiers (ASSEMBLY, CONJUNTO, ENSEMBLE), directional terms
+    (RIGHT, LEFT, FRONT), and size codes (ST, 5X20, +)). Only 2.6% of records
+    have this field filled with spaces.
+
+    The 7-byte part code field is space-padded when codes are shorter than 7 chars,
+    which is why it often ends with a space (92.5% of records).
+    """
+    offset: int
+    model_code: str
+    category: int  # 1-byte category
+    size_variant: str  # 15 bytes - size/variant/modifier code (NOT padding!)
+    code: str  # 7-byte part code (space-padded)
+    metadata: bytes  # 4 bytes of metadata
+    raw_data: bytes
+
+    @staticmethod
+    def parse_33(data: bytes, offset: int = 0):
+        """Parse a 33-byte code index record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        # Don't strip the size_variant field to preserve all data
+        size_variant_raw = data[7:22].decode(CHARSET, errors='replace')
+
+        return CodeIndexRecord33(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]).strip(),
+            category=data[6],  # Single byte
+            size_variant=size_variant_raw,  # Keep as-is, don't strip - 15 bytes
+            code=clean(data[22:29]).strip(),  # 7 bytes (was 6 + separator)
+            metadata=data[29:33],  # 4 bytes
+        )
+
+
+def is_code_index_record_block_33(data: bytes) -> bool:
+    """
+    Check if data looks like a 33-byte code index record block.
+
+    Detection heuristics:
+    - Consistent model codes every 33 bytes.
+    """
+    if len(data) < 33:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 66:  # 33 * 2
+            if not is_valid_model_code(data[33:33+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class GlossaryRecord28:
     """Represents a glossary/terminology record from sffastus (28 bytes)
 
@@ -979,6 +1056,51 @@ def is_multilingual_part_block(data: bytes) -> bool:
 
 
 
+
+
+
+def parse_code_index_records_33(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse code index records (33 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of CodeIndexRecord33 objects
+    """
+    RECORD_SIZE = 33
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = CodeIndexRecord33.parse_33(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_glossary_records_28(f, start_offset, max_records=None, verbose=False):
@@ -1770,6 +1892,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4h. Glossary record block (28-byte) - NEW
     if is_glossary_record_block_28(data):
         return 'glossary_record_28'
+
+    # 4i. Code index record block (33-byte) - NEW
+    if is_code_index_record_block_33(data):
+        return 'code_index_record_33'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start

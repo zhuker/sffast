@@ -21,6 +21,7 @@ from sffastus_parser import (
     parse_model_spec_records_103,
     parse_color_records_91,
     parse_glossary_records_28,
+    parse_code_index_records_33,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -34,6 +35,7 @@ from sffastus_parser import (
     is_model_spec_block_103,
     is_color_record_block_91,
     is_glossary_record_block_28,
+    is_code_index_record_block_33,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -49,6 +51,7 @@ from sffastus_parser import (
     ModelSpecRecord103, CatalogApplicabilityRecord466,
     ColorRecord91,
     GlossaryRecord28,
+    CodeIndexRecord33,
 )
 
 # Test data paths
@@ -930,6 +933,147 @@ class TestGlossaryRecords28(unittest.TestCase):
         # Print for inspection
         for i, r in enumerate(records[:5]):
             print(f"Record {i}: Cat={r.category:02X} Term='{r.term}'")
+
+
+class TestCodeIndexRecords33(unittest.TestCase):
+    """Tests for 33-byte code index records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_code_index_record_block_33(self):
+        """Test detect_block_type identifies code_index_record_33"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DE42800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DE42800)
+        self.assertEqual(block_type, 'code_index_record_33')
+
+    def test_parse_code_index_records_33_us2(self):
+        """Parse 33-byte code index records from 0x0DE42800 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_code_index_records_33(f, start_offset=0x0DE42800, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], CodeIndexRecord33)
+        # Check that we have codes
+        self.assertTrue(len(records[0].code) > 0)
+
+        # Print for inspection
+        for i, r in enumerate(records[:5]):
+            cat_char = chr(r.category) if 32 <= r.category <= 126 else f'0x{r.category:02X}'
+            print(f"Record {i}: Cat={cat_char} Code='{r.code}'")
+
+    def test_validate_all_code_index_blocks(self):
+        """Validate structure of ALL code_index_record_33 blocks"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Validating ALL code_index_record_33 Blocks ===")
+
+        # Step 1: Scan all blocks and find code_index_record_33 blocks
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+        code_index_ranges = [r for r in ranges if r[3] == 'code_index_record_33']
+
+        print(f"Found {len(code_index_ranges)} code_index_record_33 block ranges")
+        total_blocks = sum(r[2] for r in code_index_ranges)
+        print(f"Total blocks: {total_blocks}")
+
+        self.assertGreater(len(code_index_ranges), 0, "Should find at least one code_index_record_33 range")
+
+        # Step 2: Parse all records from these blocks
+        all_records = []
+        size_variant_patterns = {}  # Analyze size_variant field content
+        code_length_distribution = {}  # Track code lengths
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            for start, end, count, block_type in code_index_ranges:
+                f.seek(start)
+                # Parse all records in this range
+                for block_idx in range(count):
+                    block_offset = start + (block_idx * 2048)
+                    f.seek(block_offset)
+                    block_data = f.read(2048)
+
+                    # Parse records in this block (2048 // 33 = 62 records max)
+                    for rec_idx in range(62):
+                        rec_offset = rec_idx * 33
+                        if rec_offset + 33 > len(block_data):
+                            break
+
+                        rec_data = block_data[rec_offset:rec_offset + 33]
+
+                        # Check if valid (starts with model code)
+                        if not is_valid_model_code(rec_data[0:6]):
+                            break  # End of valid records in this block
+
+                        record = CodeIndexRecord33.parse_33(rec_data, block_offset + rec_offset)
+                        all_records.append(record)
+
+                        # Analyze size_variant field
+                        size_variant_stripped = record.size_variant.strip()
+                        if size_variant_stripped:  # Non-empty after stripping
+                            size_variant_patterns[size_variant_stripped] = \
+                                size_variant_patterns.get(size_variant_stripped, 0) + 1
+
+                        # Track code length distribution
+                        code_len = len(record.code)
+                        code_length_distribution[code_len] = code_length_distribution.get(code_len, 0) + 1
+
+        print(f"\nTotal records parsed: {len(all_records)}")
+
+        # Print code length distribution
+        print(f"\nPart code length distribution:")
+        for length, count in sorted(code_length_distribution.items()):
+            pct = (count / len(all_records)) * 100
+            print(f"  {length} chars: {count:6d} occurrences ({pct:5.2f}%)")
+
+        # Print size_variant patterns (top 30)
+        print(f"\nSize/Variant field patterns (top 30 by frequency):")
+        sorted_patterns = sorted(size_variant_patterns.items(), key=lambda x: x[1], reverse=True)
+        for pattern, count in sorted_patterns[:30]:
+            pct = (count / len(all_records)) * 100
+            print(f"  '{pattern}': {count:6d} occurrences ({pct:5.2f}%)")
+
+        # Show sample records with interesting size_variant values
+        print(f"\nSample records with non-empty size_variant (first 15):")
+        samples_shown = 0
+        for rec in all_records:
+            if rec.size_variant.strip() and samples_shown < 15:
+                cat_char = chr(rec.category) if 32 <= rec.category <= 126 else f'0x{rec.category:02X}'
+                print(f"  {samples_shown+1}. Offset 0x{rec.offset:08X}")
+                print(f"     Model: {rec.model_code}, Category: {cat_char}")
+                print(f"     Part Code: '{rec.code}' (len={len(rec.code)})")
+                print(f"     Size/Variant: '{rec.size_variant.strip()}'")
+                samples_shown += 1
+
+        # Assertions
+        self.assertGreater(len(all_records), 0, "Should parse at least one record")
+
+        # Validate structure:
+        # 1. Part codes should be <= 7 characters
+        max_code_len = max(len(r.code) for r in all_records)
+        print(f"\nMax part code length: {max_code_len} chars")
+        self.assertLessEqual(max_code_len, 7, "Part codes should be <= 7 characters")
+
+        # 2. Size/variant field should have content in most records
+        non_empty_size_variant = sum(1 for r in all_records if r.size_variant.strip())
+        non_empty_ratio = non_empty_size_variant / len(all_records)
+        print(f"Size/variant field has content: {non_empty_ratio * 100:.1f}% of records")
+        self.assertGreater(non_empty_ratio, 0.90, "Expected >90% of records to have size/variant data")
+
+        print("\n=== CodeIndexRecord33 structure validated successfully ===")
 
 
 class TestBlockTypeScan(unittest.TestCase):

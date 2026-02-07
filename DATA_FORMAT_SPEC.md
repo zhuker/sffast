@@ -288,6 +288,48 @@ Offset  Size  Field
 
 **Validation:** Parse records and verify part numbers match known Subaru part catalogs.
 
+### Code Index Records (33-byte Type) (0x0DE42800+) - **VALIDATED ✓**
+
+**Record size:** 33 bytes
+**Encoding:** CP437
+
+Index of part codes organized by model and category, with multilingual qualifiers.
+Located in blocks around `0x0DE42800`. **6,468 blocks detected (2.5% of file).**
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    1     Category            Single byte code classification
+0x07    15    Size/Variant        Multilingual part qualifiers (NOT padding!)
+0x16    7     Part Code           7-character part code (space-padded)
+0x1D    4     Metadata            Binary flags or reference pointers
+```
+
+**Size/Variant Field (offset 0x07, 15 bytes):**
+- **97.4% of records** have non-empty content in this field
+- Contains full multilingual part description qualifiers:
+  - English: "ASSEMBLY", "RIGHT", "FRONT", "LEFT", "REAR", "COMPLETE"
+  - French: "ENSEMBLE", "ARRIèRE", "AVANT", "GAUCHE" (LEFT)
+  - Spanish: "CONJUNTO", "CONSOLA", "CUBIERTA"
+  - German: "RECHTS" (RIGHT), "SCHRAUBE" (SCREW), "ABDECKUNG" (COVER)
+- Also contains size/dimension codes: "ST", "5X20", "+)", single digits (0-9)
+- Full words stored, not truncated suffixes
+
+**Part Code Field (offset 0x16, 7 bytes):**
+- 7-character field for part codes (matches official documentation)
+- Space-padded when code is shorter than 7 characters
+- Examples: "28391  ", "28491B ", "81608  "
+
+**Notes:**
+- Category is a single byte (e.g., 0x31='1', 0x30='0', 0x32='2')
+- Size/variant field provides multilingual qualifiers - full descriptions likely stored elsewhere
+- Part code field length matches official spec: "Part codes are 7 characters"
+- Significant presence in the file (2.5%) underscores its importance for data indexing
+
+**Validation Status:** ✓ Structure validated by parsing 400,230 records from all 6,468 blocks
+
 ### Glossary/Terminology Records (28-byte Type) (0x0DE23800+) - **VALIDATED ✓**
 
 **Record size:** 28 bytes
