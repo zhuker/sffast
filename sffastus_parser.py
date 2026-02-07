@@ -390,13 +390,300 @@ def extract_record_at_offset(f, offset, record_size=256):
 
 @dataclass
 class VINRecord:
-    """Represents a VIN range record from sffastus"""
+    """Represents a VIN range record from sffastus (38 bytes)
+
+    Used for VIN range lookup - maps VIN ranges to section pointers.
+    """
     offset: int
     vin_start: str
     vin_end: str
     section: int
     index: int
     raw_data: bytes
+
+
+@dataclass
+class VINModelRecord:
+    """Represents a VIN-Model detail record from sffastus (69 bytes)
+
+    Contains full vehicle specification for a single VIN.
+
+    Structure:
+        0x00 (17): VIN
+        0x11 (1):  Null terminator
+        0x12 (1):  Flag (typically 0x01)
+        0x13 (6):  Model Code (e.g., "S12   ")
+        0x19 (7):  Body Model (e.g., "SHMDY6S")
+        0x20 (9):  Spec/Option Code (e.g., "G1UH20NT ")
+        0x29 (2):  Binary flags
+        0x2B (8):  Date 1 (YYYYMMDD)
+        0x33 (8):  Date 2 (YYYYMMDD)
+        0x3B (8):  Date 3 (YYYYMMDD)
+        0x43 (2):  Suffix Code (e.g., "U5")
+    """
+    offset: int
+    vin: str
+    flag: int
+    model_code: str
+    body_model: str
+    spec_code: str
+    binary_flags: bytes
+    date1: str
+    date2: str
+    date3: str
+    suffix: str
+    raw_data: bytes
+
+
+@dataclass
+class MultilingualPartRecord:
+    """Represents a multilingual part name record from sffastus (192 bytes)
+
+    Contains part names in 4 languages: English, German, French, Spanish.
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (6):  Part Code (e.g., "0951S ")
+        0x0C (5):  Figure Code (e.g., " 421 ")
+        0x11 (3):  Index (e.g., " 1 ", "11 ")
+        0x14 (40): English Name
+        0x3C (40): German Name
+        0x64 (40): French Name
+        0x8C (40): Spanish Name
+        0xB4 (12): Trailer (binary flags/metadata)
+    """
+    offset: int
+    model_code: str
+    part_code: str
+    figure_code: str
+    index: str
+    name_en: str
+    name_de: str
+    name_fr: str
+    name_es: str
+    trailer: bytes
+    raw_data: bytes
+
+
+def is_multilingual_part_block(data: bytes) -> bool:
+    """
+    Check if data looks like a multilingual part record block (192-byte records).
+
+    Detection heuristics:
+    - Starts with valid model code (6 bytes)
+    - Has alphanumeric part code at offset 6
+    - Has numeric figure code at offset 12
+    - Has readable text in name fields
+    """
+    if len(data) < 192:
+        return False
+
+    try:
+        # Check model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # Check part code - should be alphanumeric
+        part_code = data[6:12].decode('cp437').strip()
+        if not part_code or not part_code.replace(' ', '').isalnum():
+            return False
+
+        # Check figure code - should contain digits
+        figure_code = data[12:17].decode('cp437').strip()
+        if not any(c.isdigit() for c in figure_code):
+            return False
+
+        # Check that English name area has readable text
+        name_area = data[19:59]
+        printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
+        if printable / len(name_area) < 0.5:
+            return False
+
+        return True
+    except:
+        return False
+
+
+def parse_multilingual_part_records(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse multilingual part name records (192 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse (None = until invalid)
+        verbose: Print progress during parsing
+
+    Returns:
+        List of MultilingualPartRecord objects
+    """
+    RECORD_SIZE = 192
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        # Parse fields (cp437 encoding used by DOS-era Subaru software)
+        # Structure: model(6) + part(6) + figure(5) + index(2) + en(40) + de(40) + fr(40) + es(40) + trailer(13)
+        model_code = data[0:6].decode('cp437', errors='replace').strip()
+        part_code = data[6:12].decode('cp437', errors='replace').strip()
+        figure_code = data[12:17].decode('cp437', errors='replace').strip()
+        index = data[17:19+1].decode('cp437', errors='replace').strip()
+        name_en = data[19+1:59+1].decode('cp437', errors='replace').strip()
+        name_de = data[59+1:99+1].decode('cp437', errors='replace').strip()
+        name_fr = data[99+1:139+1].decode('cp437', errors='replace').strip()
+        name_es = data[139+1:179+1].decode('cp437', errors='replace').strip()
+        trailer = data[179+1:192]
+
+        record = MultilingualPartRecord(
+            offset=offset,
+            model_code=model_code,
+            part_code=part_code,
+            figure_code=figure_code,
+            index=index,
+            name_en=name_en,
+            name_de=name_de,
+            name_fr=name_fr,
+            name_es=name_es,
+            trailer=trailer,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def detect_vin_record_type(data: bytes) -> str:
+    """
+    Detect whether data contains 38-byte VIN range records or 69-byte VIN-Model records.
+
+    Args:
+        data: At least 69 bytes of data from a VIN block
+
+    Returns:
+        'vin_range' for 38-byte records (VIN start + VIN end + pointer)
+        'vin_model' for 69-byte records (single VIN + full model spec)
+        'unknown' if neither pattern matches
+    """
+    if len(data) < 69:
+        return 'unknown'
+
+    # Check first record for VIN
+    try:
+        vin1 = data[0:17].decode('latin-1', errors='replace').strip('\x00')
+        if not is_valid_subaru_vin(vin1):
+            return 'unknown'
+    except:
+        return 'unknown'
+
+    # Check for 38-byte pattern: second VIN at offset 17
+    try:
+        vin2_38 = data[17:34].decode('latin-1', errors='replace').strip('\x00')
+        if is_valid_subaru_vin(vin2_38):
+            return 'vin_range'
+    except:
+        pass
+
+    # Check for 69-byte pattern: null + flag + model code at offset 17-25
+    try:
+        if data[17] == 0x00 and data[18] in (0x00, 0x01, 0x02):
+            model_code = data[19:25].decode('latin-1')
+            if is_valid_model_code(data[19:25]):
+                return 'vin_model'
+    except:
+        pass
+
+    return 'unknown'
+
+
+def parse_vin_model_records(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse VIN-Model detail records (69 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse (None = until invalid)
+        verbose: Print progress during parsing
+
+    Returns:
+        List of VINModelRecord objects
+    """
+    RECORD_SIZE = 69
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Parse VIN
+        vin = data[0:17].decode('latin-1', errors='replace').strip('\x00')
+
+        if not is_valid_subaru_vin(vin):
+            break
+
+        # Parse remaining fields
+        flag = data[18]
+        model_code = data[19:25].decode('latin-1', errors='replace').strip()
+        body_model = data[25:32].decode('latin-1', errors='replace').strip()
+        spec_code = data[32:41].decode('latin-1', errors='replace').strip()
+        binary_flags = data[41:43]
+        date1 = data[43:51].decode('latin-1', errors='replace')
+        date2 = data[51:59].decode('latin-1', errors='replace')
+        date3 = data[59:67].decode('latin-1', errors='replace')
+        suffix = data[67:69].decode('latin-1', errors='replace')
+
+        record = VINModelRecord(
+            offset=offset,
+            vin=vin,
+            flag=flag,
+            model_code=model_code,
+            body_model=body_model,
+            spec_code=spec_code,
+            binary_flags=binary_flags,
+            date1=date1,
+            date2=date2,
+            date3=date3,
+            suffix=suffix,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_vin_blocks(f, start_offset=0x800, max_records=None, verbose=False):
@@ -599,6 +886,206 @@ def analyze_vin_blocks_2kb(f, min_contiguous=5):
     print(f"\nTotal VIN data: {total_blocks * 2048 / 1024 / 1024:.2f} MB")
 
     return regions
+
+
+# Valid model code prefixes (first character of 6-byte model code)
+MODEL_CODE_PREFIXES = ('A', 'B', 'C', 'G', 'J', 'S', 'V', 'W', 'Z')
+
+
+def is_valid_model_code(data: bytes) -> bool:
+    """
+    Check if 6 bytes look like a valid model code (e.g., 'B11   ', 'W10   ').
+
+    Model codes are 3 alphanumeric chars followed by spaces.
+    First char is a letter (A, B, C, G, J, S, V, W, Z).
+    Next 2 chars are digits.
+    """
+    if len(data) < 6:
+        return False
+    try:
+        text = data[:6].decode('latin-1')
+        if not text[0] in MODEL_CODE_PREFIXES:
+            return False
+        if not text[1:3].isdigit():
+            return False
+        # Rest should be spaces or alphanumeric
+        return all(c.isalnum() or c == ' ' for c in text[3:6])
+    except:
+        return False
+
+
+def detect_block_type(data: bytes, offset: int = 0) -> str:
+    """
+    Detect the type of a 2KB block.
+
+    Args:
+        data: 2048 bytes of block data
+        offset: File offset of this block (used for header detection)
+
+    Returns:
+        Block type string: 'header', 'vin', 'model_index',
+        'body_model', 'text', 'binary', 'padding', 'unknown'
+    """
+    BLOCK_SIZE = 2048
+
+    if len(data) < BLOCK_SIZE:
+        return 'incomplete'
+
+    # 1. Header block (first 2KB contains header + model table + padding)
+    if offset < 0x800:
+        return 'header'
+
+    # 2. All zeros = padding
+    if all(b == 0 for b in data):
+        return 'padding'
+
+    # 3. VIN block - first 17 bytes are a valid Subaru VIN
+    # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
+    try:
+        vin = data[0:17].decode('latin-1', errors='replace')
+        if is_valid_subaru_vin(vin):
+            vin_type = detect_vin_record_type(data)
+            if vin_type == 'vin_range':
+                return 'vin_range'
+            elif vin_type == 'vin_model':
+                return 'vin_model'
+            else:
+                return 'vin'  # Fallback for unknown VIN format
+    except:
+        pass
+
+    # 4. Multilingual part block - 192-byte records with part names in 4 languages
+    # Check this BEFORE model_index since both start with valid model code
+    if is_multilingual_part_block(data):
+        return 'multilingual_part'
+
+    # 5. Model index block - starts with valid model code, has metadata pattern
+    # Model index records are 288 bytes, with model code at start
+    if is_valid_model_code(data[:6]):
+        # Check for category strings that appear in model index records
+        # Categories like "BODY    ", "ENGINE  ", "TRAIN   " appear at known offsets
+        try:
+            text = data.decode('latin-1', errors='replace')
+            if any(cat in text for cat in ['BODY    ', 'ENGINE  ', 'LEGACY', 'IMPREZA', 'FORESTER']):
+                return 'model_index'
+        except:
+            pass
+
+    # 5. Body model block - 17-byte records with 7-char body code + model code
+    # Body codes are 7 alphanumeric chars like "BD6AY1G"
+    try:
+        # Check first record pattern: 7-char body code + 2 bytes + 6-char model code
+        body_code = data[0:7].decode('latin-1')
+        if (len(body_code) == 7 and
+            body_code.isalnum() and
+            body_code[0].isalpha() and
+            is_valid_model_code(data[9:15])):
+            return 'body_model'
+    except:
+        pass
+
+    # 6. Text block - mostly printable ASCII
+    printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13, 0))
+    printable_ratio = printable_count / len(data)
+
+    if printable_ratio >= 0.7:
+        return 'text'
+
+    # 7. Binary block - low printable ratio, has content
+    non_zero = sum(1 for b in data if b != 0)
+    if non_zero > 0 and printable_ratio < 0.3:
+        return 'binary'
+
+    # 8. Mixed content
+    if printable_ratio >= 0.3:
+        return 'mixed'
+
+    return 'unknown'
+
+
+def scan_block_types(f, max_blocks=None):
+    """
+    Scan entire file block by block and return map of ranges to types.
+
+    Args:
+        f: File handle to sffastus
+        max_blocks: Maximum blocks to scan (None = entire file)
+
+    Returns:
+        List of (start_offset, end_offset, block_count, block_type) tuples.
+        Consecutive blocks of same type are merged into ranges.
+    """
+    BLOCK_SIZE = 2048
+
+    f.seek(0, 2)
+    file_size = f.tell()
+
+    total_blocks = file_size // BLOCK_SIZE
+    if max_blocks:
+        total_blocks = min(total_blocks, max_blocks)
+
+    ranges = []
+    current_type = None
+    current_start = 0
+    current_count = 0
+
+    for block_idx in range(total_blocks):
+        offset = block_idx * BLOCK_SIZE
+        f.seek(offset)
+        data = f.read(BLOCK_SIZE)
+
+        if len(data) < BLOCK_SIZE:
+            break
+
+        block_type = detect_block_type(data, offset)
+        # print(f"Scanned block {block_idx:5d}/{total_blocks:5d} at 0x{offset:08X}: {block_type}")
+
+        if block_type == current_type:
+            current_count += 1
+        else:
+            # Save previous range if exists
+            if current_type is not None:
+                end_offset = current_start + current_count * BLOCK_SIZE
+                ranges.append((current_start, end_offset, current_count, current_type))
+
+            # Start new range
+            current_type = block_type
+            current_start = offset
+            current_count = 1
+
+    # Save last range
+    if current_type is not None:
+        end_offset = current_start + current_count * BLOCK_SIZE
+        ranges.append((current_start, end_offset, current_count, current_type))
+
+    return ranges
+
+
+def print_block_type_map(ranges):
+    """
+    Print a formatted block type map.
+
+    Args:
+        ranges: List from scan_block_types()
+    """
+    print(f"\n{'Start':>12} {'End':>12} {'Blocks':>8} {'Type':<15}")
+    print("-" * 50)
+
+    total_blocks = 0
+    type_counts = {}
+
+    for start, end, count, block_type in ranges:
+        print(f"0x{start:08X}  0x{end:08X}  {count:8d}  {block_type:<15}")
+        total_blocks += count
+        type_counts[block_type] = type_counts.get(block_type, 0) + count
+
+    print("-" * 50)
+    print(f"{'Total':>26}  {total_blocks:8d}")
+
+    print(f"\nBlock type summary:")
+    for block_type, count in sorted(type_counts.items(), key=lambda x: -x[1]):
+        pct = 100.0 * count / total_blocks if total_blocks > 0 else 0
+        print(f"  {block_type:<15} {count:8d} blocks ({pct:5.1f}%)")
 
 
 def main():
