@@ -20,6 +20,7 @@ from sffastus_parser import (
     parse_part_range_records_24,
     parse_model_spec_records_103,
     parse_color_records_91,
+    parse_glossary_records_28,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -32,6 +33,7 @@ from sffastus_parser import (
     is_part_range_block_24,
     is_model_spec_block_103,
     is_color_record_block_91,
+    is_glossary_record_block_28,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -46,6 +48,7 @@ from sffastus_parser import (
     PartRangeRecord24,
     ModelSpecRecord103, CatalogApplicabilityRecord466,
     ColorRecord91,
+    GlossaryRecord28,
 )
 
 # Test data paths
@@ -889,6 +892,44 @@ class TestColorRecords91(unittest.TestCase):
         # Print for inspection
         for i, r in enumerate(records[:3]):
             print(f"Record {i}: {r.paint_code} - {r.color_name_en}")
+
+
+class TestGlossaryRecords28(unittest.TestCase):
+    """Tests for 28-byte glossary/terminology records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_glossary_record_block_28(self):
+        """Test detect_block_type identifies glossary_record_28"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DE23800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DE23800)
+        self.assertEqual(block_type, 'glossary_record_28')
+
+    def test_parse_glossary_records_28_us2(self):
+        """Parse 28-byte glossary records from 0x0DE23800 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_glossary_records_28(f, start_offset=0x0DE23800, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], GlossaryRecord28)
+        # Check that we have terms
+        self.assertTrue(len(records) > 0)
+        
+        # Print for inspection
+        for i, r in enumerate(records[:5]):
+            print(f"Record {i}: Cat={r.category:02X} Term='{r.term}'")
 
 
 class TestBlockTypeScan(unittest.TestCase):

@@ -469,6 +469,67 @@ class MultilingualPartRecord:
 
 
 @dataclass
+class GlossaryRecord28:
+    """Represents a glossary/terminology record from sffastus (28 bytes)
+
+    Located at 0x0DE23800+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6): Model Code (e.g., "B11   ")
+        0x06 (1): Category/Type byte
+        0x07 (17): Term/Text (e.g., "AUTO", "AXLE", "5X20")
+        0x18 (4): Metadata/Flags
+    """
+    offset: int
+    model_code: str
+    category: int  # Single byte category
+    term: str
+    metadata: bytes  # 4 bytes of metadata
+    raw_data: bytes
+
+    @staticmethod
+    def parse_28(data: bytes, offset: int = 0):
+        """Parse a 28-byte glossary record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return GlossaryRecord28(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            category=data[6],  # Single byte
+            term=clean(data[7:24]),  # 17 bytes
+            metadata=data[24:28],  # 4 bytes
+        )
+
+
+def is_glossary_record_block_28(data: bytes) -> bool:
+    """
+    Check if data looks like a 28-byte glossary record block.
+
+    Detection heuristics:
+    - Consistent model codes every 28 bytes.
+    """
+    if len(data) < 28:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 56:  # 28 * 2
+            if not is_valid_model_code(data[28:28+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class ColorRecord91:
     """Represents a color/paint code record from sffastus (91 bytes)
 
@@ -917,6 +978,51 @@ def is_multilingual_part_block(data: bytes) -> bool:
 
 
 
+
+
+
+def parse_glossary_records_28(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse glossary records (28 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of GlossaryRecord28 objects
+    """
+    RECORD_SIZE = 28
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = GlossaryRecord28.parse_28(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
@@ -1660,6 +1766,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4g. Color record block (91-byte) - NEW
     if is_color_record_block_91(data):
         return 'color_record_91'
+
+    # 4h. Glossary record block (28-byte) - NEW
+    if is_glossary_record_block_28(data):
+        return 'glossary_record_28'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start

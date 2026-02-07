@@ -288,6 +288,36 @@ Offset  Size  Field
 
 **Validation:** Parse records and verify part numbers match known Subaru part catalogs.
 
+### Glossary/Terminology Records (28-byte Type) (0x0DE23800+) - **VALIDATED ✓**
+
+**Record size:** 28 bytes
+**Encoding:** CP437
+
+Index of technical terms, abbreviations, and part terminology used throughout the catalog.
+Located in blocks around `0x0DE23800`. **632 blocks detected (0.2% of file).**
+
+**Structure:**
+```
+Offset  Size  Field
+------  ----  -----
+0x00    6     Model Code (e.g., "B11   ")
+0x06    1     Category/Type byte
+0x07    17    Term/Text (e.g., "AUTO", "AXLE", "5X20")
+0x18    4     Metadata/Flags
+```
+
+**Examples:**
+- Automotive terms: "AUTO", "AUTOMATIC", "AXLE"
+- Part terms: "B.P.T.", "BACK", "BAFFLE"
+- Technical codes: "5X20", "ST", "+)", "/", "1", "10"
+
+**Notes:**
+- Category byte appears to group related terms
+- Terms are left-aligned with space padding
+- Metadata may indicate term usage context or references
+
+**Validation:** Cross-reference terms with part descriptions and technical documentation.
+
 ### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
 
 **Record size:** 91 bytes
