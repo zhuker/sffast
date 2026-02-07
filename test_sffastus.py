@@ -19,6 +19,7 @@ from sffastus_parser import (
     parse_multilingual_part_records_167,
     parse_part_range_records_24,
     parse_model_spec_records_103,
+    parse_model_index_records_288,
     parse_color_records_91,
     parse_glossary_records_28,
     parse_code_index_records_33,
@@ -33,6 +34,7 @@ from sffastus_parser import (
     is_multilingual_part_block_167,
     is_part_range_block_24,
     is_model_spec_block_103,
+    is_model_index_block_288,
     is_color_record_block_91,
     is_glossary_record_block_28,
     is_code_index_record_block_33,
@@ -48,7 +50,9 @@ from sffastus_parser import (
     MultilingualPartRecord180,
     MultilingualPartRecord167,
     PartRangeRecord24,
-    ModelSpecRecord103, CatalogApplicabilityRecord466,
+    ModelSpecRecord103,
+    ModelIndexRecord288,
+    CatalogApplicabilityRecord466,
     ColorRecord91,
     GlossaryRecord28,
     CodeIndexRecord33,
@@ -807,6 +811,78 @@ class TestModelSpecRecords103(unittest.TestCase):
         self.assertIsInstance(records[3], ModelSpecRecord103)
         self.assertEqual(records[3].engine, 'EJ25D')
         self.assertEqual(records[3].drivetrain, 'F4WD')
+
+
+class TestModelIndexRecords288(unittest.TestCase):
+    """Tests for 288-byte model index records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_model_index_block_288(self):
+        """Test detection of 288-byte model index block pattern"""
+        # Create fake 288-byte record with known structure
+        model_code = b'B11   '
+        block_index_array = b'\x00' * 180  # 180 bytes
+        series_code = b'B '
+        model_name = b'LEGACY         '  # 15 bytes
+        start_date = b'199601'
+        end_date = b'199805'
+        features = b'12345678901234'  # 14 bytes
+        category1 = b'BODY    '  # 8 bytes
+        category2 = b'ENGINE  '  # 8 bytes
+        category3 = b'TRAIN   '  # 8 bytes
+        category4 = b'MISSION '  # 8 bytes
+        category5 = b'GRADE   '  # 8 bytes
+        category6 = b'SUS     '  # 8 bytes
+        trailer = b'\x00' * 11
+
+        record = (model_code + block_index_array + series_code + model_name +
+                  start_date + end_date + features +
+                  category1 + category2 + category3 + category4 + category5 + category6 +
+                  trailer)
+        self.assertEqual(len(record), 288)
+
+        # Pad to 2KB block
+        data = record + b'\x00' * (2048 - 288)
+        self.assertTrue(is_model_index_block_288(data))
+
+    def test_detect_model_index_block_288(self):
+        """Test detect_block_type identifies model_index_288"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x13000 which contains model index records
+            f.seek(0x13000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x13000)
+        self.assertEqual(block_type, 'model_index_288')
+
+    def test_parse_model_index_records_288_us2(self):
+        """Parse 288-byte records from 0x13000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_model_index_records_288(f, start_offset=0x13000, max_records=5)
+
+        self.assertGreater(len(records), 0)
+
+        # First record should be B11 model
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], ModelIndexRecord288)
+
+        # Check that model name is populated
+        self.assertTrue(len(records[0].model_name) > 0)
+
+        # Print for inspection
+        for i, r in enumerate(records):
+            print(f"Record {i}: {r.model_code} - {r.model_name} ({r.start_date} to {r.end_date})")
+            print(f"  Series: {r.series_code}")
+            print(f"  Categories: {r.category1}, {r.category2}, {r.category3}")
 
 
 class TestPartDetailRecords466(unittest.TestCase):

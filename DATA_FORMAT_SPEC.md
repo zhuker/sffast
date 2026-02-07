@@ -132,7 +132,10 @@ This region acts as a primary index, mapping Model Codes (6 chars) to a **32-bit
 *   **Entry size:** 10 bytes (6-byte ASCII Code + 4-byte LE Pointer)
 *   The pointer often targets the **JDM VIN Data** section (e.g., `0x00260400`).
 
-### Model Index Records (0x13000 - 0x14000) - **CONFIRMED**
+### Model Index Records (0x13000 - 0x14000) - **VALIDATED ✓**
+
+**Record size:** 288 bytes
+**Encoding:** CP437
 
 Located at offset `0x13000`, this section contains metadata and block references for each model series.
 The records are aligned to **2KB blocks** (similar to VIN blocks).
@@ -147,15 +150,24 @@ The records are aligned to **2KB blocks** (similar to VIN blocks).
 | 0x06 | 180 | Block Index Array | Array of 4-byte entries (struct `{ u16 unknown; u16 block_idx }`) |
 | 0xBA | 2 | Series Code | Single letter (`B `, `G `, etc.) |
 | 0xBC | 15 | Model Name | e.g., `LEGACY         `, `TRIBECA        ` |
-| 0xCB | 6 | Start Date | `YYYYMM` (ASCII) |
-| 0xD1 | 6 | End Date | `YYYYMM` (ASCII) |
+| 0xCB | 6 | Start Date | `YYYYMM` (ASCII, e.g., "199310") |
+| 0xD1 | 6 | End Date | `YYYYMM` (ASCII, e.g., "199905") |
 | 0xD7 | 14 | Features | Flags (`12345...`) |
-| 0xE5 | 8 | Category 1 | `BODY    ` |
-| 0xED | 8 | Category 2 | `ENGINE  ` |
-| 0xF5 | 8 | Category 3 | `TRAIN   ` |
-| 0xFD | 8 | Category 4 | `MISSION ` |
-| 0x105 | 8 | Category 5 | `GRADE   ` |
-| 0x10D | 8 | Category 6 | `SUS     ` |
+| 0xE5 | 8 | Category 1 | `ENGINE  ` |
+| 0xED | 8 | Category 2 | `TRAIN   ` |
+| 0xF5 | 8 | Category 3 | `MISSIO  ` (MISSION truncated) |
+| 0xFD | 8 | Category 4 | `GRADE   ` |
+| 0x105 | 8 | Category 5 | (varies) |
+| 0x10D | 8 | Category 6 | (varies) |
+| 0x115 | 11 | Trailer | Padding/Reserved |
+
+**Example Records:**
+- B11 (LEGACY): 199310 to 199905
+- B12 (LEGACY): 199902 to 200604
+- G10 (IMPREZA): 199206 to 200011
+- C12 (SVX): 199308 to 199611
+
+**Validation Status:** ✓ Structure validated by parsing records from 0x13000
 
 ### Body Model Map (0x3E1800 - 0x3E5000) - **CONFIRMED**
 

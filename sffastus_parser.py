@@ -895,6 +895,86 @@ def is_part_range_block_24(data: bytes) -> bool:
 
 
 @dataclass
+class ModelIndexRecord288:
+    """Represents a model index record from sffastus (288 bytes)
+
+    Located at 0x13000+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):   Model Code (e.g., "B11   ", "W10   ")
+        0x06 (180): Block Index Array (45 entries of 4 bytes each)
+        0xBA (2):   Series Code (e.g., "B ", "G ")
+        0xBC (15):  Model Name (e.g., "LEGACY         ")
+        0xCB (6):   Start Date (YYYYMM, e.g., "199601")
+        0xD1 (6):   End Date (YYYYMM, e.g., "199805")
+        0xD7 (14):  Features/Flags
+        0xE5 (8):   Category 1 (e.g., "BODY    ")
+        0xED (8):   Category 2 (e.g., "ENGINE  ")
+        0xF5 (8):   Category 3 (e.g., "TRAIN   ")
+        0xFD (8):   Category 4 (e.g., "MISSION ")
+        0x105 (8):  Category 5 (e.g., "GRADE   ")
+        0x10D (8):  Category 6 (e.g., "SUS     ")
+        0x115 (11): Trailer/Padding
+    """
+    offset: int
+    model_code: str
+    block_index_array: bytes  # 180 bytes - array of 4-byte entries
+    series_code: str
+    model_name: str
+    start_date: str
+    end_date: str
+    features: str
+    category1: str
+    category2: str
+    category3: str
+    category4: str
+    category5: str
+    category6: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_288(data: bytes, offset: int = 0):
+        """Parse a 288-byte model index record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return ModelIndexRecord288(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            block_index_array=data[6:186],  # 180 bytes
+            series_code=clean(data[186:188]),  # 0xBA
+            model_name=clean(data[188:203]),  # 0xBC
+            start_date=clean(data[203:209]),  # 0xCB
+            end_date=clean(data[209:215]),  # 0xD1
+            features=clean(data[215:229]),  # 0xD7
+            category1=clean(data[229:237]),  # 0xE5
+            category2=clean(data[237:245]),  # 0xED
+            category3=clean(data[245:253]),  # 0xF5
+            category4=clean(data[253:261]),  # 0xFD
+            category5=clean(data[261:269]),  # 0x105
+            category6=clean(data[269:277]),  # 0x10D
+            trailer=data[277:288],  # 11 bytes padding
+        )
+
+
+def is_model_index_block_288(data: bytes) -> bool:
+    if len(data) < 288:
+        return False
+
+    # Check first record model code
+    if not is_valid_model_code(data[0:6]):
+        return False
+
+    if len(data) >= 288*2:
+        if not is_valid_model_code(data[288:288+6]):
+            return False
+    return True
+
+
+@dataclass
 class MultilingualPartRecord167:
     """Represents a multilingual part name record from sffastus (167 bytes)
 
@@ -1227,6 +1307,51 @@ def parse_model_spec_records_103(f, start_offset, max_records=None, verbose=Fals
 
         # Parse fields (cp437)
         record = ModelSpecRecord103.parse_103(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_model_index_records_288(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse model index records (288 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of ModelIndexRecord288 objects
+    """
+    RECORD_SIZE = 288
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        # Parse fields (cp437)
+        record = ModelIndexRecord288.parse_288(data, offset)
         records.append(record)
 
         if verbose and count % 1000 == 0:
@@ -1897,17 +2022,9 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     if is_code_index_record_block_33(data):
         return 'code_index_record_33'
 
-    # 5. Model index block - starts with valid model code, has metadata pattern
-    # Model index records are 288 bytes, with model code at start
-    if is_valid_model_code(data[:6]):
-        # Check for category strings that appear in model index records
-        # Categories like "BODY    ", "ENGINE  ", "TRAIN   " appear at known offsets
-        try:
-            text = data.decode(CHARSET, errors='replace')
-            if any(cat in text for cat in ['BODY    ', 'ENGINE  ', 'LEGACY', 'IMPREZA', 'FORESTER']):
-                return 'model_index'
-        except:
-            pass
+    # 4j. Model index block (288-byte) - NEW
+    if is_model_index_block_288(data):
+        return 'model_index_288'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
