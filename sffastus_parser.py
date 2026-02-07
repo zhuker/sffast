@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 SFFASTUS_PATH = "sffastus"
 
+CHARSET = 'cp437'
+
 # Valid Subaru VIN prefixes
 # 4S3 - US manufactured (Subaru of Indiana Automotive)
 # JF1 - Japan manufactured (Fuji Heavy Industries)
@@ -132,7 +134,7 @@ def analyze_region(f, start, size, description=""):
     if is_printable_text(data, 0.8):
         result['type'] = 'text'
         try:
-            text = data.decode('latin-1').replace('\x00', ' ').strip()
+            text = data.decode(CHARSET).replace('\x00', ' ').strip()
             result['sample'] = text[:200]
             result['details']['language'] = detect_language(text)
         except:
@@ -141,7 +143,7 @@ def analyze_region(f, start, size, description=""):
 
     # Check for VIN-like patterns
     try:
-        text = data.decode('latin-1', errors='ignore')
+        text = data.decode(CHARSET, errors='ignore')
         if any(prefix in text for prefix in SUBARU_VIN_PREFIXES):
             result['type'] = 'vin_data'
             return result
@@ -153,7 +155,7 @@ def analyze_region(f, start, size, description=""):
         result['type'] = 'mixed_binary_text'
         try:
             # Extract readable strings
-            text = data.decode('latin-1', errors='ignore')
+            text = data.decode(CHARSET, errors='ignore')
             result['sample'] = text[:200]
         except:
             pass
@@ -184,7 +186,7 @@ def scan_for_strings(f, start, end, min_length=10):
             else:
                 if len(current_string) >= min_length:
                     try:
-                        s = current_string.decode('latin-1')
+                        s = current_string.decode(CHARSET)
                         strings.append((string_start, s))
                     except:
                         pass
@@ -268,7 +270,7 @@ def parse_model_table(f):
         if len(entry) < 10:
             break
 
-        code = entry[:6].decode('latin-1').strip()
+        code = entry[:6].decode(CHARSET).strip()
         pointer = struct.unpack('<I', entry[6:10])[0]
 
         if code and code[0].isalnum():
@@ -289,8 +291,8 @@ def analyze_vin_section(f, start, count=10):
             break
 
         try:
-            vin1 = record[0:17].decode('latin-1').strip('\x00')
-            vin2 = record[17:34].decode('latin-1').strip('\x00')
+            vin1 = record[0:17].decode(CHARSET).strip('\x00')
+            vin2 = record[17:34].decode(CHARSET).strip('\x00')
             ptr = struct.unpack('<I', record[34:38])[0]
 
             if is_valid_subaru_vin(vin1):
@@ -360,7 +362,7 @@ def analyze_text_regions(f, file_size):
                 context = chunk[context_start:context_end]
 
                 try:
-                    context_str = context.decode('latin-1', errors='replace')
+                    context_str = context.decode(CHARSET, errors='replace')
                     # Clean up for display
                     context_str = ''.join(c if 32 <= ord(c) <= 126 else '.' for c in context_str)
 
@@ -466,6 +468,71 @@ class MultilingualPartRecord:
     raw_data: bytes
 
 
+
+@dataclass
+class MultilingualPartRecord180:
+    """Represents a multilingual part name record from sffastus (180 bytes)
+
+    Contains part names in 4 languages: English, German, French, Spanish.
+    Encoding: CP437 (NOT Latin-1)
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (7):  Part Code (e.g., "13028  ")
+        0x0D (40): English Name
+        0x35 (40): German Name
+        0x5D (40): French Name
+        0x85 (40): Spanish Name
+        0xAD (7):  Trailer (binary flags/metadata)
+    """
+    offset: int
+    model_code: str
+    part_code: str
+    name_en: str
+    name_de: str
+    name_fr: str
+    name_es: str
+    trailer: bytes
+    raw_data: bytes
+
+
+def is_multilingual_part_block_180(data: bytes) -> bool:
+    """
+    Check if data looks like a 180-byte multilingual part record block.
+
+    Detection heuristics:
+    - Starts with valid model code (6 bytes)
+    - Has alphanumeric part code at offset 6
+    - Has readable text in name fields
+    """
+    if len(data) < 180:
+        return False
+
+    try:
+        # Check model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # Check part code - should be alphanumeric
+        # Use CP437 as requested by user
+        # Part code is 7 bytes in this format
+        part_code = data[6:13].decode(CHARSET).strip()
+        if not part_code or not part_code.replace(' ', '').isalnum():
+            # Allow some flexibility, but usually part codes are alphanumeric
+            pass
+
+        # Check that English name area has readable text
+        name_area = data[13:53]
+        printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
+        if printable / len(name_area) < 0.5:
+            return False
+        
+        # Check German/French/Spanish areas too if needed, but EN is usually enough
+        return True
+    except:
+        return False
+
+
 def is_multilingual_part_block(data: bytes) -> bool:
     """
     Check if data looks like a multilingual part record block (192-byte records).
@@ -485,12 +552,12 @@ def is_multilingual_part_block(data: bytes) -> bool:
             return False
 
         # Check part code - should be alphanumeric
-        part_code = data[6:12].decode('cp437').strip()
+        part_code = data[6:12].decode(CHARSET).strip()
         if not part_code or not part_code.replace(' ', '').isalnum():
             return False
 
         # Check figure code - should contain digits
-        figure_code = data[12:17].decode('cp437').strip()
+        figure_code = data[12:17].decode(CHARSET).strip()
         if not any(c.isdigit() for c in figure_code):
             return False
 
@@ -503,6 +570,72 @@ def is_multilingual_part_block(data: bytes) -> bool:
         return True
     except:
         return False
+
+
+def parse_multilingual_part_records_180(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse multilingual part name records (180 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse (None = until invalid)
+        verbose: Print progress during parsing
+
+    Returns:
+        List of MultilingualPartRecord180 objects
+    """
+    RECORD_SIZE = 180
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        # Parse fields (cp437 encoding)
+        # Structure: model(6) + part(7) + en(40) + de(40) + fr(40) + es(40) + trailer(7)
+        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+        part_code = data[6:13].decode(CHARSET, errors='replace').strip()
+        # No figure/index in this format
+        
+        name_en = data[13:53].decode(CHARSET, errors='replace').strip()
+        name_de = data[53:93].decode(CHARSET, errors='replace').strip()
+        name_fr = data[93:133].decode(CHARSET, errors='replace').strip()
+        name_es = data[133:173].decode(CHARSET, errors='replace').strip()
+        trailer = data[173:180]
+
+        record = MultilingualPartRecord180(
+            offset=offset,
+            model_code=model_code,
+            part_code=part_code,
+            name_en=name_en,
+            name_de=name_de,
+            name_fr=name_fr,
+            name_es=name_es,
+            trailer=trailer,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_multilingual_part_records(f, start_offset, max_records=None, verbose=False):
@@ -540,14 +673,14 @@ def parse_multilingual_part_records(f, start_offset, max_records=None, verbose=F
 
         # Parse fields (cp437 encoding used by DOS-era Subaru software)
         # Structure: model(6) + part(6) + figure(5) + index(2) + en(40) + de(40) + fr(40) + es(40) + trailer(13)
-        model_code = data[0:6].decode('cp437', errors='replace').strip()
-        part_code = data[6:12].decode('cp437', errors='replace').strip()
-        figure_code = data[12:17].decode('cp437', errors='replace').strip()
-        index = data[17:19+1].decode('cp437', errors='replace').strip()
-        name_en = data[19+1:59+1].decode('cp437', errors='replace').strip()
-        name_de = data[59+1:99+1].decode('cp437', errors='replace').strip()
-        name_fr = data[99+1:139+1].decode('cp437', errors='replace').strip()
-        name_es = data[139+1:179+1].decode('cp437', errors='replace').strip()
+        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+        part_code = data[6:12].decode(CHARSET, errors='replace').strip()
+        figure_code = data[12:17].decode(CHARSET, errors='replace').strip()
+        index = data[17:19+1].decode(CHARSET, errors='replace').strip()
+        name_en = data[19+1:59+1].decode(CHARSET, errors='replace').strip()
+        name_de = data[59+1:99+1].decode(CHARSET, errors='replace').strip()
+        name_fr = data[99+1:139+1].decode(CHARSET, errors='replace').strip()
+        name_es = data[139+1:179+1].decode(CHARSET, errors='replace').strip()
         trailer = data[179+1:192]
 
         record = MultilingualPartRecord(
@@ -590,7 +723,7 @@ def detect_vin_record_type(data: bytes) -> str:
 
     # Check first record for VIN
     try:
-        vin1 = data[0:17].decode('latin-1', errors='replace').strip('\x00')
+        vin1 = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
         if not is_valid_subaru_vin(vin1):
             return 'unknown'
     except:
@@ -598,7 +731,7 @@ def detect_vin_record_type(data: bytes) -> str:
 
     # Check for 38-byte pattern: second VIN at offset 17
     try:
-        vin2_38 = data[17:34].decode('latin-1', errors='replace').strip('\x00')
+        vin2_38 = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
         if is_valid_subaru_vin(vin2_38):
             return 'vin_range'
     except:
@@ -607,7 +740,7 @@ def detect_vin_record_type(data: bytes) -> str:
     # Check for 69-byte pattern: null + flag + model code at offset 17-25
     try:
         if data[17] == 0x00 and data[18] in (0x00, 0x01, 0x02):
-            model_code = data[19:25].decode('latin-1')
+            model_code = data[19:25].decode(CHARSET)
             if is_valid_model_code(data[19:25]):
                 return 'vin_model'
     except:
@@ -646,21 +779,21 @@ def parse_vin_model_records(f, start_offset, max_records=None, verbose=False):
             break
 
         # Parse VIN
-        vin = data[0:17].decode('latin-1', errors='replace').strip('\x00')
+        vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
 
         if not is_valid_subaru_vin(vin):
             break
 
         # Parse remaining fields
         flag = data[18]
-        model_code = data[19:25].decode('latin-1', errors='replace').strip()
-        body_model = data[25:32].decode('latin-1', errors='replace').strip()
-        spec_code = data[32:41].decode('latin-1', errors='replace').strip()
+        model_code = data[19:25].decode(CHARSET, errors='replace').strip()
+        body_model = data[25:32].decode(CHARSET, errors='replace').strip()
+        spec_code = data[32:41].decode(CHARSET, errors='replace').strip()
         binary_flags = data[41:43]
-        date1 = data[43:51].decode('latin-1', errors='replace')
-        date2 = data[51:59].decode('latin-1', errors='replace')
-        date3 = data[59:67].decode('latin-1', errors='replace')
-        suffix = data[67:69].decode('latin-1', errors='replace')
+        date1 = data[43:51].decode(CHARSET, errors='replace')
+        date2 = data[51:59].decode(CHARSET, errors='replace')
+        date3 = data[59:67].decode(CHARSET, errors='replace')
+        suffix = data[67:69].decode(CHARSET, errors='replace')
 
         record = VINModelRecord(
             offset=offset,
@@ -722,8 +855,8 @@ def parse_vin_blocks(f, start_offset=0x800, max_records=None, verbose=False):
             break
 
         # Parse fields
-        vin_start = data[0:17].decode('latin-1', errors='replace').strip('\x00')
-        vin_end = data[17:34].decode('latin-1', errors='replace').strip('\x00')
+        vin_start = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
+        vin_end = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
         section = struct.unpack('<H', data[34:36])[0]
         index = struct.unpack('<H', data[36:38])[0]
 
@@ -832,7 +965,7 @@ def scan_vin_blocks_2kb(f, min_contiguous=5):
         if len(data) < 17:
             break
 
-        vin = data.decode('latin-1', errors='replace')
+        vin = data.decode(CHARSET, errors='replace')
 
         if is_valid_subaru_vin(vin):
             if current_start is None:
@@ -903,7 +1036,7 @@ def is_valid_model_code(data: bytes) -> bool:
     if len(data) < 6:
         return False
     try:
-        text = data[:6].decode('latin-1')
+        text = data[:6].decode(CHARSET)
         if not text[0] in MODEL_CODE_PREFIXES:
             return False
         if not text[1:3].isdigit():
@@ -942,7 +1075,7 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 3. VIN block - first 17 bytes are a valid Subaru VIN
     # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
     try:
-        vin = data[0:17].decode('latin-1', errors='replace')
+        vin = data[0:17].decode(CHARSET, errors='replace')
         if is_valid_subaru_vin(vin):
             vin_type = detect_vin_record_type(data)
             if vin_type == 'vin_range':
@@ -954,10 +1087,13 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     except:
         pass
 
-    # 4. Multilingual part block - 192-byte records with part names in 4 languages
-    # Check this BEFORE model_index since both start with valid model code
+    # 4. Multilingual part block - 192-byte records
     if is_multilingual_part_block(data):
         return 'multilingual_part'
+
+    # 4b. Multilingual part block (180-byte) - NEW
+    if is_multilingual_part_block_180(data):
+        return 'multilingual_part_180'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start
@@ -965,7 +1101,7 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
         # Check for category strings that appear in model index records
         # Categories like "BODY    ", "ENGINE  ", "TRAIN   " appear at known offsets
         try:
-            text = data.decode('latin-1', errors='replace')
+            text = data.decode(CHARSET, errors='replace')
             if any(cat in text for cat in ['BODY    ', 'ENGINE  ', 'LEGACY', 'IMPREZA', 'FORESTER']):
                 return 'model_index'
         except:
@@ -975,7 +1111,7 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
     try:
         # Check first record pattern: 7-char body code + 2 bytes + 6-char model code
-        body_code = data[0:7].decode('latin-1')
+        body_code = data[0:7].decode(CHARSET)
         if (len(body_code) == 7 and
             body_code.isalnum() and
             body_code[0].isalpha() and

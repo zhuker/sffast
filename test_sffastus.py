@@ -15,6 +15,7 @@ from sffastus_parser import (
     parse_vin_blocks,
     parse_vin_model_records,
     parse_multilingual_part_records,
+    parse_multilingual_part_records_180,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -22,6 +23,7 @@ from sffastus_parser import (
     is_valid_subaru_vin_strict,
     is_valid_model_code,
     is_multilingual_part_block,
+    is_multilingual_part_block_180,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -31,6 +33,7 @@ from sffastus_parser import (
     VINRecord,
     VINModelRecord,
     MultilingualPartRecord,
+    MultilingualPartRecord180,
 )
 
 # Test data paths
@@ -552,6 +555,87 @@ class TestMultilingualPartRecords(unittest.TestCase):
         self.assertEqual(rec.model_code, "B11")
         self.assertEqual(rec.name_en, "FUEL HOSE")
         self.assertEqual(rec.name_de, "KRAFTSTOFFSCHLAUCH")
+
+
+class TestMultilingualPartRecords180(unittest.TestCase):
+    """Tests for 180-byte multilingual part name records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_multilingual_part_block_180(self):
+        """Test detection of 180-byte multilingual part block pattern"""
+        # Create a fake 180-byte multilingual part record
+        model_code = b'B11   '
+        part_code = b'13028  '  # 7 bytes
+        # No figure/index
+        name_en = b'BELT-TIMING' + b' ' * 29
+        name_de = b'ZAHNRIEMEN' + b' ' * 30
+        name_fr = b'COURROIE DE DISTRIBUTION' + b' ' * 16
+        name_es = b'CORREA DISTRIBUCION' + b' ' * 21
+        trailer = b'\x00' * 7  # 7 bytes
+
+        # model(6) + part(7) + 40*4 + 7 = 180
+        record = model_code + part_code + name_en + name_de + name_fr + name_es + trailer
+        self.assertEqual(len(record), 180)
+
+        # Pad to 2KB block
+        data = record + b'\x00' * (2048 - 180)
+        self.assertTrue(is_multilingual_part_block_180(data))
+
+    def test_detect_multilingual_part_block_180(self):
+        """Test detect_block_type identifies multilingual_part_180"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0CD45000 which contains 180-byte multilingual parts
+            f.seek(0x0CD45000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0CD45000)
+        self.assertEqual(block_type, 'multilingual_part_180')
+
+    def test_parse_multilingual_part_records_180_us2(self):
+        """Parse 180-byte records from 0x0CD45000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_multilingual_part_records_180(f, start_offset=0x0CD45000, max_records=10)
+
+        self.assertEqual(len(records), 10)
+
+        # First record should be B11 model
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], MultilingualPartRecord180)
+        self.assertEqual(records[0].part_code, '13028')
+
+        # Check all 4 languages have content
+        # Note: encoding is CP437, parser handles it
+        self.assertTrue(len(records[0].name_en) > 0)
+        self.assertTrue("BELT-TIMING" in records[0].name_en)
+        self.assertTrue(len(records[0].name_de) > 0)
+        self.assertTrue(len(records[0].name_fr) > 0)
+        self.assertTrue(len(records[0].name_es) > 0)
+
+    def test_multilingual_part_record_180_dataclass(self):
+        """Test MultilingualPartRecord180 dataclass structure"""
+        rec = MultilingualPartRecord180(
+            offset=0x0CD45000,
+            model_code="B11",
+            part_code="13028",
+            name_en="BELT-TIMING",
+            name_de="ZAHNRIEMEN",
+            name_fr="COURROIE DE DISTRIBUTION",
+            name_es="CORREA DISTRIBUCION",
+            trailer=b'\x00' * 7,
+            raw_data=b'\x00' * 180
+        )
+        self.assertEqual(rec.offset, 0x0CD45000)
+        self.assertEqual(rec.model_code, "B11")
+        self.assertEqual(rec.name_en, "BELT-TIMING")
 
 
 class TestBlockTypeScan(unittest.TestCase):
