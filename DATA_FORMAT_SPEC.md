@@ -261,6 +261,23 @@ Offset  Size  Field
 
 **Validation:** Search for a known part number in the app, check if model code matches.
 
+### Part Range Records (24-byte Type) (0x0CD42800+) - **NEW**
+
+**Record size:** 24 bytes
+**Encoding:** CP437
+
+Appears to define valid part number ranges for a model.
+Located in blocks around `0x0CD42800`.
+
+```
+Offset  Size  Field
+------  ----  -----
+0x00    6     Model Code (e.g., "B11   ")
+0x06    7     Part Number Start (e.g., "11711  ")
+0x0D    7     Part Number End (e.g., "12024  ")
+0x14    4     Metadata (e.g., 0x17 0x19 Index 0x00)
+```
+
 ### Multilingual Part Records (167-byte Type) (0x0CD41000+) - **NEW**
 
 **Record size:** 167 bytes

@@ -470,6 +470,53 @@ class MultilingualPartRecord:
 
 
 @dataclass
+class PartRangeRecord24:
+    """Represents a part number range record from sffastus (24 bytes)
+
+    Located at 0x0CD42800+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6): Model Code (e.g., "B11   ")
+        0x06 (7): Part Number Start (e.g., "11711  ")
+        0x0D (7): Part Number End (e.g., "12024  ")
+        0x14 (4): Metadata (e.g., [0x17, 0x19, Index, 0x00])
+    """
+    offset: int
+    model_code: str
+    part_start: str
+    part_end: str
+    metadata: bytes
+    raw_data: bytes
+
+
+def is_part_range_block_24(data: bytes) -> bool:
+    """
+    Check if data looks like a 24-byte part range record block.
+
+    Detection heuristics:
+    - Starts with valid model code (6 bytes)
+    - If multiple records, next record also starts with valid model code
+    """
+    if len(data) < 24:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 48:
+            if not is_valid_model_code(data[24:30]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class MultilingualPartRecord167:
     """Represents a multilingual part name record from sffastus (167 bytes)
 
@@ -627,6 +674,64 @@ def is_multilingual_part_block(data: bytes) -> bool:
     except:
         return False
 
+
+
+
+def parse_part_range_records_24(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse part range records (24 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of PartRangeRecord24 objects
+    """
+    RECORD_SIZE = 24
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        # Parse fields (cp437)
+        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+        part_start = data[6:13].decode(CHARSET, errors='replace').strip()
+        part_end = data[13:20].decode(CHARSET, errors='replace').strip()
+        metadata = data[20:24]
+
+        record = PartRangeRecord24(
+            offset=offset,
+            model_code=model_code,
+            part_start=part_start,
+            part_end=part_end,
+            metadata=metadata,
+            raw_data=data
+        )
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_multilingual_part_records_167(f, start_offset, max_records=None, verbose=False):
@@ -1200,6 +1305,9 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
                 return 'vin'  # Fallback for unknown VIN format
     except:
         pass
+
+    if is_part_range_block_24(data):
+        return 'part_range_24'
 
     # 4. Multilingual part block - 192-byte records
     if is_multilingual_part_block(data):

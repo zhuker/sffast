@@ -18,6 +18,7 @@ from sffastus_parser import (
     parse_multilingual_part_records,
     parse_multilingual_part_records_180,
     parse_multilingual_part_records_167,
+    parse_part_range_records_24,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -27,6 +28,7 @@ from sffastus_parser import (
     is_multilingual_part_block,
     is_multilingual_part_block_180,
     is_multilingual_part_block_167,
+    is_part_range_block_24,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -38,6 +40,7 @@ from sffastus_parser import (
     MultilingualPartRecord,
     MultilingualPartRecord180,
     MultilingualPartRecord167,
+    PartRangeRecord24,
 )
 
 # Test data paths
@@ -696,6 +699,52 @@ class TestMultilingualPartRecords167(unittest.TestCase):
         # Check spec and description
         self.assertTrue(len(records[0].spec_code) > 0)
         self.assertTrue(len(records[0].description) > 0)
+
+
+class TestPartRangeRecords24(unittest.TestCase):
+    """Tests for 24-byte part range records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_part_range_block_24(self):
+        """Test detection of 24-byte part range block pattern"""
+        # Create fake 24-byte records
+        # Model(6) PartStart(7) PartEnd(7) Metadata(4)
+        record = b'B11   ' + b'11711  ' + b'12024  ' + b'\x17\x19\x2A\x00'
+        self.assertEqual(len(record), 24)
+
+        # Block with 2 consistent records
+        data = (record * 2) + b'\x00' * (2048 - 48)
+        self.assertTrue(is_part_range_block_24(data))
+
+    def test_detect_part_range_block_24(self):
+        """Test detect_block_type identifies part_range_24"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0CD42800 which contains 24-byte records
+            f.seek(0x0CD42800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0CD42800)
+        self.assertEqual(block_type, 'part_range_24')
+
+    def test_parse_part_range_records_24_us2(self):
+        """Parse 24-byte records from 0x0CD42800 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_part_range_records_24(f, start_offset=0x0CD42800, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], PartRangeRecord24)
+        self.assertEqual(records[0].part_start, '11711')
+        self.assertEqual(records[0].part_end, '12024')
 
 
 class TestBlockTypeScan(unittest.TestCase):
