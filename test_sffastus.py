@@ -42,7 +42,7 @@ from sffastus_parser import (
     MultilingualPartRecord180,
     MultilingualPartRecord167,
     PartRangeRecord24,
-    ModelSpecRecord103,
+    ModelSpecRecord103, CatalogApplicabilityRecord466,
 )
 
 # Test data paths
@@ -800,6 +800,46 @@ class TestModelSpecRecords103(unittest.TestCase):
         self.assertEqual(records[3].drivetrain, 'F4WD')
 
 
+class TestPartDetailRecords466(unittest.TestCase):
+    """Tests for 466-byte part detail records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_parse_part_detail_records_466_us2(self):
+        """Parse 466-byte records from 0x0CE04000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        initial_offset = 0x0CE04000
+        records = []
+        with open(SFCDUS2_PATH, 'rb') as f:
+            for block in range(10):
+                offset = initial_offset + (block * 2048)
+                f.seek(offset)
+                # Read first few records manually
+                for i in range(2048 // 466):  # 4 records fit in 2KB (466*4=1864)
+                    data = f.read(466)
+                    if len(data) < 466:
+                        break
+
+                    # Basic validation: starts with model code
+                    record = CatalogApplicabilityRecord466.parse_466(data, offset)
+                    records.append(record)
+                    offset = offset + 466
+
+        # Should have found at least one valid record
+        self.assertGreater(len(records), 0)
+
+        # First record should be B11
+        self.assertEqual(records[0].model_code, 'B11')
+
+        # Print for manual inspection
+        for i, r in enumerate(records):
+            print(f"Record {i}: {r}")
+
+
 class TestBlockTypeScan(unittest.TestCase):
     """Tests for full file block type scanning"""
 
@@ -853,16 +893,6 @@ class TestBlockTypeScan(unittest.TestCase):
 
         with open(SFCDUS2_PATH, 'rb') as f:
             ranges = scan_block_types(f)
-
-        for r in ranges:
-            start, end, count, type = r
-            if type == 'model_spec_103':
-                print(start, end, count, type)
-                with open(SFCDUS2_PATH, 'rb') as f:
-                    for _start in range(start, end, 2048):
-                        records = parse_model_spec_records_103(f, start_offset=_start, max_records=2048//103)
-                        for i, r in enumerate(records):
-                            print(f"0x{start:08X} {i} {r}")
 
         self.assertGreater(len(ranges), 0)
 

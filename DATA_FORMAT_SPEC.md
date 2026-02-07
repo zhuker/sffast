@@ -261,6 +261,33 @@ Offset  Size  Field
 
 **Validation:** Search for a known part number in the app, check if model code matches.
 
+### Part Detail Records (466-byte Type) (0x0CE04000+) - **NEW**
+
+**Record size:** 466 bytes
+**Encoding:** CP437
+
+Detailed part information including part numbers, date ranges, and specifications.
+Located in blocks around `0x0CE04000`.
+
+**Preliminary Structure:**
+```
+Offset  Size  Field
+------  ----  -----
+0x00    6     Model Code (e.g., "B11   ")
+0x06    ~20   Part Number Fields (e.g., "10103  10103AA810")
+0x1A    ~20   Date Range (e.g., "D1996070119980331")
+0x2E    ~20   Engine/Spec (e.g., "EJ25D")
+...     ~400  Additional metadata, padding, and delimiters
+```
+
+**Notes:**
+- Contains extensive padding with null bytes and delimiter characters (@, *)
+- Multiple part number references within single record
+- Date ranges appear in YYYYMMDDYYYYMMDD format
+- Further analysis needed to determine exact field boundaries
+
+**Validation:** Parse records and verify part numbers match known Subaru part catalogs.
+
 ### Model Specification Records (103-byte Type) (0x0CD4B800+) - **VALIDATED ✓**
 
 **Record size:** 103 bytes

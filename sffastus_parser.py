@@ -12,7 +12,7 @@ import struct
 import os
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 SFFASTUS_PATH = "sffastus"
 
@@ -467,6 +467,84 @@ class MultilingualPartRecord:
     trailer: bytes
     raw_data: bytes
 
+
+@dataclass
+class CatalogApplicabilityRecord466:
+    offset: int
+
+    model_code: str
+    group_category: str
+    part_id: str
+
+    date_flag: str
+    date: str
+
+    spec_logic: str
+    usage_notes: str
+
+    internal_flags: str
+    unknown: bytes
+    raw_data: bytes = field(repr=False)
+
+
+    @property
+    def is_manual_only(self) -> bool:
+        """Helper: Checks if spec logic restricts to Manual Transmission."""
+        return '.MT' in self.spec_logic or 'MT.' in self.spec_logic
+
+    @staticmethod
+    def parse_466(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return CatalogApplicabilityRecord466(
+            # Identification
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            group_category=clean(data[6:11]),
+            part_id=clean(data[13:23]),
+
+            # Validity Range
+            date_flag=clean(data[28:29]),
+            date=clean(data[29:46]),
+
+            # The Logic String (Fixed window at 0x40/64 decimal)
+            spec_logic=clean(data[64:128]),
+
+            # Notes / Constraints (Fixed window at 0x80/128 decimal)
+            usage_notes=clean(data[128:160]),
+
+            # Internal pointers (Text based integers)
+            internal_flags=clean(data[160:180]),
+
+            # The rest is the binary feature mask
+            unknown=data[180:],
+        )
+
+def is_catalog_applicability_block_466(data: bytes) -> bool:
+    """
+    Check if data looks like a 466-byte catalog applicability record block.
+
+    Detection heuristics:
+    - Consistent model codes every 466 bytes.
+    """
+    if len(data) < 466:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 932:  # 466 * 2
+            if not is_valid_model_code(data[466:466+6]):
+                return False
+
+        return True
+    except:
+        return False
 
 @dataclass
 class ModelSpecRecord103:
@@ -1461,6 +1539,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
 
     if is_model_spec_block_103(data):
         return 'model_spec_103'
+
+    # 4f. Catalog applicability block (466-byte) - NEW
+    if is_catalog_applicability_block_466(data):
+        return 'catalog_applicability_466'
 
     # 5. Model index block - starts with valid model code, has metadata pattern
     # Model index records are 288 bytes, with model code at start
