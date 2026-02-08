@@ -407,6 +407,42 @@ Offset  Size  Field               Description
 - Multilingual strings are space-padded to 40 bytes
 - Validated by scanning the file and matching codes to application categories
 
+**Validation:** Cross-reference terms with part descriptions and technical documentation.
+
+### FIG Illustration Records (183-byte Type) (0x0DF9B000+) - **VALIDATED ✓**
+
+**Record size:** 183 bytes
+**Encoding:** CP437
+
+Contains multilingual descriptions for individual FIG illustrations (e.g., "CYLINDER BLOCK", "PISTON & CRANKSHAFT"). These records are specifically linked to FIG groups.
+Located in blocks around `0x0DF9B000`.
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    2     FIG Group Code      Category code (e.g., "0A", "1B")
+0x08    5     FIG Group Code 2    Secondary code (e.g., "003  ")
+0x0D    40    Description (EN)    Illustration name in English
+0x35    40    Description (DE)    Illustration name in German
+0x5D    40    Description (FR)    Illustration name in French
+0x85    40    Description (ES)    Illustration name in Spanish
+0xAD    10    Trailer/Metadata    LE reference pointers or flags
+```
+
+**Examples (Model B11, Group 0A):**
+- English: `004  CYLINDER BLOCK`
+- English: `010  PISTON & CRANKSHAFT`
+- English: `005  TIMING HOLE PLUG & TRANSMISSION BOL`
+
+**Notes:**
+- Used to populate the illustrated index names in the application.
+- Record size (183) is one byte smaller than the FIG Group category records.
+- The FIG index (e.g., 004, 010) is typically embedded at the start of the English description.
+
+**Validation:** Matches FIG illustration titles in the illustrated index menu.
+
 ### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
 
 **Record size:** 91 bytes

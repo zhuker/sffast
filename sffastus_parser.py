@@ -675,6 +675,81 @@ def is_color_record_block_91(data: bytes) -> bool:
 
 
 @dataclass
+class FIGIllustrationRecord183:
+    """Represents a FIG illustration description record from sffastus (183 bytes)
+
+    Located at 0x0DF9B000+
+    Encoding: CP437
+
+    Contains multilingual descriptions for individual FIG illustrations.
+    These are the illustration names shown in the illustrated index.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (2):  FIG Group Code (e.g., "0A", "1B")
+        0x08 (40): English Description (often prefixed with index like "010")
+        0x30 (40): German Description (Deutsch)
+        0x58 (40): French Description (Français)
+        0x80 (40): Spanish Description (Español)
+        0xA8 (15): Trailer/Metadata
+    """
+    offset: int
+    model_code: str
+    fig_group_code: str
+    fig_group_code2: str
+    desc_en: str
+    desc_de: str
+    desc_fr: str
+    desc_es: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_183(data: bytes, offset: int = 0):
+        """Parse a 183-byte FIG illustration record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return FIGIllustrationRecord183(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            fig_group_code=clean(data[6:8]),
+            fig_group_code2=clean(data[8:8+5]),
+            desc_en=clean(data[8+5:48+5]),
+            desc_de=clean(data[48+5:88+5]),
+            desc_fr=clean(data[88+5:128+5]),
+            desc_es=clean(data[128+5:168+5]),
+            trailer=data[168+5:183],
+        )
+
+
+def is_fig_illustration_block_183(data: bytes) -> bool:
+    """
+    Check if data looks like a 183-byte FIG illustration record block.
+
+    Detection heuristics:
+    - Consistent model codes every 183 bytes.
+    - FIG group code pattern (2 chars: digit + letter/digit)
+    """
+    if len(data) < 183:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 183*2:
+            if not is_valid_model_code(data[183:183+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class FIGGroupCategoryRecord184:
     """Represents a FIG group category description record from sffastus (184 bytes)
 
@@ -1335,6 +1410,51 @@ def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
             break
 
         record = ColorRecord91.parse_91(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+
+def parse_fig_illustration_records_183(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse FIG illustration description records (183 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of FIGIllustrationRecord183 objects
+    """
+    RECORD_SIZE = 183
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = FIGIllustrationRecord183.parse_183(data, offset)
         records.append(record)
 
         if verbose and count % 1000 == 0:
@@ -2147,6 +2267,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4k. FIG group category block (184-byte) - NEW
     if is_fig_group_category_block_184(data):
         return 'fig_group_category_184'
+
+    # 4l. FIG illustration block (183-byte) - NEW
+    if is_fig_illustration_block_183(data):
+        return 'fig_illustration_183'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
