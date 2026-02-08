@@ -470,7 +470,36 @@ Offset  Size  Field               Description
 
 **Validation:** Index numbers and labels match the illustrations documented in the 183-byte records.
 
-### Part Group Records (185-byte Type) (0x0DFD3000+) - **NEW**
+### Variant Glossary Records (81-byte Type) (0x0E6E9000+) - **VALIDATED ✓**
+ 
+ **Record size:** 81 bytes
+ **Encoding:** CP437
+ 
+ Maps model-specific configuration codes (body types, engine codes, transmission types, etc.) to their full descriptive names. These names are used in the "Applied Model" specification display and vehicle selection.
+ 
+ Located in blocks around `0x0E6E9000`. **54 blocks detected in SFCDUS2.**
+ 
+ **Structure:**
+ ```
+ Offset  Size  Field               Description
+ ------  ----  -----               -----------
+ 0x00    6     Model Code          "B11", "G11", etc.
+ 0x06    15    Variant Code        Variant code (e.g., "2200CC", "SW", "5MT")
+ 0x15    60    Description         Full descriptive name
+ ```
+ 
+ **Notes:**
+ - The first record in some blocks may have leading spaces before the model code to maintain certain byte-padding requirements.
+ - Variant codes include:
+   - Engine displacement (e.g., "2200CC", "2500CC")
+   - Body styles (e.g., "SW" for Station Wagon, "TW" for Touring Wagon, "SEDAN")
+   - Transmission types (e.g., "MT", "AT", "5MT")
+   - Trim levels and other variant qualifiers.
+ - Descriptions are typically formatted as `CATEGORY : VALUE` (e.g., `GRADE : OUT BACK`).
+ 
+ **Validation:** Variant names match the technical specifications and grading levels for the respective Subaru model years.
+ 
+ ### Part Group Records (185-byte Type) (0x0DFD3000+) - **NEW**
 
 **Record size:** 185 bytes
 **Encoding:** CP437

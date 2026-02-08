@@ -986,6 +986,62 @@ def is_fig_illustration_block_183(data: bytes) -> bool:
 
 
 @dataclass
+class VariantGlossaryRecord81:
+    """Represents a variant glossary record from sffastus (81 bytes)
+
+    Located at 0x0E6E9000+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (15): Variant Code (e.g., "2200CC", "SW", "TW")
+        0x15 (60): Description (e.g., "ENGINE DISPLACEMENT : 2200CC")
+    """
+    offset: int
+    model_code: str
+    variant_code: str
+    description: str
+    raw_data: bytes
+
+    @staticmethod
+    def parse_81(data: bytes, offset: int = 0):
+        """Parse an 81-byte variant glossary record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return VariantGlossaryRecord81(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            variant_code=clean(data[6:21]),
+            description=clean(data[21:81]),
+        )
+
+
+def is_variant_glossary_block_81(data: bytes) -> bool:
+    """
+    Check if data looks like an 81-byte variant glossary record block.
+
+    Detection heuristics:
+    - Consistent model codes every 81 bytes.
+    - Handles potential leading padding at start of block.
+    """
+    if len(data) < 162:  # Need at least 2 records to verify consistency
+        return False
+
+    try:
+        # Check common offsets for model code (0, 2, 4...)
+        for start_offset in range(10):
+            if is_valid_model_code(data[start_offset:start_offset+6]):
+                # Verify consistency with next record
+                if is_valid_model_code(data[start_offset+81:start_offset+81+6]):
+                    return True
+        return False
+    except:
+        return False
+
+
+@dataclass
 class FIGGroupCategoryRecord184:
     """Represents a FIG group category description record from sffastus (184 bytes)
 
@@ -1692,6 +1748,51 @@ def parse_part_group_records_185(f, start_offset, max_records=None, verbose=Fals
             break
 
         record = PartGroupRecord185.parse_185(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_variant_glossary_records_81(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse variant glossary records (81 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of VariantGlossaryRecord81 objects
+    """
+    RECORD_SIZE = 81
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        # Note: can have leading spaces in first record of block
+        if not is_valid_model_code(data[0:6]) and not is_valid_model_code(data[0:6].strip().ljust(6)):
+            break
+
+        record = VariantGlossaryRecord81.parse_81(data, offset)
         records.append(record)
 
         if verbose and count % 1000 == 0:
@@ -2654,6 +2755,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4o. Part group block (185-byte) - NEW
     if is_part_group_block_185(data):
         return 'part_group_185'
+
+    # 4p. Variant glossary block (81-byte) - NEW
+    if is_variant_glossary_block_81(data):
+        return 'variant_glossary_81'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"

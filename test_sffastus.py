@@ -28,6 +28,7 @@ from sffastus_parser import (
     parse_fig_illustration_page_records_89,
     parse_engine_spec_records_230,
     parse_part_group_records_185,
+    parse_variant_glossary_records_81,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -48,6 +49,7 @@ from sffastus_parser import (
     is_fig_illustration_page_block_89,
     is_engine_spec_block_230,
     is_part_group_block_185,
+    is_variant_glossary_block_81,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -71,6 +73,7 @@ from sffastus_parser import (
     FIGIllustrationPage89,
     EngineSpecRecord230,
     PartGroupRecord185,
+    VariantGlossaryRecord81,
 )
 
 # Test data paths
@@ -1496,6 +1499,8 @@ class TestBlockTypeScan(unittest.TestCase):
         # Verify we found expected block types
         types_found = set(r[3] for r in ranges)
         self.assertIn('header', types_found)
+        # Should have variant_glossary_81
+        self.assertIn('variant_glossary_81', types_found)
         # Should have either vin_range or vin_model (or both)
         self.assertTrue('vin_range' in types_found or 'vin_model' in types_found)
 
@@ -1688,6 +1693,69 @@ class TestBlockTypeScan(unittest.TestCase):
             self.assertIn('0A', validated_codes)
             self.assertIn('5A', validated_codes)
             self.assertGreater(len(validated_codes), 10)
+
+
+class TestVariantGlossaryRecords81(unittest.TestCase):
+    """Tests for 81-byte variant glossary records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_variant_glossary_block_81(self):
+        """Test detection of 81-byte variant glossary block pattern"""
+        # Create a fake 81-byte record
+        # model(6) + variant(15) + desc(60) = 81
+        model_code = b'B11   '
+        variant_code = b'2200CC         ' # 15 bytes
+        description = b'ENGINE DISPLACEMENT : 2200CC' + b' ' * 32 # 60 bytes
+        
+        record = model_code + variant_code + description
+        self.assertEqual(len(record), 81)
+
+        # Pad to 2KB block
+        data = (record * 2) + b'\x00' * (2048 - 162)
+        self.assertTrue(is_variant_glossary_block_81(data))
+        
+        # Test with leading spaces in first record
+        data_padded = b'  ' + (record * 2)
+        data_padded = data_padded[:2048].ljust(2048, b'\x00')
+        self.assertTrue(is_variant_glossary_block_81(data_padded))
+
+    def test_detect_variant_glossary_block_81(self):
+        """Test detect_block_type identifies variant_glossary_81"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E6E9000 which contains 81-byte records
+            f.seek(0x0E6E9000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0E6E9000)
+        self.assertEqual(block_type, 'variant_glossary_81')
+
+    def test_validate_all_variant_glossary_blocks81(self):
+        """Validate all variant_glossary_81 blocks in the file"""
+        print("\n=== Validating Variant Glossary Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            glossary_ranges = [r for r in ranges if r[3] == 'variant_glossary_81']
+            self.assertGreater(len(glossary_ranges), 0, "No Variant Glossary blocks found")
+
+            print(f"Found {len(glossary_ranges)} Variant Glossary blocks (covering {sum(r[2] for r in glossary_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in glossary_ranges:
+                records = parse_variant_glossary_records_81(f, r_start)
+                for rec in records:
+                    print(rec)
+                    self.assertIsInstance(rec, VariantGlossaryRecord81)
+                    # Use a smaller count for validation to avoid huge logs if many records
+                    # but check at least some properties
+                    self.assertTrue(len(rec.model_code) >= 3)
+
 
 if __name__ == '__main__':
     # Run tests
