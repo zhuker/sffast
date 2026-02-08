@@ -57,7 +57,7 @@ SFCDUS2_PATH = "SFCDUS2/sffastus"
 SFCDUS3_PATH = "SFCDUS3/sffastus"
 FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
 ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
-
+MYSTI_VIN = "JF1GD70655L510047"
 
 def create_parser():
     # Shared parser instance with figure codes for block disambiguation
@@ -83,7 +83,7 @@ class TestVINValidation(unittest.TestCase):
     def test_valid_prefixes(self):
         """Test that all documented prefixes are accepted"""
         self.assertTrue(is_valid_subaru_vin("4S3BD3350T1200011"))  # US
-        self.assertTrue(is_valid_subaru_vin("JF1GD70655L510047"))  # Japan JF1
+        self.assertTrue(is_valid_subaru_vin(MYSTI_VIN))  # Japan JF1
         self.assertTrue(is_valid_subaru_vin("JF2SJAAC5FH123456"))  # Japan JF2
 
     def test_invalid_prefixes(self):
@@ -107,6 +107,35 @@ class TestVINValidation(unittest.TestCase):
         self.assertFalse(is_valid_subaru_vin_strict("4S3BD3350T12"))
         # Invalid chars (I, O, Q not allowed in VINs)
         self.assertFalse(is_valid_subaru_vin_strict("4S3BD3350I1200011"))
+
+class TestMyQueries(unittest.TestCase):
+    # my sti offset 128744666
+    def test_vin_model(self):
+        # 0x003E5000  0x0CD41000    103096  vin_model
+        all_records = []
+        body_model_index = dict()
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            initial_offset = 0x003E5000
+            num_blocks = 103096
+            for i in range(num_blocks):
+                offset = initial_offset + i * 2048
+                if i % 1000 == 0:
+                    print(i, offset)
+
+                # print(offset)
+                records = parser.parse_vin_model_records(f, start_offset=offset)
+                self.assertTrue(len(records) > 0)
+                all_records.extend(records)
+                for r in records:
+                    if r.body_model not in body_model_index:
+                        body_model_index[r.body_model] = []
+                    body_model_index[r.body_model].append(r)
+
+
+        print(len(all_records))
+        mysti = list(filter(lambda r: r.vin == MYSTI_VIN, all_records))
+        print(mysti)
 
 
 class TestVINBlocks(unittest.TestCase):
@@ -513,6 +542,28 @@ class TestVINModelRecords(unittest.TestCase):
 
     def test_parse_vin_model_records_us2(self):
         """Parse VIN-Model records from 0x3E5000 in SFCDUS2"""
+        offset = 128744666 // 2048 * 2048
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parser.parse_vin_model_records(f, start_offset=offset)
+
+        mysti = list(filter(lambda r: r.vin == MYSTI_VIN, records))
+        self.assertEqual(len(mysti), 1)
+        rec = mysti[0]
+        self.assertEqual(rec.offset, 128744666)
+        self.assertEqual(rec.vin, MYSTI_VIN)
+        self.assertEqual(rec.model_code, "G11")
+        self.assertEqual(rec.color_code, "51E")
+        self.assertEqual(rec.trim_code, "B20")
+        self.assertEqual(rec.option_code, "TG")
+        self.assertEqual(rec.destination_code, "U4")
+        self.assertEqual(rec.date1, '20040625')
+        self.assertEqual(rec.date2, '20040624')
+        self.assertEqual(rec.date1, '20040625')
+        self.assertEqual(rec.flag, 1)
+
+
+    def test_parse_my_sti(self):
+        """Parse VIN-Model records from 0x3E5000 in SFCDUS2"""
         with open(SFCDUS2_PATH, 'rb') as f:
             records = parser.parse_vin_model_records(f, start_offset=0x3E5000, max_records=10)
 
@@ -535,17 +586,23 @@ class TestVINModelRecords(unittest.TestCase):
             flag=1,
             model_code="S12",
             body_model="SHMDY6S",
-            spec_code="G1UH20NT",
+            color_code="G1U",
+            trim_code="H20",
+            option_code="NT",
             binary_flags=b'\x00\x10',
             date1="20120116",
             date2="20120112",
             date3="20120112",
-            suffix="U5",
+            destination_code="U5",
             raw_data=b'\x00' * 69
         )
         self.assertEqual(rec.offset, 0x3E5000)
         self.assertEqual(rec.vin, "JF2SHAEC0CH440463")
         self.assertEqual(rec.model_code, "S12")
+        self.assertEqual(rec.color_code, "G1U")
+        self.assertEqual(rec.trim_code, "H20")
+        self.assertEqual(rec.option_code, "NT")
+        self.assertEqual(rec.destination_code, "U5")
         self.assertEqual(len(rec.date1), 8)
 
 

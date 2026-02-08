@@ -417,24 +417,29 @@ class VINModelRecord:
         0x12 (1):  Flag (typically 0x01)
         0x13 (6):  Model Code (e.g., "S12   ")
         0x19 (7):  Body Model (e.g., "SHMDY6S")
-        0x20 (9):  Spec/Option Code (e.g., "G1UH20NT ")
+        0x20 (3):  Color Code (e.g., "G1U")
+        0x23 (3):  Trim Code (e.g., "H20")
+        0x26 (2):  Main Option Code (e.g., "NT")
+        0x28 (1):  Padding (space)
         0x29 (2):  Binary flags
         0x2B (8):  Date 1 (YYYYMMDD)
         0x33 (8):  Date 2 (YYYYMMDD)
         0x3B (8):  Date 3 (YYYYMMDD)
-        0x43 (2):  Suffix Code (e.g., "U5")
+        0x43 (2):  Destination Code (e.g., "U5")
     """
     offset: int
     vin: str
     flag: int
     model_code: str
     body_model: str
-    spec_code: str
+    color_code: str
+    trim_code: str
+    option_code: str
     binary_flags: bytes
     date1: str
     date2: str
     date3: str
-    suffix: str
+    destination_code: str
     raw_data: bytes = field(repr=False)
 
 
@@ -2339,18 +2344,22 @@ class SffastusBlockParser:
             vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
 
             if not is_valid_subaru_vin(vin):
+                # print(f"not subaru vin {vin}")
                 break
 
             # Parse remaining fields
             flag = data[18]
             model_code = data[19:25].decode(CHARSET, errors='replace').strip()
             body_model = data[25:32].decode(CHARSET, errors='replace').strip()
-            spec_code = data[32:41].decode(CHARSET, errors='replace').strip()
+            color_code = data[32:35].decode(CHARSET, errors='replace').strip()
+            trim_code = data[35:38].decode(CHARSET, errors='replace').strip()
+            option_code = data[38:40].decode(CHARSET, errors='replace').strip()
+            # data[40] is padding (space)
             binary_flags = data[41:43]
             date1 = data[43:51].decode(CHARSET, errors='replace')
             date2 = data[51:59].decode(CHARSET, errors='replace')
             date3 = data[59:67].decode(CHARSET, errors='replace')
-            suffix = data[67:69].decode(CHARSET, errors='replace')
+            destination_code = data[67:69].decode(CHARSET, errors='replace')
 
             record = VINModelRecord(
                 offset=offset,
@@ -2358,12 +2367,14 @@ class SffastusBlockParser:
                 flag=flag,
                 model_code=model_code,
                 body_model=body_model,
-                spec_code=spec_code,
+                color_code=color_code,
+                trim_code=trim_code,
+                option_code=option_code,
                 binary_flags=binary_flags,
                 date1=date1,
                 date2=date2,
                 date3=date3,
-                suffix=suffix,
+                destination_code=destination_code,
                 raw_data=data
             )
             records.append(record)

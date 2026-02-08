@@ -257,6 +257,40 @@ Content:
 
 **Validation:** Enter a VIN in the app, verify the range matching behavior.
 
+### VIN-Model Detail Records (69-byte Type) (0x3E5000+) - **VALIDATED ✓**
+
+**Record size:** 69 bytes
+**Encoding:** CP437
+
+Full vehicle specification records keyed by VIN. Each record maps a specific VIN to its complete build configuration including model, body type, color, trim, options, and production dates. Located immediately after the VIN range index blocks.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 17 | VIN | Full VIN (e.g. `JF2SHAEC0CH440463`) |
+| 0x11 | 1 | Null | Null terminator |
+| 0x12 | 1 | Flag | Typically `0x01` |
+| 0x13 | 6 | Model Code | e.g. `S12   `, `B11   ` |
+| 0x19 | 7 | Body Model | e.g. `SHMDY6S`, `BD6AY1G` |
+| 0x20 | 3 | Color Code | Paint/color code (e.g. `G1U`) |
+| 0x23 | 3 | Trim Code | Interior trim code (e.g. `H20`) |
+| 0x26 | 2 | Main Option Code | Main option code (e.g. `NT`) |
+| 0x28 | 1 | Padding | Space |
+| 0x29 | 2 | Binary Flags | Unknown flags |
+| 0x2B | 8 | Date 1 | `YYYYMMDD` (e.g. `20120116`) |
+| 0x33 | 8 | Date 2 | `YYYYMMDD` (e.g. `20120112`) |
+| 0x3B | 8 | Date 3 | `YYYYMMDD` (e.g. `20120112`) |
+| 0x43 | 2 | Destination Code | Market/destination (e.g. `U5`) |
+
+**Notes:**
+- Records are contiguous; parsing stops when VIN fails validation
+- Color/trim/option codes were previously treated as a single 9-byte "spec_code" field
+- Destination code indicates target market (e.g. `U5` = US market)
+- Three date fields may represent production, shipping, and registration dates
+
+**Validation:** Parse records from VIN pointer targets and verify model/body/color combinations match known Subaru specifications.
+
 ### Model-Spec Records (0x0F000000+) - **TO VALIDATE**
 
 **Record size:** ~69 bytes (estimated)
