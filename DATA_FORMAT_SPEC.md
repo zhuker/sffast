@@ -671,6 +671,35 @@ Offset  Size  Field
 0xAD    7     Trailer (binary flags/metadata)
 ```
 
+### Inventory Records (199-byte Type) (0x0E147000+) - **VALIDATED ✓**
+
+**Record size:** 199 bytes
+**Encoding:** CP437
+
+Mapping of model codes and figures to full part numbers and multilingual names.
+Located in blocks around `0x0E147000`.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   ` |
+| 0x06 | 5 | Figure | FIG index (e.g. `004  `) |
+| 0x0B | 2 | Figure Page | Section/Page within figure (e.g. `01`) |
+| 0x0D | 15 | Part Number | Full 15-char part number |
+| 0x1C | 4 | Unknown | Binary metadata |
+| 0x20 | 7 | Part Code | 7-character part code |
+| 0x27 | 40 | Name EN | English part name |
+| 0x4F | 40 | Name DE | German part name |
+| 0x77 | 40 | Name FR | French part name |
+| 0x9F | 40 | Name ES | Spanish part name |
+
+**Notes:**
+- `Part Number` matches the 15-character length used in `SF_PRICE.DAT`.
+- `Part Code` matches the 7-character length used in official documentation.
+- All names are space-padded to 40 bytes.
+- Record is a superset of information, linking figure/page to actual global part numbers.
+
 ### Multilingual Part Records (192-byte Type) (0x0CD4D000+) - **VALIDATED ✓**
 
 **Record size:** 192 bytes

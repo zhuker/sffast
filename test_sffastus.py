@@ -29,6 +29,7 @@ from sffastus_parser import (
     parse_engine_spec_records_230,
     parse_part_group_records_185,
     parse_variant_glossary_records_81,
+    parse_inventory_records_199,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -50,6 +51,7 @@ from sffastus_parser import (
     is_engine_spec_block_230,
     is_part_group_block_185,
     is_variant_glossary_block_81,
+    is_inventory_block_199,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -74,6 +76,7 @@ from sffastus_parser import (
     EngineSpecRecord230,
     PartGroupRecord185,
     VariantGlossaryRecord81,
+    InventoryRecord199,
 )
 
 # Test data paths
@@ -1755,6 +1758,70 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
                     # Use a smaller count for validation to avoid huge logs if many records
                     # but check at least some properties
                     self.assertTrue(len(rec.model_code) >= 3)
+
+
+class TestInventoryRecord199(unittest.TestCase):
+    """Tests for 199-byte inventory records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_inventory_block_199(self):
+        """Test detection of 199-byte inventory block pattern"""
+        # Create a fake 199-byte record
+        # model(6) + part(7) + extra(10) + names(40*4) + trailer(16) = 199
+        model_code = b'B11   '
+        part_code = b'004  02'
+        extra_code = b'037018200 '
+        name_en = b'GASKET-ALUMINIUM' + b' ' * 24
+        name_de = b'DICHTUNG - ALUMINIUM' + b' ' * 20
+        name_fr = b'JOINT - ALUMINIUM' + b' ' * 23
+        name_es = b'JUNTA ESTANQUEIDAD ALUMINIO' + b' ' * 13
+        trailer = b'\x00' * 16
+        
+        record = model_code + part_code + extra_code + name_en + name_de + name_fr + name_es + trailer
+        self.assertEqual(len(record), 199)
+
+        # Pad to 2KB block
+        data = (record * 2) + b'\x00' * (2048 - 398)
+        self.assertTrue(is_inventory_block_199(data))
+
+    def test_detect_inventory_block_199(self):
+        """Test detect_block_type identifies inventory_199"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E147000 which contains 199-byte records
+            f.seek(0x0E147000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0E147000)
+        self.assertEqual(block_type, 'inventory_199')
+
+    def test_validate_all_inventory_blocks199(self):
+        """Validate inventory_199 blocks in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Validating Inventory Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            inv_ranges = [r for r in ranges if r[3] == 'inventory_199']
+            self.assertGreater(len(inv_ranges), 0, "No Inventory blocks found")
+
+            print(f"Found {len(inv_ranges)} Inventory blocks (covering {sum(r[2] for r in inv_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in inv_ranges:
+                records = parse_inventory_records_199(f, r_start, max_records=10)
+                for rec in records:
+                    print(rec)
+                    self.assertIsInstance(rec, InventoryRecord199)
+                    self.assertTrue(len(rec.model_code) >= 3)
+                    self.assertTrue(len(rec.part_code) > 0)
 
 
 if __name__ == '__main__':

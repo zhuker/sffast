@@ -847,6 +847,83 @@ class FIGIllustrationPage89:
 
 
 @dataclass
+class InventoryRecord199:
+    """Represents a 199-byte inventory/part name record from sffastus
+
+    Located at 0x0E147000+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (7):  Part Code (e.g., "004  02")
+        0x0D (10): Extra Code/ID (e.g., "037018200")
+        0x17 (40): English Name
+        0x3F (40): German Name
+        0x67 (40): French Name
+        0x8F (40): Spanish Name
+        0xB7 (16): Trailer/Metadata
+    """
+    offset: int
+    model_code: str
+    figure: str
+    figure_page: str
+    part_number: str
+    unknown: bytes
+    part_code: str
+    name_en: str
+    name_de: str
+    name_fr: str
+    name_es: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_199(data: bytes, offset: int = 0):
+        """Parse a 199-byte inventory record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        fix_offset=16
+        return InventoryRecord199(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            figure=clean(data[6:6+5]),
+            figure_page=clean(data[6+5:13]),
+            part_number=clean(data[13:23+5]),
+            unknown=data[23+5:23+5+4],
+            part_code=clean(data[23+5+4:23+fix_offset]),
+            name_en=clean(data[23+fix_offset:63+fix_offset]),
+            name_de=clean(data[63+fix_offset:103+fix_offset]),
+            name_fr=clean(data[103+fix_offset:143+fix_offset]),
+            name_es=clean(data[143+fix_offset:183+fix_offset]),
+            trailer=data[183+fix_offset:199],
+        )
+
+
+def is_inventory_block_199(data: bytes) -> bool:
+    """
+    Check if data looks like a 199-byte inventory record block.
+    """
+    if len(data) < 199:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 199*2:
+            if not is_valid_model_code(data[199:199+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class PartGroupRecord185:
     """Represents a 185-byte part group description record from sffastus
 
@@ -1797,6 +1874,48 @@ def parse_variant_glossary_records_81(f, start_offset, max_records=None, verbose
 
         if verbose and count % 1000 == 0:
             print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_inventory_records_199(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse inventory records (199 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of InventoryRecord199 objects
+    """
+    f.seek(start_offset)
+    records = []
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        data = f.read(199)
+        if len(data) < 199:
+            break
+
+        # Check for padding (all zeros in model code field)
+        if all(b == 0 for b in data[:6]):
+            break
+
+        try:
+            record = InventoryRecord199.parse_199(data, start_offset + count * 199)
+            records.append(record)
+            if verbose and count % 100 == 0:
+                print(f"  Parsed {count} inventory records...")
+        except:
+            break
 
         count += 1
 
@@ -2760,6 +2879,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     if is_variant_glossary_block_81(data):
         return 'variant_glossary_81'
 
+    # 4q. Inventory record block (199-byte) - NEW
+    if is_inventory_block_199(data):
+        return 'inventory_199'
+
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
     try:
@@ -2774,7 +2897,7 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
         pass
 
     # 6. Text block - mostly printable ASCII
-    printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13, 0))
+    printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13))
     printable_ratio = printable_count / len(data)
 
     if printable_ratio >= 0.8:
@@ -2782,11 +2905,11 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
 
     # 7. Binary block - low printable ratio, has content
     non_zero = sum(1 for b in data if b != 0)
-    if non_zero > 0 and printable_ratio < 0.3:
+    if non_zero > 0 and printable_ratio < 0.4:
         return 'binary'
 
     # 8. Mixed content
-    if printable_ratio >= 0.3:
+    if printable_ratio >= 0.4:
         return 'mixed'
 
     return 'unknown'
