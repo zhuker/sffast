@@ -498,6 +498,8 @@ class TestBlockTypeDetection(unittest.TestCase):
             assert_block(CatalogApplicabilityRecord466.ID, 0x1525B800)
             assert_block(PartGroupRecord185.ID, 0x155B0000)
 
+            assert_block(ColorRecord91.ID, 0x1BF44800)
+
 
 
 

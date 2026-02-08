@@ -600,7 +600,8 @@ class SffastusBlockParser:
 
             # If we have at least 2 records, check the second one too
             if len(data) >= 182:  # 91 * 2
-                if not is_valid_model_code(data[91:91+6]):
+                if not (is_valid_model_code(data[91:91 + 6]) or (
+                        data[91:91 + 91].decode(CHARSET, errors='replace') == "*" * 91)):
                     return False
 
             return True
