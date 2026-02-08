@@ -528,8 +528,9 @@ class SffastusBlockParser:
     improve block type disambiguation.
     """
 
-    def __init__(self, figure_codes: set = None):
+    def __init__(self, figure_codes: set = None, parts_catalog: ItcaPartsCatalog = None):
         self.figure_codes = figure_codes or set()
+        self.parts_catalog = parts_catalog
 
 
     def is_code_index_record_block_33(self, data: bytes) -> bool:
@@ -794,6 +795,16 @@ class SffastusBlockParser:
             return False
         except:
             return False
+
+
+    def is_vin_code(self, vinlike) -> bool:
+        return self.parts_catalog.contains(vinlike)
+
+    def is_part_index_block_34(self, data: bytes) -> bool:
+        if len(data) < 34:
+            return False
+        assert self.parts_catalog is not None
+        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[15:30].decode(CHARSET, errors='replace').strip())
 
 
     def is_figure_index_block_22(self, data: bytes) -> bool:
@@ -1452,6 +1463,36 @@ class SffastusBlockParser:
 
         return records
 
+    def parse_part_index_records_34(self, f, start_offset, max_records=None, verbose=False):
+        RECORD_SIZE = 34
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not self.is_part_index_block_34(data):
+                break
+
+            record = PartRangeIndex34.parse_34(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
 
     def parse_figure_index_records_22(self, f, start_offset, max_records=None, verbose=False):
         """
@@ -2304,6 +2345,9 @@ class SffastusBlockParser:
         if self.is_spec_mapping_block_22(data):
             return 'spec_mapping_22'
 
+        if self.is_part_index_block_34(data):
+            return 'part_index_34'
+
         # 5. Body model block - 17-byte records with 7-char body code + model code
         # Body codes are 7 alphanumeric chars like "BD6AY1G"
         try:
@@ -2834,6 +2878,27 @@ class FigureIndexRecord22:
             metadata=data[18:22],
         )
 
+@dataclass
+class PartRangeIndex34:
+    offset: int
+    part_number_from: str
+    part_number_to: str
+    metadata: bytes # block index maybe BE 16-bit block index (starts 0x1441=5185, increments by 1)
+    raw_data: bytes
+
+    @staticmethod
+    def parse_34(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return PartRangeIndex34(
+            offset=offset,
+            raw_data=data,
+            part_number_from=clean(data[0:15]),
+            part_number_to=clean(data[15:30]),
+            metadata=data[30:],
+        )
+
 
 @dataclass
 class SpecMappingRecord22:
@@ -3207,6 +3272,10 @@ class ItcaPartsCatalog:
         for r in self.records:
             if r.supersedes_to and r.supersedes_to.strip():
                 self.supersedes_index[r.supersedes_to.strip()].append(r)
+
+    def contains(self, part_number: str) -> bool:
+        part_number = part_number.strip()
+        return (part_number in self.primary_index) or (part_number in self.supersedes_index)
 
     def lookup(self, part_number: str) -> List[ItcaRecord]:
         """Lookup record by current part number or supersedes-to part number."""
