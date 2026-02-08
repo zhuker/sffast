@@ -521,30 +521,1877 @@ class CodeIndexRecord33:
         )
 
 
-def is_code_index_record_block_33(data: bytes) -> bool:
-    """
-    Check if data looks like a 33-byte code index record block.
+class SffastusBlockParser:
+    """Block type detection and record parsing for sffastus files.
 
-    Detection heuristics:
-    - Consistent model codes every 33 bytes.
+    Holds context (e.g. figure codes from figname.txt) used to
+    improve block type disambiguation.
     """
-    if len(data) < 33:
-        return False
 
-    try:
+    def __init__(self, figure_codes: set = None):
+        self.figure_codes = figure_codes or set()
+
+
+    def is_code_index_record_block_33(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 33-byte code index record block.
+
+        Detection heuristics:
+        - Consistent model codes every 33 bytes.
+        """
+        if len(data) < 33:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 66:  # 33 * 2
+                if not is_valid_model_code(data[33:33+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_glossary_record_block_28(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 28-byte glossary record block.
+
+        Detection heuristics:
+        - Consistent model codes every 28 bytes.
+        """
+        if len(data) < 28:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 56:  # 28 * 2
+                if not is_valid_model_code(data[28:28+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_color_record_block_91(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 91-byte color record block.
+
+        Detection heuristics:
+        - Consistent model codes every 91 bytes.
+        """
+        if len(data) < 91:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 182:  # 91 * 2
+                if not is_valid_model_code(data[91:91+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_engine_spec_block_230(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 230-byte engine specification block.
+
+        Detection heuristics:
+        - Consistent model codes every 230 bytes.
+        - Numeric date patterns at offset 93.
+        """
+        if len(data) < 230:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check first record date fields (offset 93 is Start Date)
+            start_date = data[93:99].decode(CHARSET, errors='replace').strip()
+            if start_date and not start_date.isdigit():
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 230*2:
+                if not is_valid_model_code(data[230:230+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_multilingual_part_block_182(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 182-byte multilingual part record block.
+        """
+        if len(data) < 182:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check for the separator pattern nearby (often at +178 or similar)
+            # Note: Separators may not be at fixed offsets if record length varies slightly,
+            # but for a block-based check we look at the next potential record start.
+            if len(data) >= 182*2:
+                 # Next record might start with signature or model code
+                 if not is_valid_model_code(data[182:182+6]):
+                     return False
+
+            return True
+        except:
+            return False
+
+
+    def is_inventory_block_199(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 199-byte inventory record block.
+        """
+        if len(data) < 199:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 199*2:
+                if not is_valid_model_code(data[199:199+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_part_group_block_185(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 185-byte part group block.
+
+        Detection heuristics:
+        - Consistent model codes every 185 bytes.
+        - Sequential numeric patterns in group_index.
+        """
+        if len(data) < 185:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check group index is numeric
+            idx = data[6:9].decode(CHARSET, errors='replace').strip()
+            if idx and not idx.isdigit():
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 185*2:
+                if not is_valid_model_code(data[185:185+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_fig_illustration_page_block_89(self, data: bytes) -> bool:
+        """
+        Check if data looks like an 89-byte FIG illustration page record block.
+
+        Detection heuristics:
+        - Consistent model codes every 89 bytes.
+        - Numeric patterns in fig_index and page_index fields.
+        """
+        if len(data) < 89:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check first record numeric fields
+            fig_idx = data[6:9].decode(CHARSET, errors='replace').strip()
+            page_idx = data[11:13].decode(CHARSET, errors='replace').strip()
+            if not (fig_idx.isdigit() and page_idx.isdigit()):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 89*2:
+                if not is_valid_model_code(data[89:89+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_fig_illustration_block_183(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 183-byte FIG illustration record block.
+
+        Detection heuristics:
+        - Consistent model codes every 183 bytes.
+        - FIG group code pattern (2 chars: digit + letter/digit)
+        """
+        if len(data) < 183:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 183*2:
+                if not is_valid_model_code(data[183:183+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_variant_glossary_block_81(self, data: bytes) -> bool:
+        """
+        Check if data looks like an 81-byte variant glossary record block.
+
+        Detection heuristics:
+        - Consistent model codes every 81 bytes.
+        - Handles potential leading padding at start of block.
+        """
+        if len(data) < 162:  # Need at least 2 records to verify consistency
+            return False
+
+        try:
+            # Check common offsets for model code (0, 2, 4...)
+            for start_offset in range(10):
+                if is_valid_model_code(data[start_offset:start_offset+6]):
+                    # Verify consistency with next record
+                    if is_valid_model_code(data[start_offset+81:start_offset+81+6]):
+                        return True
+            return False
+        except:
+            return False
+
+
+    def is_figure_index_block_22(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 22-byte figure index record block.
+        Uses figure_codes from figname.txt when available for precise matching.
+        Falls back to digit heuristic when no figure codes loaded.
+        """
+        if len(data) < 44:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # First record figure code (5 bytes, e.g. "003  ")
+            figure = data[6:11].decode(CHARSET, errors='replace').strip()
+
+            if self.figure_codes:
+                # Precise: must be a known figure code from figname.txt
+                if figure not in self.figure_codes:
+                    return False
+            else:
+                # Fallback: require digits
+                if not any(c.isdigit() for c in figure):
+                    return False
+
+            # Verify second record
+            if not is_valid_model_code(data[22:28]):
+                return False
+
+            return True
+        except:
+            return False
+
+
+    def is_spec_mapping_block_22(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 22-byte spec mapping record block.
+        Matches 22-byte records with valid model codes that are NOT figure index blocks.
+        """
+        if len(data) < 44:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Code field (6-11) must NOT be a known figure code
+            code = data[6:11].decode(CHARSET, errors='replace').strip()
+            if self.figure_codes and code in self.figure_codes:
+                return False
+            elif not self.figure_codes:
+                # Fallback: reject if code has digits (likely figure index)
+                if any(c.isdigit() for c in code):
+                    return False
+
+            # Verify second record
+            if not is_valid_model_code(data[22:28]):
+                return False
+
+            return True
+        except:
+            return False
+
+
+    def is_fig_group_category_block_184(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 184-byte FIG group category record block.
+
+        Detection heuristics:
+        - Consistent model codes every 184 bytes.
+        - FIG group code pattern (2 chars: digit + letter)
+        - English description contains expected keywords
+        """
+        if len(data) < 184:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 184*2:
+                if not is_valid_model_code(data[184*2:184*2+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_catalog_applicability_block_466(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 466-byte catalog applicability record block.
+
+        Detection heuristics:
+        - Consistent model codes every 466 bytes.
+        """
+        if len(data) < 466:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 932:  # 466 * 2
+                if not is_valid_model_code(data[466:466+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_model_spec_block_103(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 103-byte model spec record block.
+
+        Detection heuristics:
+        - Consistent model codes every 103 bytes.
+        """
+        if len(data) < 103:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 206:
+                if not is_valid_model_code(data[103:103+6]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_part_range_block_24(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 24-byte part range record block.
+
+        Detection heuristics:
+        - Starts with valid model code (6 bytes)
+        - If multiple records, next record also starts with valid model code
+        """
+        if len(data) < 24:
+            return False
+
+        try:
+            # Check first record model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # If we have at least 2 records, check the second one too
+            if len(data) >= 48:
+                if not is_valid_model_code(data[24:30]):
+                    return False
+
+            return True
+        except:
+            return False
+
+
+    def is_model_index_block_288(self, data: bytes) -> bool:
+        if len(data) < 288:
+            return False
+
         # Check first record model code
         if not is_valid_model_code(data[0:6]):
             return False
 
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 66:  # 33 * 2
-            if not is_valid_model_code(data[33:33+6]):
+        if len(data) >= 288*2:
+            if not is_valid_model_code(data[288:288+6]):
+                return False
+        return True
+
+
+    def is_multilingual_part_block_167(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 167-byte multilingual part record block.
+
+        Detection heuristics:
+        - Starts with valid model code (6 bytes)
+        - Spec code (11 bytes) typically alphanumeric
+        """
+        if len(data) < 167:
+            return False
+        if len(data) >= 167 * 2:
+            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[167:167 + 6])
+
+        try:
+            # Check model code
+            if not is_valid_model_code(data[0:6]):
                 return False
 
-        return True
-    except:
-        return False
+            # Spec code (offset 6, length 11)
+            # Often starts with digits
+            spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
+            if not spec_code:
+                # Allow empty spec? Maybe. But usually present.
+                pass
 
+            return True
+        except:
+            return False
+
+
+    def is_multilingual_part_block_180(self, data: bytes) -> bool:
+        """
+        Check if data looks like a 180-byte multilingual part record block.
+
+        Detection heuristics:
+        - Starts with valid model code (6 bytes)
+        - Has alphanumeric part code at offset 6
+        - Has readable text in name fields
+        """
+        if len(data) < 180:
+            return False
+        if len(data) >= 180 * 2:
+            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[180:180 + 6])
+
+
+        try:
+            # Check model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check part code - should be alphanumeric
+            # Use CP437 as requested by user
+            # Part code is 7 bytes in this format
+            part_code = data[6:13].decode(CHARSET).strip()
+            if not part_code or not part_code.replace(' ', '').isalnum():
+                # Allow some flexibility, but usually part codes are alphanumeric
+                pass
+
+            # Check that English name area has readable text
+            name_area = data[13:53]
+            printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
+            if printable / len(name_area) < 0.5:
+                return False
+
+            # Check German/French/Spanish areas too if needed, but EN is usually enough
+            return True
+        except:
+            return False
+
+
+    def is_multilingual_part_block(self, data: bytes) -> bool:
+        """
+        Check if data looks like a multilingual part record block (192-byte records).
+
+        Detection heuristics:
+        - Starts with valid model code (6 bytes)
+        - Has alphanumeric part code at offset 6
+        - Has numeric figure code at offset 12
+        - Has readable text in name fields
+        """
+        if len(data) < 192:
+            return False
+        if len(data) >= 192 * 2:
+            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[192:192 + 6])
+
+        try:
+            # Check model code
+            if not is_valid_model_code(data[0:6]):
+                return False
+
+            # Check part code - should be alphanumeric
+            part_code = data[6:12].decode(CHARSET).strip()
+            if not part_code or not part_code.replace(' ', '').isalnum():
+                return False
+
+            # Check figure code - should contain digits
+            figure_code = data[12:17].decode(CHARSET).strip()
+            if not any(c.isdigit() for c in figure_code):
+                return False
+
+            # Check that English name area has readable text
+            name_area = data[19:59]
+            printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
+            if printable / len(name_area) < 0.5:
+                return False
+
+            return True
+        except:
+            return False
+
+
+    def parse_code_index_records_33(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse code index records (33 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of CodeIndexRecord33 objects
+        """
+        RECORD_SIZE = 33
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = CodeIndexRecord33.parse_33(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_glossary_records_28(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse glossary records (28 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of GlossaryRecord28 objects
+        """
+        RECORD_SIZE = 28
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = GlossaryRecord28.parse_28(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_color_records_91(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse color records (91 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of ColorRecord91 objects
+        """
+        RECORD_SIZE = 91
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = ColorRecord91.parse_91(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_part_group_records_185(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse part group description records (185 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of PartGroupRecord185 objects
+        """
+        RECORD_SIZE = 185
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = PartGroupRecord185.parse_185(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_variant_glossary_records_81(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse variant glossary records (81 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of VariantGlossaryRecord81 objects
+        """
+        RECORD_SIZE = 81
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            # Note: can have leading spaces in first record of block
+            if not is_valid_model_code(data[0:6]) and not is_valid_model_code(data[0:6].strip().ljust(6)):
+                break
+
+            record = VariantGlossaryRecord81.parse_81(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+        return records
+
+
+    def parse_multilingual_part_records_182(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse multilingual part records (182 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of MultilingualPartRecord182 objects
+        """
+        f.seek(start_offset)
+        records = []
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            # Peek for separator or model code
+            pos = f.tell()
+            data = f.read(10)
+            if len(data) < 10:
+                break
+
+            # If it starts with the 19 1e separator, skip it or include it?
+            # Based on analysis, the struct might be 182 bytes including the separator.
+            if data.startswith(b'\x19\x1e'):
+                f.seek(pos)
+                data = f.read(182)
+            elif is_valid_model_code(data[:6]):
+                f.seek(pos)
+                data = f.read(182)
+            else:
+                break
+
+            if len(data) < 182:
+                break
+
+            try:
+                record = MultilingualPartRecord182.parse_182(data, pos)
+                records.append(record)
+                if verbose and count % 100 == 0:
+                    print(f"  Parsed {count} 182-byte records...")
+            except:
+                break
+
+            count += 1
+
+        return records
+
+
+    def parse_inventory_records_199(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse inventory records (199 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of InventoryRecord199 objects
+        """
+        f.seek(start_offset)
+        records = []
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            data = f.read(199)
+            if len(data) < 199:
+                break
+
+            # Check for padding (all zeros in model code field)
+            if all(b == 0 for b in data[:6]):
+                break
+
+            try:
+                record = InventoryRecord199.parse_199(data, start_offset + count * 199)
+                records.append(record)
+                if verbose and count % 100 == 0:
+                    print(f"  Parsed {count} inventory records...")
+            except:
+                break
+
+            count += 1
+
+        return records
+
+
+    def parse_engine_spec_records_230(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse engine specification records (230 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of EngineSpecRecord230 objects
+        """
+        RECORD_SIZE = 230
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = EngineSpecRecord230.parse_230(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_figure_index_records_22(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse figure index records (22 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of FigureIndexRecord22 objects
+        """
+        RECORD_SIZE = 22
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = FigureIndexRecord22.parse_22(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_spec_mapping_records_22(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse spec mapping records (22 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of SpecMappingRecord22 objects
+        """
+        RECORD_SIZE = 22
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = SpecMappingRecord22.parse_22(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_fig_illustration_page_records_89(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse FIG illustration page/sub-index records (89 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of FIGIllustrationPage89 objects
+        """
+        RECORD_SIZE = 89
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = FIGIllustrationPage89.parse_89(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_fig_illustration_records_183(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse FIG illustration description records (183 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of FIGIllustrationRecord183 objects
+        """
+        RECORD_SIZE = 183
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = FIGIllustrationRecord183.parse_183(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_fig_group_category_records_184(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse FIG group category description records (184 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of FIGGroupCategoryRecord184 objects
+        """
+        RECORD_SIZE = 184
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = FIGGroupCategoryRecord184.parse_184(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_model_spec_records_103(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse model spec records (103 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of ModelSpecRecord103 objects
+        """
+        RECORD_SIZE = 103
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+
+            # Parse fields (cp437)
+            record = ModelSpecRecord103.parse_103(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_model_index_records_288(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse model index records (288 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of ModelIndexRecord288 objects
+        """
+        RECORD_SIZE = 288
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            # Parse fields (cp437)
+            record = ModelIndexRecord288.parse_288(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_part_range_records_24(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse part range records (24 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of PartRangeRecord24 objects
+        """
+        RECORD_SIZE = 24
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            # Parse fields (cp437)
+            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+            part_start = data[6:13].decode(CHARSET, errors='replace').strip()
+            part_end = data[13:20].decode(CHARSET, errors='replace').strip()
+            metadata = data[20:24]
+
+            record = PartRangeRecord24(
+                offset=offset,
+                model_code=model_code,
+                part_start=part_start,
+                part_end=part_end,
+                metadata=metadata,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_multilingual_part_records_167(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse multilingual part name records (167 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse (None = until invalid)
+            verbose: Print progress during parsing
+
+        Returns:
+            List of MultilingualPartRecord167 objects
+        """
+        RECORD_SIZE = 167
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            # Parse fields (cp437 encoding)
+            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+            spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
+            description = data[17:42].decode(CHARSET, errors='replace').strip()
+            trailer = data[42:167]
+
+            record = MultilingualPartRecord167(
+                offset=offset,
+                model_code=model_code,
+                spec_code=spec_code,
+                description=description,
+                trailer=trailer,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_multilingual_part_records_180(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse multilingual part name records (180 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse (None = until invalid)
+            verbose: Print progress during parsing
+
+        Returns:
+            List of MultilingualPartRecord180 objects
+        """
+        RECORD_SIZE = 180
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            # Parse fields (cp437 encoding)
+            # Structure: model(6) + part(7) + en(40) + de(40) + fr(40) + es(40) + trailer(7)
+            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+            part_code = data[6:13].decode(CHARSET, errors='replace').strip()
+            # No figure/index in this format
+
+            name_en = data[13:53].decode(CHARSET, errors='replace').strip()
+            name_de = data[53:93].decode(CHARSET, errors='replace').strip()
+            name_fr = data[93:133].decode(CHARSET, errors='replace').strip()
+            name_es = data[133:173].decode(CHARSET, errors='replace').strip()
+            trailer = data[173:180]
+
+            record = MultilingualPartRecord180(
+                offset=offset,
+                model_code=model_code,
+                part_code=part_code,
+                name_en=name_en,
+                name_de=name_de,
+                name_fr=name_fr,
+                name_es=name_es,
+                trailer=trailer,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_multilingual_part_records(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse multilingual part name records (192 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse (None = until invalid)
+            verbose: Print progress during parsing
+
+        Returns:
+            List of MultilingualPartRecord objects
+        """
+        RECORD_SIZE = 192
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            # Parse fields (cp437 encoding used by DOS-era Subaru software)
+            # Structure: model(6) + part(6) + figure(5) + index(2) + en(40) + de(40) + fr(40) + es(40) + trailer(13)
+            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
+            part_code = data[6:12].decode(CHARSET, errors='replace').strip()
+            figure_code = data[12:17].decode(CHARSET, errors='replace').strip()
+            index = data[17:19+1].decode(CHARSET, errors='replace').strip()
+            name_en = data[19+1:59+1].decode(CHARSET, errors='replace').strip()
+            name_de = data[59+1:99+1].decode(CHARSET, errors='replace').strip()
+            name_fr = data[99+1:139+1].decode(CHARSET, errors='replace').strip()
+            name_es = data[139+1:179+1].decode(CHARSET, errors='replace').strip()
+            trailer = data[179+1:192]
+
+            record = MultilingualPartRecord(
+                offset=offset,
+                model_code=model_code,
+                part_code=part_code,
+                figure_code=figure_code,
+                index=index,
+                name_en=name_en,
+                name_de=name_de,
+                name_fr=name_fr,
+                name_es=name_es,
+                trailer=trailer,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def detect_vin_record_type(self, data: bytes) -> str:
+        """
+        Detect whether data contains 38-byte VIN range records or 69-byte VIN-Model records.
+
+        Args:
+            data: At least 69 bytes of data from a VIN block
+
+        Returns:
+            'vin_range' for 38-byte records (VIN start + VIN end + pointer)
+            'vin_model' for 69-byte records (single VIN + full model spec)
+            'unknown' if neither pattern matches
+        """
+        if len(data) < 69:
+            return 'unknown'
+
+        # Check first record for VIN
+        try:
+            vin1 = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
+            if not is_valid_subaru_vin(vin1):
+                return 'unknown'
+        except:
+            return 'unknown'
+
+        # Check for 38-byte pattern: second VIN at offset 17
+        try:
+            vin2_38 = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
+            if is_valid_subaru_vin(vin2_38):
+                return 'vin_range'
+        except:
+            pass
+
+        # Check for 69-byte pattern: null + flag + model code at offset 17-25
+        try:
+            if data[17] == 0x00 and data[18] in (0x00, 0x01, 0x02):
+                model_code = data[19:25].decode(CHARSET)
+                if is_valid_model_code(data[19:25]):
+                    return 'vin_model'
+        except:
+            pass
+
+        return 'unknown'
+
+
+    def parse_vin_model_records(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse VIN-Model detail records (69 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse (None = until invalid)
+            verbose: Print progress during parsing
+
+        Returns:
+            List of VINModelRecord objects
+        """
+        RECORD_SIZE = 69
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Parse VIN
+            vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
+
+            if not is_valid_subaru_vin(vin):
+                break
+
+            # Parse remaining fields
+            flag = data[18]
+            model_code = data[19:25].decode(CHARSET, errors='replace').strip()
+            body_model = data[25:32].decode(CHARSET, errors='replace').strip()
+            spec_code = data[32:41].decode(CHARSET, errors='replace').strip()
+            binary_flags = data[41:43]
+            date1 = data[43:51].decode(CHARSET, errors='replace')
+            date2 = data[51:59].decode(CHARSET, errors='replace')
+            date3 = data[59:67].decode(CHARSET, errors='replace')
+            suffix = data[67:69].decode(CHARSET, errors='replace')
+
+            record = VINModelRecord(
+                offset=offset,
+                vin=vin,
+                flag=flag,
+                model_code=model_code,
+                body_model=body_model,
+                spec_code=spec_code,
+                binary_flags=binary_flags,
+                date1=date1,
+                date2=date2,
+                date3=date3,
+                suffix=suffix,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+
+    def parse_vin_blocks(self, f, start_offset=0x800, max_records=None, verbose=False):
+        """
+        Parse VIN range records starting at given offset.
+
+        Each record is 38 bytes:
+        - Bytes 0-16: VIN range start (17 chars ASCII)
+        - Bytes 17-33: VIN range end (17 chars ASCII)
+        - Bytes 34-35: Section number (uint16 LE)
+        - Bytes 36-37: Index within section (uint16 LE)
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where VIN records begin (default 0x800)
+            max_records: Maximum records to parse (None = until invalid)
+            verbose: Print progress during parsing
+
+        Returns:
+            List of VINRecord objects
+        """
+        RECORD_SIZE = 38
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Parse fields
+            vin_start = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
+            vin_end = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
+            section = struct.unpack('<H', data[34:36])[0]
+            index = struct.unpack('<H', data[36:38])[0]
+
+            # Validate - must be a valid Subaru VIN
+            if not is_valid_subaru_vin(vin_start):
+                # End of VIN records
+                break
+
+            record = VINRecord(
+                offset=offset,
+                vin_start=vin_start,
+                vin_end=vin_end,
+                section=section,
+                index=index,
+                raw_data=data
+            )
+            records.append(record)
+
+            if verbose and count % 100 == 0:
+                print(f"  Parsed {count} records at 0x{offset:06X}...")
+
+            count += 1
+
+        return records
+
+
+    def detect_block_type(self, data: bytes, offset: int = 0) -> str:
+        """
+        Detect the type of a 2KB block.
+
+        Args:
+            data: 2048 bytes of block data
+            offset: File offset of this block (used for header detection)
+
+        Returns:
+            Block type string: 'header', 'vin', 'model_index',
+            'body_model', 'text', 'binary', 'padding', 'unknown'
+        """
+        BLOCK_SIZE = 2048
+
+        if len(data) < BLOCK_SIZE:
+            return 'incomplete'
+
+        # 1. Header block (first 2KB contains header + model table + padding)
+        if offset < 0x800:
+            return 'header'
+
+        # 2. All zeros = padding
+        if all(b == 0 for b in data):
+            return 'padding'
+
+        # 3. VIN block - first 17 bytes are a valid Subaru VIN
+        # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
+        try:
+            vin = data[0:17].decode(CHARSET, errors='replace')
+            if is_valid_subaru_vin(vin):
+                vin_type = self.detect_vin_record_type(data)
+                if vin_type == 'vin_range':
+                    return 'vin_range'
+                elif vin_type == 'vin_model':
+                    return 'vin_model'
+                else:
+                    return 'vin'  # Fallback for unknown VIN format
+        except:
+            pass
+
+        if self.is_part_range_block_24(data):
+            return 'part_range_24'
+
+        if self.is_multilingual_part_block(data):
+            return 'multilingual_part'
+
+        if self.is_multilingual_part_block_180(data):
+            return 'multilingual_part_180'
+
+        if self.is_multilingual_part_block_167(data):
+            return 'multilingual_part_167'
+
+        if self.is_model_spec_block_103(data):
+            return 'model_spec_103'
+
+        # 4f. Catalog applicability block (466-byte) - NEW
+        if self.is_catalog_applicability_block_466(data):
+            return 'catalog_applicability_466'
+
+        # 4g. Color record block (91-byte) - NEW
+        if self.is_color_record_block_91(data):
+            return 'color_record_91'
+
+        # 4h. Glossary record block (28-byte) - NEW
+        if self.is_glossary_record_block_28(data):
+            return 'glossary_record_28'
+
+        # 4i. Code index record block (33-byte) - NEW
+        if self.is_code_index_record_block_33(data):
+            return 'code_index_record_33'
+
+        # 4j. Model index block (288-byte) - NEW
+        if self.is_model_index_block_288(data):
+            return 'model_index_288'
+
+        # 4k. FIG group category block (184-byte) - NEW
+        if self.is_fig_group_category_block_184(data):
+            return 'fig_group_category_184'
+
+        # 4l. FIG illustration block (183-byte) - NEW
+        if self.is_fig_illustration_block_183(data):
+            return 'fig_illustration_183'
+
+        # 4m. FIG illustration page block (89-byte) - NEW
+        if self.is_fig_illustration_page_block_89(data):
+            return 'fig_illustration_page_89'
+
+        # 4n. Engine spec block (230-byte) - NEW
+        if self.is_engine_spec_block_230(data):
+            return 'engine_spec_230'
+
+        # 4o. Part group block (185-byte) - NEW
+        if self.is_part_group_block_185(data):
+            return 'part_group_185'
+
+        # 4p. Variant glossary block (81-byte) - NEW
+        if self.is_variant_glossary_block_81(data):
+            return 'variant_glossary_81'
+
+        # 4q. Inventory record block (199-byte) - NEW
+        if self.is_inventory_block_199(data):
+            return 'inventory_199'
+
+        # 4r. Multilingual part block (182-byte) - NEW
+        if self.is_multilingual_part_block_182(data):
+            return 'multilingual_part_182'
+
+        # 4s. Figure index block (22-byte) - NEW
+        if self.is_figure_index_block_22(data):
+            return 'figure_index_22'
+
+        # 4t. Spec mapping block (22-byte) - NEW
+        if self.is_spec_mapping_block_22(data):
+            return 'spec_mapping_22'
+
+        # 5. Body model block - 17-byte records with 7-char body code + model code
+        # Body codes are 7 alphanumeric chars like "BD6AY1G"
+        try:
+            # Check first record pattern: 7-char body code + 2 bytes + 6-char model code
+            body_code = data[0:7].decode(CHARSET)
+            if (len(body_code) == 7 and
+                body_code.isalnum() and
+                body_code[0].isalpha() and
+                is_valid_model_code(data[9:15])):
+                return 'body_model'
+        except:
+            pass
+
+        # 6. Text block - mostly printable ASCII
+        printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13))
+        printable_ratio = printable_count / len(data)
+
+        if printable_ratio >= 0.8:
+            return 'text'
+
+        # 7. Binary block - low printable ratio, has content
+        non_zero = sum(1 for b in data if b != 0)
+        if non_zero > 0 and printable_ratio < 0.4:
+            return 'binary'
+
+        # 8. Mixed content
+        if printable_ratio >= 0.4:
+            return 'mixed'
+
+        return 'unknown'
+
+
+    def scan_block_types(self, f, max_blocks=None):
+        """
+        Scan entire file block by block and return map of ranges to types.
+
+        Args:
+            f: File handle to sffastus
+            max_blocks: Maximum blocks to scan (None = entire file)
+
+        Returns:
+            List of (start_offset, end_offset, block_count, block_type) tuples.
+            Consecutive blocks of same type are merged into ranges.
+        """
+        BLOCK_SIZE = 2048
+
+        f.seek(0, 2)
+        file_size = f.tell()
+
+        total_blocks = file_size // BLOCK_SIZE
+        if max_blocks:
+            total_blocks = min(total_blocks, max_blocks)
+
+        ranges = []
+        current_type = None
+        current_start = 0
+        current_count = 0
+
+        for block_idx in range(total_blocks):
+            offset = block_idx * BLOCK_SIZE
+            f.seek(offset)
+            data = f.read(BLOCK_SIZE)
+
+            if len(data) < BLOCK_SIZE:
+                break
+
+            block_type = self.detect_block_type(data, offset)
+            # print(f"Scanned block {block_idx:5d}/{total_blocks:5d} at 0x{offset:08X}: {block_type}")
+
+            if block_type == current_type:
+                current_count += 1
+            else:
+                # Save previous range if exists
+                if current_type is not None:
+                    end_offset = current_start + current_count * BLOCK_SIZE
+                    ranges.append((current_start, end_offset, current_count, current_type))
+
+                # Start new range
+                current_type = block_type
+                current_start = offset
+                current_count = 1
+
+        # Save last range
+        if current_type is not None:
+            end_offset = current_start + current_count * BLOCK_SIZE
+            ranges.append((current_start, end_offset, current_count, current_type))
+
+        return ranges
 
 @dataclass
 class GlossaryRecord28:
@@ -580,31 +2427,6 @@ class GlossaryRecord28:
             term=clean(data[7:24]),  # 17 bytes
             metadata=data[24:28],  # 4 bytes
         )
-
-
-def is_glossary_record_block_28(data: bytes) -> bool:
-    """
-    Check if data looks like a 28-byte glossary record block.
-
-    Detection heuristics:
-    - Consistent model codes every 28 bytes.
-    """
-    if len(data) < 28:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 56:  # 28 * 2
-            if not is_valid_model_code(data[28:28+6]):
-                return False
-
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -648,31 +2470,6 @@ class ColorRecord91:
             color_name_fr=clean(data[50:70]),  # 20 bytes
             color_name_es=clean(data[70:90]),  # 20 bytes
         )
-
-
-def is_color_record_block_91(data: bytes) -> bool:
-    """
-    Check if data looks like a 91-byte color record block.
-
-    Detection heuristics:
-    - Consistent model codes every 91 bytes.
-    """
-    if len(data) < 91:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 182:  # 91 * 2
-            if not is_valid_model_code(data[91:91+6]):
-                return False
-
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -771,37 +2568,6 @@ class EngineSpecRecord230:
             end_date=clean(data[99:105]),
             trailer=data[105:230],
         )
-
-
-def is_engine_spec_block_230(data: bytes) -> bool:
-    """
-    Check if data looks like a 230-byte engine specification block.
-
-    Detection heuristics:
-    - Consistent model codes every 230 bytes.
-    - Numeric date patterns at offset 93.
-    """
-    if len(data) < 230:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-            
-        # Check first record date fields (offset 93 is Start Date)
-        start_date = data[93:99].decode(CHARSET, errors='replace').strip()
-        if start_date and not start_date.isdigit():
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 230*2:
-            if not is_valid_model_code(data[230:230+6]):
-                return False
-
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -950,53 +2716,6 @@ class MultilingualPartRecord182:
         )
 
 
-def is_multilingual_part_block_182(data: bytes) -> bool:
-    """
-    Check if data looks like a 182-byte multilingual part record block.
-    """
-    if len(data) < 182:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # Check for the separator pattern nearby (often at +178 or similar)
-        # Note: Separators may not be at fixed offsets if record length varies slightly,
-        # but for a block-based check we look at the next potential record start.
-        if len(data) >= 182*2:
-             # Next record might start with signature or model code
-             if not is_valid_model_code(data[182:182+6]):
-                 return False
-
-        return True
-    except:
-        return False
-
-
-def is_inventory_block_199(data: bytes) -> bool:
-    """
-    Check if data looks like a 199-byte inventory record block.
-    """
-    if len(data) < 199:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 199*2:
-            if not is_valid_model_code(data[199:199+6]):
-                return False
-
-        return True
-    except:
-        return False
-
-
 @dataclass
 class PartGroupRecord185:
     """Represents a 185-byte part group description record from sffastus
@@ -1048,94 +2767,6 @@ class PartGroupRecord185:
         )
 
 
-def is_part_group_block_185(data: bytes) -> bool:
-    """
-    Check if data looks like a 185-byte part group block.
-
-    Detection heuristics:
-    - Consistent model codes every 185 bytes.
-    - Sequential numeric patterns in group_index.
-    """
-    if len(data) < 185:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-            
-        # Check group index is numeric
-        idx = data[6:9].decode(CHARSET, errors='replace').strip()
-        if idx and not idx.isdigit():
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 185*2:
-            if not is_valid_model_code(data[185:185+6]):
-                return False
-
-        return True
-    except:
-        return False
-
-
-def is_fig_illustration_page_block_89(data: bytes) -> bool:
-    """
-    Check if data looks like an 89-byte FIG illustration page record block.
-
-    Detection heuristics:
-    - Consistent model codes every 89 bytes.
-    - Numeric patterns in fig_index and page_index fields.
-    """
-    if len(data) < 89:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-            
-        # Check first record numeric fields
-        fig_idx = data[6:9].decode(CHARSET, errors='replace').strip()
-        page_idx = data[11:13].decode(CHARSET, errors='replace').strip()
-        if not (fig_idx.isdigit() and page_idx.isdigit()):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 89*2:
-            if not is_valid_model_code(data[89:89+6]):
-                return False
-
-        return True
-    except:
-        return False
-
-
-def is_fig_illustration_block_183(data: bytes) -> bool:
-    """
-    Check if data looks like a 183-byte FIG illustration record block.
-
-    Detection heuristics:
-    - Consistent model codes every 183 bytes.
-    - FIG group code pattern (2 chars: digit + letter/digit)
-    """
-    if len(data) < 183:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 183*2:
-            if not is_valid_model_code(data[183:183+6]):
-                return False
-
-        return True
-    except:
-        return False
-
-
 @dataclass
 class VariantGlossaryRecord81:
     """Represents a variant glossary record from sffastus (81 bytes)
@@ -1167,29 +2798,6 @@ class VariantGlossaryRecord81:
             variant_code=clean(data[6:21]),
             description=clean(data[21:81]),
         )
-
-
-def is_variant_glossary_block_81(data: bytes) -> bool:
-    """
-    Check if data looks like an 81-byte variant glossary record block.
-
-    Detection heuristics:
-    - Consistent model codes every 81 bytes.
-    - Handles potential leading padding at start of block.
-    """
-    if len(data) < 162:  # Need at least 2 records to verify consistency
-        return False
-
-    try:
-        # Check common offsets for model code (0, 2, 4...)
-        for start_offset in range(10):
-            if is_valid_model_code(data[start_offset:start_offset+6]):
-                # Verify consistency with next record
-                if is_valid_model_code(data[start_offset+81:start_offset+81+6]):
-                    return True
-        return False
-    except:
-        return False
 
 
 @dataclass
@@ -1259,67 +2867,6 @@ class SpecMappingRecord22:
         )
 
 
-def is_figure_index_block_22(data: bytes) -> bool:
-    """
-    Check if data looks like a 22-byte figure index record block.
-    Heuristic: figure field (6-11) contains digits.
-    """
-    if len(data) < 44:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # First record figure code
-        figure = data[6:11].decode(CHARSET, errors='replace')
-        if not any(c.isdigit() for c in figure):
-            return False
-
-        # Verify second record
-        if not is_valid_model_code(data[22:28]):
-            return False
-
-        return True
-    except:
-        return False
-
-
-def is_spec_mapping_block_22(data: bytes) -> bool:
-    """
-    Check if data looks like a 22-byte spec mapping record block.
-    Heuristic: figure field (6-11) is non-numeric/alpha.
-    """
-    if len(data) < 44:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # Code field (6-11) should be alpha if it's the spec mapping flavor
-        # (Based on "AAICN" example)
-        code = data[6:11].decode(CHARSET, errors='replace')
-        if any(c.isdigit() for c in code):
-            # If it has digits, it might be the numeric FigureIndex type instead
-            return False
-
-        # Description should have text
-        desc = data[11:22].decode(CHARSET, errors='replace')
-        if not any(c.isalpha() for c in desc):
-             return False
-
-        # Verify second record
-        if not is_valid_model_code(data[22:28]):
-            return False
-
-        return True
-    except:
-        return False
-
-
 @dataclass
 class FIGGroupCategoryRecord184:
     """Represents a FIG group category description record from sffastus (184 bytes)
@@ -1366,32 +2913,6 @@ class FIGGroupCategoryRecord184:
             desc_es=clean(data[128:168]),
             trailer=data[168:184],
         )
-
-
-def is_fig_group_category_block_184(data: bytes) -> bool:
-    """
-    Check if data looks like a 184-byte FIG group category record block.
-
-    Detection heuristics:
-    - Consistent model codes every 184 bytes.
-    - FIG group code pattern (2 chars: digit + letter)
-    - English description contains expected keywords
-    """
-    if len(data) < 184:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 184*2:
-            if not is_valid_model_code(data[184*2:184*2+6]):
-                return False
-
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -1447,30 +2968,6 @@ class CatalogApplicabilityRecord466:
             # The rest is the binary feature mask
             unknown=data[180:],
         )
-
-def is_catalog_applicability_block_466(data: bytes) -> bool:
-    """
-    Check if data looks like a 466-byte catalog applicability record block.
-
-    Detection heuristics:
-    - Consistent model codes every 466 bytes.
-    """
-    if len(data) < 466:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 932:  # 466 * 2
-            if not is_valid_model_code(data[466:466+6]):
-                return False
-
-        return True
-    except:
-        return False
 
 @dataclass
 class ModelSpecRecord103:
@@ -1542,31 +3039,6 @@ class ModelSpecRecord103:
         )
 
 
-def is_model_spec_block_103(data: bytes) -> bool:
-    """
-    Check if data looks like a 103-byte model spec record block.
-
-    Detection heuristics:
-    - Consistent model codes every 103 bytes.
-    """
-    if len(data) < 103:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 206:
-            if not is_valid_model_code(data[103:103+6]):
-                return False
-
-        return True
-    except:
-        return False
-
-
 @dataclass
 class PartRangeRecord24:
     """Represents a part number range record from sffastus (24 bytes)
@@ -1586,32 +3058,6 @@ class PartRangeRecord24:
     part_end: str
     metadata: bytes
     raw_data: bytes
-
-
-def is_part_range_block_24(data: bytes) -> bool:
-    """
-    Check if data looks like a 24-byte part range record block.
-
-    Detection heuristics:
-    - Starts with valid model code (6 bytes)
-    - If multiple records, next record also starts with valid model code
-    """
-    if len(data) < 24:
-        return False
-
-    try:
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # If we have at least 2 records, check the second one too
-        if len(data) >= 48:
-            if not is_valid_model_code(data[24:30]):
-                return False
-
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -1680,20 +3126,6 @@ class ModelIndexRecord288:
         )
 
 
-def is_model_index_block_288(data: bytes) -> bool:
-    if len(data) < 288:
-        return False
-
-    # Check first record model code
-    if not is_valid_model_code(data[0:6]):
-        return False
-
-    if len(data) >= 288*2:
-        if not is_valid_model_code(data[288:288+6]):
-            return False
-    return True
-
-
 @dataclass
 class MultilingualPartRecord167:
     """Represents a multilingual part name record from sffastus (167 bytes)
@@ -1713,36 +3145,6 @@ class MultilingualPartRecord167:
     description: str
     trailer: bytes
     raw_data: bytes
-
-
-def is_multilingual_part_block_167(data: bytes) -> bool:
-    """
-    Check if data looks like a 167-byte multilingual part record block.
-
-    Detection heuristics:
-    - Starts with valid model code (6 bytes)
-    - Spec code (11 bytes) typically alphanumeric
-    """
-    if len(data) < 167:
-        return False
-    if len(data) >= 167 * 2:
-        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[167:167 + 6])
-
-    try:
-        # Check model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # Spec code (offset 6, length 11)
-        # Often starts with digits
-        spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
-        if not spec_code:
-            # Allow empty spec? Maybe. But usually present.
-            pass
-            
-        return True
-    except:
-        return False
 
 
 @dataclass
@@ -1843,1129 +3245,8 @@ class FigNameRecord:
         )
 
 
-def is_multilingual_part_block_180(data: bytes) -> bool:
-    """
-    Check if data looks like a 180-byte multilingual part record block.
 
-    Detection heuristics:
-    - Starts with valid model code (6 bytes)
-    - Has alphanumeric part code at offset 6
-    - Has readable text in name fields
-    """
-    if len(data) < 180:
-        return False
-    if len(data) >= 180 * 2:
-        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[180:180 + 6])
 
-
-    try:
-        # Check model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # Check part code - should be alphanumeric
-        # Use CP437 as requested by user
-        # Part code is 7 bytes in this format
-        part_code = data[6:13].decode(CHARSET).strip()
-        if not part_code or not part_code.replace(' ', '').isalnum():
-            # Allow some flexibility, but usually part codes are alphanumeric
-            pass
-
-        # Check that English name area has readable text
-        name_area = data[13:53]
-        printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
-        if printable / len(name_area) < 0.5:
-            return False
-        
-        # Check German/French/Spanish areas too if needed, but EN is usually enough
-        return True
-    except:
-        return False
-
-
-def is_multilingual_part_block(data: bytes) -> bool:
-    """
-    Check if data looks like a multilingual part record block (192-byte records).
-
-    Detection heuristics:
-    - Starts with valid model code (6 bytes)
-    - Has alphanumeric part code at offset 6
-    - Has numeric figure code at offset 12
-    - Has readable text in name fields
-    """
-    if len(data) < 192:
-        return False
-    if len(data) >= 192 * 2:
-        return is_valid_model_code(data[0:6]) and is_valid_model_code(data[192:192 + 6])
-
-    try:
-        # Check model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        # Check part code - should be alphanumeric
-        part_code = data[6:12].decode(CHARSET).strip()
-        if not part_code or not part_code.replace(' ', '').isalnum():
-            return False
-
-        # Check figure code - should contain digits
-        figure_code = data[12:17].decode(CHARSET).strip()
-        if not any(c.isdigit() for c in figure_code):
-            return False
-
-        # Check that English name area has readable text
-        name_area = data[19:59]
-        printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
-        if printable / len(name_area) < 0.5:
-            return False
-
-        return True
-    except:
-        return False
-
-
-
-
-
-
-
-
-def parse_code_index_records_33(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse code index records (33 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of CodeIndexRecord33 objects
-    """
-    RECORD_SIZE = 33
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = CodeIndexRecord33.parse_33(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_glossary_records_28(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse glossary records (28 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of GlossaryRecord28 objects
-    """
-    RECORD_SIZE = 28
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = GlossaryRecord28.parse_28(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse color records (91 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of ColorRecord91 objects
-    """
-    RECORD_SIZE = 91
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = ColorRecord91.parse_91(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-
-
-def parse_part_group_records_185(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse part group description records (185 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of PartGroupRecord185 objects
-    """
-    RECORD_SIZE = 185
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = PartGroupRecord185.parse_185(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_variant_glossary_records_81(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse variant glossary records (81 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of VariantGlossaryRecord81 objects
-    """
-    RECORD_SIZE = 81
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        # Note: can have leading spaces in first record of block
-        if not is_valid_model_code(data[0:6]) and not is_valid_model_code(data[0:6].strip().ljust(6)):
-            break
-
-        record = VariantGlossaryRecord81.parse_81(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-    return records
-
-
-def parse_multilingual_part_records_182(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse multilingual part records (182 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of MultilingualPartRecord182 objects
-    """
-    f.seek(start_offset)
-    records = []
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        # Peek for separator or model code
-        pos = f.tell()
-        data = f.read(10)
-        if len(data) < 10:
-            break
-
-        # If it starts with the 19 1e separator, skip it or include it?
-        # Based on analysis, the struct might be 182 bytes including the separator.
-        if data.startswith(b'\x19\x1e'):
-            f.seek(pos)
-            data = f.read(182)
-        elif is_valid_model_code(data[:6]):
-            f.seek(pos)
-            data = f.read(182)
-        else:
-            break
-
-        if len(data) < 182:
-            break
-
-        try:
-            record = MultilingualPartRecord182.parse_182(data, pos)
-            records.append(record)
-            if verbose and count % 100 == 0:
-                print(f"  Parsed {count} 182-byte records...")
-        except:
-            break
-
-        count += 1
-
-    return records
-
-
-def parse_inventory_records_199(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse inventory records (199 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of InventoryRecord199 objects
-    """
-    f.seek(start_offset)
-    records = []
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        data = f.read(199)
-        if len(data) < 199:
-            break
-
-        # Check for padding (all zeros in model code field)
-        if all(b == 0 for b in data[:6]):
-            break
-
-        try:
-            record = InventoryRecord199.parse_199(data, start_offset + count * 199)
-            records.append(record)
-            if verbose and count % 100 == 0:
-                print(f"  Parsed {count} inventory records...")
-        except:
-            break
-
-        count += 1
-
-    return records
-
-
-def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse engine specification records (230 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of EngineSpecRecord230 objects
-    """
-    RECORD_SIZE = 230
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = EngineSpecRecord230.parse_230(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_figure_index_records_22(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse figure index records (22 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of FigureIndexRecord22 objects
-    """
-    RECORD_SIZE = 22
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = FigureIndexRecord22.parse_22(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_spec_mapping_records_22(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse spec mapping records (22 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of SpecMappingRecord22 objects
-    """
-    RECORD_SIZE = 22
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = SpecMappingRecord22.parse_22(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_fig_illustration_page_records_89(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse FIG illustration page/sub-index records (89 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of FIGIllustrationPage89 objects
-    """
-    RECORD_SIZE = 89
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = FIGIllustrationPage89.parse_89(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_fig_illustration_records_183(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse FIG illustration description records (183 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of FIGIllustrationRecord183 objects
-    """
-    RECORD_SIZE = 183
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = FIGIllustrationRecord183.parse_183(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_fig_group_category_records_184(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse FIG group category description records (184 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of FIGGroupCategoryRecord184 objects
-    """
-    RECORD_SIZE = 184
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        record = FIGGroupCategoryRecord184.parse_184(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_model_spec_records_103(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse model spec records (103 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of ModelSpecRecord103 objects
-    """
-    RECORD_SIZE = 103
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-
-        # Parse fields (cp437)
-        record = ModelSpecRecord103.parse_103(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_model_index_records_288(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse model index records (288 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of ModelIndexRecord288 objects
-    """
-    RECORD_SIZE = 288
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        # Parse fields (cp437)
-        record = ModelIndexRecord288.parse_288(data, offset)
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_part_range_records_24(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse part range records (24 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse
-        verbose: Print progress
-
-    Returns:
-        List of PartRangeRecord24 objects
-    """
-    RECORD_SIZE = 24
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        # Parse fields (cp437)
-        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-        part_start = data[6:13].decode(CHARSET, errors='replace').strip()
-        part_end = data[13:20].decode(CHARSET, errors='replace').strip()
-        metadata = data[20:24]
-
-        record = PartRangeRecord24(
-            offset=offset,
-            model_code=model_code,
-            part_start=part_start,
-            part_end=part_end,
-            metadata=metadata,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_multilingual_part_records_167(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse multilingual part name records (167 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse (None = until invalid)
-        verbose: Print progress during parsing
-
-    Returns:
-        List of MultilingualPartRecord167 objects
-    """
-    RECORD_SIZE = 167
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        # Parse fields (cp437 encoding)
-        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-        spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
-        description = data[17:42].decode(CHARSET, errors='replace').strip()
-        trailer = data[42:167]
-
-        record = MultilingualPartRecord167(
-            offset=offset,
-            model_code=model_code,
-            spec_code=spec_code,
-            description=description,
-            trailer=trailer,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_multilingual_part_records_180(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse multilingual part name records (180 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse (None = until invalid)
-        verbose: Print progress during parsing
-
-    Returns:
-        List of MultilingualPartRecord180 objects
-    """
-    RECORD_SIZE = 180
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        # Parse fields (cp437 encoding)
-        # Structure: model(6) + part(7) + en(40) + de(40) + fr(40) + es(40) + trailer(7)
-        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-        part_code = data[6:13].decode(CHARSET, errors='replace').strip()
-        # No figure/index in this format
-        
-        name_en = data[13:53].decode(CHARSET, errors='replace').strip()
-        name_de = data[53:93].decode(CHARSET, errors='replace').strip()
-        name_fr = data[93:133].decode(CHARSET, errors='replace').strip()
-        name_es = data[133:173].decode(CHARSET, errors='replace').strip()
-        trailer = data[173:180]
-
-        record = MultilingualPartRecord180(
-            offset=offset,
-            model_code=model_code,
-            part_code=part_code,
-            name_en=name_en,
-            name_de=name_de,
-            name_fr=name_fr,
-            name_es=name_es,
-            trailer=trailer,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def parse_multilingual_part_records(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse multilingual part name records (192 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse (None = until invalid)
-        verbose: Print progress during parsing
-
-    Returns:
-        List of MultilingualPartRecord objects
-    """
-    RECORD_SIZE = 192
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Check if valid record
-        if not is_valid_model_code(data[0:6]):
-            break
-
-        # Parse fields (cp437 encoding used by DOS-era Subaru software)
-        # Structure: model(6) + part(6) + figure(5) + index(2) + en(40) + de(40) + fr(40) + es(40) + trailer(13)
-        model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-        part_code = data[6:12].decode(CHARSET, errors='replace').strip()
-        figure_code = data[12:17].decode(CHARSET, errors='replace').strip()
-        index = data[17:19+1].decode(CHARSET, errors='replace').strip()
-        name_en = data[19+1:59+1].decode(CHARSET, errors='replace').strip()
-        name_de = data[59+1:99+1].decode(CHARSET, errors='replace').strip()
-        name_fr = data[99+1:139+1].decode(CHARSET, errors='replace').strip()
-        name_es = data[139+1:179+1].decode(CHARSET, errors='replace').strip()
-        trailer = data[179+1:192]
-
-        record = MultilingualPartRecord(
-            offset=offset,
-            model_code=model_code,
-            part_code=part_code,
-            figure_code=figure_code,
-            index=index,
-            name_en=name_en,
-            name_de=name_de,
-            name_fr=name_fr,
-            name_es=name_es,
-            trailer=trailer,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
-
-
-def detect_vin_record_type(data: bytes) -> str:
-    """
-    Detect whether data contains 38-byte VIN range records or 69-byte VIN-Model records.
-
-    Args:
-        data: At least 69 bytes of data from a VIN block
-
-    Returns:
-        'vin_range' for 38-byte records (VIN start + VIN end + pointer)
-        'vin_model' for 69-byte records (single VIN + full model spec)
-        'unknown' if neither pattern matches
-    """
-    if len(data) < 69:
-        return 'unknown'
-
-    # Check first record for VIN
-    try:
-        vin1 = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
-        if not is_valid_subaru_vin(vin1):
-            return 'unknown'
-    except:
-        return 'unknown'
-
-    # Check for 38-byte pattern: second VIN at offset 17
-    try:
-        vin2_38 = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
-        if is_valid_subaru_vin(vin2_38):
-            return 'vin_range'
-    except:
-        pass
-
-    # Check for 69-byte pattern: null + flag + model code at offset 17-25
-    try:
-        if data[17] == 0x00 and data[18] in (0x00, 0x01, 0x02):
-            model_code = data[19:25].decode(CHARSET)
-            if is_valid_model_code(data[19:25]):
-                return 'vin_model'
-    except:
-        pass
-
-    return 'unknown'
-
-
-def parse_vin_model_records(f, start_offset, max_records=None, verbose=False):
-    """
-    Parse VIN-Model detail records (69 bytes each).
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where records begin
-        max_records: Maximum records to parse (None = until invalid)
-        verbose: Print progress during parsing
-
-    Returns:
-        List of VINModelRecord objects
-    """
-    RECORD_SIZE = 69
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Parse VIN
-        vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
-
-        if not is_valid_subaru_vin(vin):
-            break
-
-        # Parse remaining fields
-        flag = data[18]
-        model_code = data[19:25].decode(CHARSET, errors='replace').strip()
-        body_model = data[25:32].decode(CHARSET, errors='replace').strip()
-        spec_code = data[32:41].decode(CHARSET, errors='replace').strip()
-        binary_flags = data[41:43]
-        date1 = data[43:51].decode(CHARSET, errors='replace')
-        date2 = data[51:59].decode(CHARSET, errors='replace')
-        date3 = data[59:67].decode(CHARSET, errors='replace')
-        suffix = data[67:69].decode(CHARSET, errors='replace')
-
-        record = VINModelRecord(
-            offset=offset,
-            vin=vin,
-            flag=flag,
-            model_code=model_code,
-            body_model=body_model,
-            spec_code=spec_code,
-            binary_flags=binary_flags,
-            date1=date1,
-            date2=date2,
-            date3=date3,
-            suffix=suffix,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 1000 == 0:
-            print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-        count += 1
-
-    return records
 
 
 def parse_itca_data(file_path: str) -> List[ItcaRecord]:
@@ -3048,70 +3329,6 @@ def parse_figname_txt(file_path: str) -> List[FigNameRecord]:
     return records
 
 
-def parse_vin_blocks(f, start_offset=0x800, max_records=None, verbose=False):
-    """
-    Parse VIN range records starting at given offset.
-
-    Each record is 38 bytes:
-    - Bytes 0-16: VIN range start (17 chars ASCII)
-    - Bytes 17-33: VIN range end (17 chars ASCII)
-    - Bytes 34-35: Section number (uint16 LE)
-    - Bytes 36-37: Index within section (uint16 LE)
-
-    Args:
-        f: File handle to sffastus
-        start_offset: Where VIN records begin (default 0x800)
-        max_records: Maximum records to parse (None = until invalid)
-        verbose: Print progress during parsing
-
-    Returns:
-        List of VINRecord objects
-    """
-    RECORD_SIZE = 38
-    records = []
-
-    f.seek(start_offset)
-    count = 0
-
-    while True:
-        if max_records and count >= max_records:
-            break
-
-        offset = f.tell()
-        data = f.read(RECORD_SIZE)
-
-        if len(data) < RECORD_SIZE:
-            break
-
-        # Parse fields
-        vin_start = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
-        vin_end = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
-        section = struct.unpack('<H', data[34:36])[0]
-        index = struct.unpack('<H', data[36:38])[0]
-
-        # Validate - must be a valid Subaru VIN
-        if not is_valid_subaru_vin(vin_start):
-            # End of VIN records
-            break
-
-        record = VINRecord(
-            offset=offset,
-            vin_start=vin_start,
-            vin_end=vin_end,
-            section=section,
-            index=index,
-            raw_data=data
-        )
-        records.append(record)
-
-        if verbose and count % 100 == 0:
-            print(f"  Parsed {count} records at 0x{offset:06X}...")
-
-        count += 1
-
-    return records
-
-
 def analyze_vin_blocks(f, start_offset=0x800, max_records=2000):
     """
     Analyze VIN block structure and print statistics.
@@ -3120,7 +3337,8 @@ def analyze_vin_blocks(f, start_offset=0x800, max_records=2000):
     """
     print(f"\n=== Analyzing VIN Blocks at 0x{start_offset:X} ===")
 
-    records = parse_vin_blocks(f, start_offset, max_records, verbose=True)
+    parser = SffastusBlockParser()
+    records = parser.parse_vin_blocks(f, start_offset, max_records, verbose=True)
 
     if not records:
         print("  No valid VIN records found!")
@@ -3278,217 +3496,12 @@ def is_valid_model_code(data: bytes) -> bool:
         return False
 
 
-def detect_block_type(data: bytes, offset: int = 0) -> str:
-    """
-    Detect the type of a 2KB block.
-
-    Args:
-        data: 2048 bytes of block data
-        offset: File offset of this block (used for header detection)
-
-    Returns:
-        Block type string: 'header', 'vin', 'model_index',
-        'body_model', 'text', 'binary', 'padding', 'unknown'
-    """
-    BLOCK_SIZE = 2048
-
-    if len(data) < BLOCK_SIZE:
-        return 'incomplete'
-
-    # 1. Header block (first 2KB contains header + model table + padding)
-    if offset < 0x800:
-        return 'header'
-
-    # 2. All zeros = padding
-    if all(b == 0 for b in data):
-        return 'padding'
-
-    # 3. VIN block - first 17 bytes are a valid Subaru VIN
-    # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
-    try:
-        vin = data[0:17].decode(CHARSET, errors='replace')
-        if is_valid_subaru_vin(vin):
-            vin_type = detect_vin_record_type(data)
-            if vin_type == 'vin_range':
-                return 'vin_range'
-            elif vin_type == 'vin_model':
-                return 'vin_model'
-            else:
-                return 'vin'  # Fallback for unknown VIN format
-    except:
-        pass
-
-    if is_part_range_block_24(data):
-        return 'part_range_24'
-
-    if is_multilingual_part_block(data):
-        return 'multilingual_part'
-
-    if is_multilingual_part_block_180(data):
-        return 'multilingual_part_180'
-
-    if is_multilingual_part_block_167(data):
-        return 'multilingual_part_167'
-
-    if is_model_spec_block_103(data):
-        return 'model_spec_103'
-
-    # 4f. Catalog applicability block (466-byte) - NEW
-    if is_catalog_applicability_block_466(data):
-        return 'catalog_applicability_466'
-
-    # 4g. Color record block (91-byte) - NEW
-    if is_color_record_block_91(data):
-        return 'color_record_91'
-
-    # 4h. Glossary record block (28-byte) - NEW
-    if is_glossary_record_block_28(data):
-        return 'glossary_record_28'
-
-    # 4i. Code index record block (33-byte) - NEW
-    if is_code_index_record_block_33(data):
-        return 'code_index_record_33'
-
-    # 4j. Model index block (288-byte) - NEW
-    if is_model_index_block_288(data):
-        return 'model_index_288'
-
-    # 4k. FIG group category block (184-byte) - NEW
-    if is_fig_group_category_block_184(data):
-        return 'fig_group_category_184'
-
-    # 4l. FIG illustration block (183-byte) - NEW
-    if is_fig_illustration_block_183(data):
-        return 'fig_illustration_183'
-
-    # 4m. FIG illustration page block (89-byte) - NEW
-    if is_fig_illustration_page_block_89(data):
-        return 'fig_illustration_page_89'
-
-    # 4n. Engine spec block (230-byte) - NEW
-    if is_engine_spec_block_230(data):
-        return 'engine_spec_230'
-
-    # 4o. Part group block (185-byte) - NEW
-    if is_part_group_block_185(data):
-        return 'part_group_185'
-
-    # 4p. Variant glossary block (81-byte) - NEW
-    if is_variant_glossary_block_81(data):
-        return 'variant_glossary_81'
-
-    # 4q. Inventory record block (199-byte) - NEW
-    if is_inventory_block_199(data):
-        return 'inventory_199'
-
-    # 4r. Multilingual part block (182-byte) - NEW
-    if is_multilingual_part_block_182(data):
-        return 'multilingual_part_182'
-
-    # 4s. Figure index block (22-byte) - NEW
-    if is_figure_index_block_22(data):
-        return 'figure_index_22'
-
-    # 4t. Spec mapping block (22-byte) - NEW
-    if is_spec_mapping_block_22(data):
-        return 'spec_mapping_22'
-
-    # 5. Body model block - 17-byte records with 7-char body code + model code
-    # Body codes are 7 alphanumeric chars like "BD6AY1G"
-    try:
-        # Check first record pattern: 7-char body code + 2 bytes + 6-char model code
-        body_code = data[0:7].decode(CHARSET)
-        if (len(body_code) == 7 and
-            body_code.isalnum() and
-            body_code[0].isalpha() and
-            is_valid_model_code(data[9:15])):
-            return 'body_model'
-    except:
-        pass
-
-    # 6. Text block - mostly printable ASCII
-    printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13))
-    printable_ratio = printable_count / len(data)
-
-    if printable_ratio >= 0.8:
-        return 'text'
-
-    # 7. Binary block - low printable ratio, has content
-    non_zero = sum(1 for b in data if b != 0)
-    if non_zero > 0 and printable_ratio < 0.4:
-        return 'binary'
-
-    # 8. Mixed content
-    if printable_ratio >= 0.4:
-        return 'mixed'
-
-    return 'unknown'
-
-
-def scan_block_types(f, max_blocks=None):
-    """
-    Scan entire file block by block and return map of ranges to types.
-
-    Args:
-        f: File handle to sffastus
-        max_blocks: Maximum blocks to scan (None = entire file)
-
-    Returns:
-        List of (start_offset, end_offset, block_count, block_type) tuples.
-        Consecutive blocks of same type are merged into ranges.
-    """
-    BLOCK_SIZE = 2048
-
-    f.seek(0, 2)
-    file_size = f.tell()
-
-    total_blocks = file_size // BLOCK_SIZE
-    if max_blocks:
-        total_blocks = min(total_blocks, max_blocks)
-
-    ranges = []
-    current_type = None
-    current_start = 0
-    current_count = 0
-
-    for block_idx in range(total_blocks):
-        offset = block_idx * BLOCK_SIZE
-        f.seek(offset)
-        data = f.read(BLOCK_SIZE)
-
-        if len(data) < BLOCK_SIZE:
-            break
-
-        block_type = detect_block_type(data, offset)
-        # print(f"Scanned block {block_idx:5d}/{total_blocks:5d} at 0x{offset:08X}: {block_type}")
-
-        if block_type == current_type:
-            current_count += 1
-        else:
-            # Save previous range if exists
-            if current_type is not None:
-                end_offset = current_start + current_count * BLOCK_SIZE
-                ranges.append((current_start, end_offset, current_count, current_type))
-
-            # Start new range
-            current_type = block_type
-            current_start = offset
-            current_count = 1
-
-    # Save last range
-    if current_type is not None:
-        end_offset = current_start + current_count * BLOCK_SIZE
-        ranges.append((current_start, end_offset, current_count, current_type))
-
-    return ranges
-
-
 def print_block_type_map(ranges):
     """
     Print a formatted block type map.
 
     Args:
-        ranges: List from scan_block_types()
+        ranges: List from self.scan_block_types()
     """
     print(f"\n{'Start':>12} {'End':>12} {'Blocks':>8} {'Type':<15}")
     print("-" * 50)

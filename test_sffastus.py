@@ -12,58 +12,18 @@ import unittest
 # Import parser functions
 from sffastus_parser import (
     parse_model_table,
-    parse_vin_blocks,
-    parse_vin_model_records,
-    parse_multilingual_part_records,
-    parse_multilingual_part_records_180,
-    parse_multilingual_part_records_167,
-    parse_part_range_records_24,
-    parse_model_spec_records_103,
-    parse_model_index_records_288,
-    parse_color_records_91,
-    parse_glossary_records_28,
-    parse_code_index_records_33,
-    parse_fig_group_category_records_184,
-    parse_fig_illustration_records_183,
-    parse_fig_illustration_page_records_89,
-    parse_engine_spec_records_230,
-    parse_part_group_records_185,
-    parse_variant_glossary_records_81,
-    parse_inventory_records_199,
-    parse_multilingual_part_records_182,
-    parse_figure_index_records_22,
-    parse_spec_mapping_records_22,
+    parse_figname_txt,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
     is_valid_subaru_vin,
     is_valid_subaru_vin_strict,
     is_valid_model_code,
-    is_multilingual_part_block,
-    is_multilingual_part_block_180,
-    is_multilingual_part_block_167,
-    is_part_range_block_24,
-    is_model_spec_block_103,
-    is_model_index_block_288,
-    is_color_record_block_91,
-    is_glossary_record_block_28,
-    is_code_index_record_block_33,
-    is_fig_group_category_block_184,
-    is_fig_illustration_block_183,
-    is_fig_illustration_page_block_89,
-    is_engine_spec_block_230,
-    is_part_group_block_185,
-    is_variant_glossary_block_81,
-    is_inventory_block_199,
-    is_multilingual_part_block_182,
-    is_figure_index_block_22,
-    is_spec_mapping_block_22,
-    detect_block_type,
-    detect_vin_record_type,
-    scan_block_types,
     print_block_type_map,
+    SffastusBlockParser,
     SUBARU_VIN_PREFIXES,
     VALID_MODEL_CODES,
+    CHARSET,
     VINRecord,
     VINModelRecord,
     MultilingualPartRecord,
@@ -92,6 +52,13 @@ from sffastus_parser import (
 SFCDUS1_PATH = "SFCDUS1/sffastus"
 SFCDUS2_PATH = "SFCDUS2/sffastus"
 SFCDUS3_PATH = "SFCDUS3/sffastus"
+FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
+
+# Shared parser instance with figure codes for block disambiguation
+_figure_codes = set()
+if os.path.exists(FIGNAME_PATH):
+    _figure_codes = {r.figure_code for r in parse_figname_txt(FIGNAME_PATH)}
+parser = SffastusBlockParser(figure_codes=_figure_codes)
 
 
 class TestVINValidation(unittest.TestCase):
@@ -142,7 +109,7 @@ class TestVINBlocks(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_vin_blocks(f, start_offset=0x800, max_records=10)
+            records = parser.parse_vin_blocks(f, start_offset=0x800, max_records=10)
 
         self.assertEqual(len(records), 10)
 
@@ -160,7 +127,7 @@ class TestVINBlocks(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_vin_blocks(f, start_offset=0x800, max_records=100)
+            records = parser.parse_vin_blocks(f, start_offset=0x800, max_records=100)
 
         self.assertGreater(len(records), 0)
 
@@ -177,7 +144,7 @@ class TestVINBlocks(unittest.TestCase):
             self.skipTest("SFCDUS1/sffastus not found")
 
         with open(SFCDUS1_PATH, 'rb') as f:
-            records = parse_vin_blocks(f, start_offset=0x800, max_records=10)
+            records = parser.parse_vin_blocks(f, start_offset=0x800, max_records=10)
 
         self.assertGreater(len(records), 0)
         # Oldest database should also have 4S3 or JF1 VINs
@@ -192,7 +159,7 @@ class TestVINBlocks(unittest.TestCase):
             self.skipTest("SFCDUS3/sffastus not found")
 
         with open(SFCDUS3_PATH, 'rb') as f:
-            records = parse_vin_blocks(f, start_offset=0x800, max_records=10)
+            records = parser.parse_vin_blocks(f, start_offset=0x800, max_records=10)
 
         self.assertGreater(len(records), 0)
 
@@ -402,13 +369,13 @@ class TestBlockTypeDetection(unittest.TestCase):
     def test_detect_header_block(self):
         """Header block at offset < 0x800"""
         data = b'\x00' * 2048
-        self.assertEqual(detect_block_type(data, offset=0), 'header')
-        self.assertEqual(detect_block_type(data, offset=0x400), 'header')
+        self.assertEqual(parser.detect_block_type(data, offset=0), 'header')
+        self.assertEqual(parser.detect_block_type(data, offset=0x400), 'header')
 
     def test_detect_padding_block(self):
         """All-zero padding block"""
         data = b'\x00' * 2048
-        self.assertEqual(detect_block_type(data, offset=0x1000), 'padding')
+        self.assertEqual(parser.detect_block_type(data, offset=0x1000), 'padding')
 
     def test_detect_vin_range_block(self):
         """VIN range block with 38-byte records (VIN start + VIN end + pointer)"""
@@ -418,7 +385,7 @@ class TestBlockTypeDetection(unittest.TestCase):
         pointer = b'\x00\x04\x29\x00'  # Little-endian pointer
         record = vin1 + vin2 + pointer
         data = record + b'\x00' * (2048 - len(record))
-        self.assertEqual(detect_block_type(data, offset=0x800), 'vin_range')
+        self.assertEqual(parser.detect_block_type(data, offset=0x800), 'vin_range')
 
     def test_detect_vin_model_block(self):
         """VIN model block with 69-byte records (single VIN + model spec)"""
@@ -436,7 +403,7 @@ class TestBlockTypeDetection(unittest.TestCase):
         record = vin + null_flag + model_code + body_model + spec_code + binary + date1 + date2 + date3 + suffix
         self.assertEqual(len(record), 69)
         data = record + b'\x00' * (2048 - len(record))
-        self.assertEqual(detect_block_type(data, offset=0x3E5000), 'vin_model')
+        self.assertEqual(parser.detect_block_type(data, offset=0x3E5000), 'vin_model')
 
     def test_detect_vin_record_type(self):
         """Test detect_vin_record_type distinguishes 38 vs 69 byte records"""
@@ -446,7 +413,7 @@ class TestBlockTypeDetection(unittest.TestCase):
         pointer = b'\x00\x04\x29\x00'
         range_data = vin1 + vin2 + pointer + b'\x00' * 31  # Pad to 69 bytes
         self.assertEqual(len(range_data), 69)
-        self.assertEqual(detect_vin_record_type(range_data), 'vin_range')
+        self.assertEqual(parser.detect_vin_record_type(range_data), 'vin_range')
 
         # 69-byte VIN-Model
         vin = b'JF2SHAEC0CH440463'
@@ -459,25 +426,25 @@ class TestBlockTypeDetection(unittest.TestCase):
         suffix = b'U5'
         model_data = vin + null_flag + model_code + body_model + spec_code + binary + dates + suffix
         self.assertEqual(len(model_data), 69)
-        self.assertEqual(detect_vin_record_type(model_data), 'vin_model')
+        self.assertEqual(parser.detect_vin_record_type(model_data), 'vin_model')
 
     def test_detect_text_block(self):
         """Text block with mostly printable ASCII"""
         # Create block with >70% printable text
         text = b'ENGINE ASSEMBLY COMPLETE WITH ALL PARTS AND COMPONENTS ' * 30
         data = text[:2048].ljust(2048, b' ')
-        self.assertEqual(detect_block_type(data, offset=0x1000000), 'text')
+        self.assertEqual(parser.detect_block_type(data, offset=0x1000000), 'text')
 
     def test_detect_binary_block(self):
         """Binary block with low printable ratio"""
         # Create block with mostly non-printable bytes
         data = bytes([0x80 + (i % 128) for i in range(2048)])
-        self.assertEqual(detect_block_type(data, offset=0x1000000), 'binary')
+        self.assertEqual(parser.detect_block_type(data, offset=0x1000000), 'binary')
 
     def test_detect_incomplete_block(self):
         """Incomplete block (< 2048 bytes)"""
         data = b'\x00' * 1000
-        self.assertEqual(detect_block_type(data, offset=0x1000), 'incomplete')
+        self.assertEqual(parser.detect_block_type(data, offset=0x1000), 'incomplete')
 
 
 class TestVINModelRecords(unittest.TestCase):
@@ -493,7 +460,7 @@ class TestVINModelRecords(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_vin_model_records(f, start_offset=0x3E5000, max_records=10)
+            records = parser.parse_vin_model_records(f, start_offset=0x3E5000, max_records=10)
 
         self.assertEqual(len(records), 10)
 
@@ -553,7 +520,7 @@ class TestMultilingualPartRecords(unittest.TestCase):
 
         # Pad to 2KB block
         data = record + b'\x00' * (2048 - 192)
-        self.assertTrue(is_multilingual_part_block(data))
+        self.assertTrue(parser.is_multilingual_part_block(data))
 
     def test_detect_multilingual_part_block(self):
         """Test detect_block_type identifies multilingual_part"""
@@ -565,7 +532,7 @@ class TestMultilingualPartRecords(unittest.TestCase):
             f.seek(0x0CD4D000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0CD4D000)
+        block_type = parser.detect_block_type(data, offset=0x0CD4D000)
         self.assertEqual(block_type, 'multilingual_part')
 
     def test_parse_multilingual_part_records_us2(self):
@@ -574,7 +541,7 @@ class TestMultilingualPartRecords(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
+            records = parser.parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
 
         self.assertEqual(len(records), 10)
 
@@ -634,7 +601,7 @@ class TestMultilingualPartRecords180(unittest.TestCase):
 
         # Pad to 2KB block
         data = record + b'\x00' * (2048 - 180)
-        self.assertTrue(is_multilingual_part_block_180(data))
+        self.assertTrue(parser.is_multilingual_part_block_180(data))
 
     def test_detect_multilingual_part_block_180(self):
         """Test detect_block_type identifies multilingual_part_180"""
@@ -646,7 +613,7 @@ class TestMultilingualPartRecords180(unittest.TestCase):
             f.seek(0x0CD45000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0CD45000)
+        block_type = parser.detect_block_type(data, offset=0x0CD45000)
         self.assertEqual(block_type, 'multilingual_part_180')
 
     def test_parse_multilingual_part_records_180_us2(self):
@@ -655,7 +622,7 @@ class TestMultilingualPartRecords180(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_multilingual_part_records_180(f, start_offset=0x0CD45000, max_records=10)
+            records = parser.parse_multilingual_part_records_180(f, start_offset=0x0CD45000, max_records=10)
 
         self.assertEqual(len(records), 10)
 
@@ -712,7 +679,7 @@ class TestMultilingualPartRecords167(unittest.TestCase):
         # Pad to 2KB block
         # 2048 // 167 = 12 records
         data = (record * 12) + b'\x00' * (2048 - (167 * 12))
-        self.assertTrue(is_multilingual_part_block_167(data))
+        self.assertTrue(parser.is_multilingual_part_block_167(data))
 
     def test_detect_multilingual_part_block_167(self):
         """Test detect_block_type identifies multilingual_part_167"""
@@ -724,7 +691,7 @@ class TestMultilingualPartRecords167(unittest.TestCase):
             f.seek(0x0CD41000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0CD41000)
+        block_type = parser.detect_block_type(data, offset=0x0CD41000)
         self.assertEqual(block_type, 'multilingual_part_167')
 
     def test_parse_multilingual_part_records_167_us2(self):
@@ -733,7 +700,7 @@ class TestMultilingualPartRecords167(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_multilingual_part_records_167(f, start_offset=0x0CD41000, max_records=10)
+            records = parser.parse_multilingual_part_records_167(f, start_offset=0x0CD41000, max_records=10)
 
         self.assertEqual(len(records), 10)
 
@@ -762,7 +729,7 @@ class TestPartRangeRecords24(unittest.TestCase):
 
         # Block with 2 consistent records
         data = (record * 2) + b'\x00' * (2048 - 48)
-        self.assertTrue(is_part_range_block_24(data))
+        self.assertTrue(parser.is_part_range_block_24(data))
 
     def test_detect_part_range_block_24(self):
         """Test detect_block_type identifies part_range_24"""
@@ -774,7 +741,7 @@ class TestPartRangeRecords24(unittest.TestCase):
             f.seek(0x0CD42800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0CD42800)
+        block_type = parser.detect_block_type(data, offset=0x0CD42800)
         self.assertEqual(block_type, 'part_range_24')
 
     def test_parse_part_range_records_24_us2(self):
@@ -783,7 +750,7 @@ class TestPartRangeRecords24(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_part_range_records_24(f, start_offset=0x0CD42800, max_records=10)
+            records = parser.parse_part_range_records_24(f, start_offset=0x0CD42800, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -808,7 +775,7 @@ class TestModelSpecRecords103(unittest.TestCase):
 
         # Block with 2 consistent records
         data = (record * 2) + b'\x00' * (2048 - 206)
-        self.assertTrue(is_model_spec_block_103(data))
+        self.assertTrue(parser.is_model_spec_block_103(data))
 
     def test_detect_model_spec_block_103(self):
         """Test detect_block_type identifies model_spec_103"""
@@ -820,7 +787,7 @@ class TestModelSpecRecords103(unittest.TestCase):
             f.seek(0x0CD4B800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0CD4B800)
+        block_type = parser.detect_block_type(data, offset=0x0CD4B800)
         self.assertEqual(block_type, 'model_spec_103')
 
     def test_parse_model_spec_records_103_us2(self):
@@ -829,7 +796,7 @@ class TestModelSpecRecords103(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_model_spec_records_103(f, start_offset=0x0CD4B800, max_records=10)
+            records = parser.parse_model_spec_records_103(f, start_offset=0x0CD4B800, max_records=10)
 
         for i, r in enumerate(records):
             print(i, r)
@@ -876,7 +843,7 @@ class TestModelIndexRecords288(unittest.TestCase):
 
         # Pad to 2KB block
         data = record + b'\x00' * (2048 - 288)
-        self.assertTrue(is_model_index_block_288(data))
+        self.assertTrue(parser.is_model_index_block_288(data))
 
     def test_detect_model_index_block_288(self):
         """Test detect_block_type identifies model_index_288"""
@@ -888,7 +855,7 @@ class TestModelIndexRecords288(unittest.TestCase):
             f.seek(0x13000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x13000)
+        block_type = parser.detect_block_type(data, offset=0x13000)
         self.assertEqual(block_type, 'model_index_288')
 
     def test_parse_model_index_records_288_us2(self):
@@ -897,7 +864,7 @@ class TestModelIndexRecords288(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_model_index_records_288(f, start_offset=0x13000, max_records=5)
+            records = parser.parse_model_index_records_288(f, start_offset=0x13000, max_records=5)
 
         self.assertGreater(len(records), 0)
 
@@ -970,7 +937,7 @@ class TestColorRecords91(unittest.TestCase):
 
         # Block with 2 consistent records
         data = (record * 2) + b'\x00' * (2048 - 182)
-        self.assertTrue(is_color_record_block_91(data))
+        self.assertTrue(parser.is_color_record_block_91(data))
 
     def test_detect_color_record_block_91(self):
         """Test detect_block_type identifies color_record_91"""
@@ -981,7 +948,7 @@ class TestColorRecords91(unittest.TestCase):
             f.seek(0x0DE1F800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DE1F800)
+        block_type = parser.detect_block_type(data, offset=0x0DE1F800)
         self.assertEqual(block_type, 'color_record_91')
 
     def test_parse_color_records_91_us2(self):
@@ -990,7 +957,7 @@ class TestColorRecords91(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_color_records_91(f, start_offset=0x0DE1F800, max_records=10)
+            records = parser.parse_color_records_91(f, start_offset=0x0DE1F800, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1019,7 +986,7 @@ class TestGlossaryRecords28(unittest.TestCase):
             f.seek(0x0DE23800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DE23800)
+        block_type = parser.detect_block_type(data, offset=0x0DE23800)
         self.assertEqual(block_type, 'glossary_record_28')
 
     def test_parse_glossary_records_28_us2(self):
@@ -1028,7 +995,7 @@ class TestGlossaryRecords28(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_glossary_records_28(f, start_offset=0x0DE23800, max_records=10)
+            records = parser.parse_glossary_records_28(f, start_offset=0x0DE23800, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1057,7 +1024,7 @@ class TestFIGIllustrationRecords183(unittest.TestCase):
             f.seek(0x0DF9B000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DF9B000)
+        block_type = parser.detect_block_type(data, offset=0x0DF9B000)
         self.assertEqual(block_type, 'fig_illustration_183')
 
     def test_parse_fig_illustration_records_183_us2(self):
@@ -1066,7 +1033,7 @@ class TestFIGIllustrationRecords183(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_fig_illustration_records_183(f, start_offset=0x0DF9B000, max_records=10)
+            records = parser.parse_fig_illustration_records_183(f, start_offset=0x0DF9B000, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1096,7 +1063,7 @@ class TestFIGIllustrationPageRecords89(unittest.TestCase):
             f.seek(0x0DFA5000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DFA5000)
+        block_type = parser.detect_block_type(data, offset=0x0DFA5000)
         self.assertEqual(block_type, 'fig_illustration_page_89')
 
     def test_parse_fig_illustration_page_records_89_us2(self):
@@ -1105,7 +1072,7 @@ class TestFIGIllustrationPageRecords89(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_fig_illustration_page_records_89(f, start_offset=0x0DFA5000, max_records=10)
+            records = parser.parse_fig_illustration_page_records_89(f, start_offset=0x0DFA5000, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1135,7 +1102,7 @@ class TestEngineSpecRecords230(unittest.TestCase):
             f.seek(0x0DFB1000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DFB1000)
+        block_type = parser.detect_block_type(data, offset=0x0DFB1000)
         self.assertEqual(block_type, 'engine_spec_230')
 
     def test_parse_engine_spec_records_230_us2(self):
@@ -1144,7 +1111,7 @@ class TestEngineSpecRecords230(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_engine_spec_records_230(f, start_offset=0x0DFB1000, max_records=10)
+            records = parser.parse_engine_spec_records_230(f, start_offset=0x0DFB1000, max_records=10)
 
         self.assertEqual(len(records), 8) # Block only fits 8 records (230*8=1840)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1173,7 +1140,7 @@ class TestPartGroupRecords185(unittest.TestCase):
             f.seek(0x0DFD3000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DFD3000)
+        block_type = parser.detect_block_type(data, offset=0x0DFD3000)
         self.assertEqual(block_type, 'part_group_185')
 
     def test_parse_part_group_records_185_us2(self):
@@ -1182,7 +1149,7 @@ class TestPartGroupRecords185(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_part_group_records_185(f, start_offset=0x0DFD3000, max_records=10)
+            records = parser.parse_part_group_records_185(f, start_offset=0x0DFD3000, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1211,7 +1178,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
             f.seek(0x0DE42800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DE42800)
+        block_type = parser.detect_block_type(data, offset=0x0DE42800)
         self.assertEqual(block_type, 'code_index_record_33')
 
     def test_parse_code_index_records_33_us2(self):
@@ -1220,7 +1187,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_code_index_records_33(f, start_offset=0x0DE42800, max_records=10)
+            records = parser.parse_code_index_records_33(f, start_offset=0x0DE42800, max_records=10)
 
         self.assertEqual(len(records), 10)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1242,7 +1209,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
 
         # Step 1: Scan all blocks and find code_index_record_33 blocks
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
         code_index_ranges = [r for r in ranges if r[3] == 'code_index_record_33']
 
@@ -1371,7 +1338,7 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
 
         # Combine records and pad to 2KB block
         data = record1 + record2 + b'\x00' * (2048 - 368)
-        self.assertTrue(is_fig_group_category_block_184(data))
+        self.assertTrue(parser.is_fig_group_category_block_184(data))
 
     def test_detect_fig_group_category_block_184(self):
         """Test detect_block_type identifies fig_group_category_184"""
@@ -1382,7 +1349,7 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
             f.seek(0x0DF9A000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0DF9A000)
+        block_type = parser.detect_block_type(data, offset=0x0DF9A000)
         self.assertEqual(block_type, 'fig_group_category_184')
 
     def test_parse_fig_group_category_records_184_us2(self):
@@ -1391,7 +1358,7 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=15)
+            records = parser.parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=15)
 
         self.assertEqual(len(records), 15)
         self.assertEqual(records[0].model_code, 'B11')
@@ -1438,7 +1405,7 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
         }
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=20)
+            records = parser.parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=20)
 
         # Check that we found expected groups
         found_groups = {r.fig_group_code: r.desc_en for r in records}
@@ -1464,7 +1431,7 @@ class TestBlockTypeScan(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f, max_blocks=100)
+            ranges = parser.scan_block_types(f, max_blocks=100)
 
         self.assertGreater(len(ranges), 0)
 
@@ -1480,7 +1447,7 @@ class TestBlockTypeScan(unittest.TestCase):
 
     def test_print_a_couple(self):
         with open('SFCDUS2/sffastus', 'rb') as f:
-            records = parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
+            records = parser.parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
 
         print('Multilingual Part Records (192 bytes each)')
         print('=' * 80)
@@ -1501,7 +1468,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Full Block Type Scan of SFCDUS2/sffastus ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
         self.assertGreater(len(ranges), 0)
 
@@ -1536,7 +1503,7 @@ class TestBlockTypeScan(unittest.TestCase):
             vin_regions = scan_vin_blocks_2kb(f, min_contiguous=10)
 
             # Get block type map
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
         # Extract VIN ranges from block type map (both vin_range and vin_model)
         vin_ranges_from_map = [r for r in ranges if r[3] in ('vin_range', 'vin_model', 'vin')]
@@ -1558,7 +1525,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Validating FIG Group Category Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_183']
             self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
@@ -1571,7 +1538,7 @@ class TestBlockTypeScan(unittest.TestCase):
             for r_start, r_len, num_blocks, block_type in fig_ranges:
                 # Parse all records in this range
                 print(r_start)
-                records = parse_fig_illustration_records_183(f, r_start)
+                records = parser.parse_fig_illustration_records_183(f, r_start)
                 for r in records:
                     print(r)
 
@@ -1581,7 +1548,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Validating FIG Illustration Page Padding ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
             self.assertGreater(len(fig_ranges), 0, "No FIG illustration page blocks found")
@@ -1589,7 +1556,7 @@ class TestBlockTypeScan(unittest.TestCase):
             print(f"Found {len(fig_ranges)} FIG illustration page blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in fig_ranges:
-                records = parse_fig_illustration_page_records_89(f, r_start)
+                records = parser.parse_fig_illustration_page_records_89(f, r_start)
                 for rec in records:
                     print(rec)
                     pad1 = rec.raw_data[9:11]
@@ -1606,7 +1573,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Validating Part Group Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             group_ranges = [r for r in ranges if r[3] == 'part_group_185']
             self.assertGreater(len(group_ranges), 0, "No Part Group blocks found")
@@ -1615,7 +1582,7 @@ class TestBlockTypeScan(unittest.TestCase):
 
             for r_start, r_len, num_blocks, block_type in group_ranges:
                 print(r_start)
-                records = parse_part_group_records_185(f, r_start)
+                records = parser.parse_part_group_records_185(f, r_start)
                 for rec in records:
                     print(rec)
 
@@ -1627,7 +1594,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Validating Engine Spec Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
             self.assertGreater(len(spec_ranges), 0, "No Engine Spec blocks found")
@@ -1636,7 +1603,7 @@ class TestBlockTypeScan(unittest.TestCase):
 
             for r_start, r_len, num_blocks, block_type in spec_ranges:
                 print(r_start)
-                records = parse_engine_spec_records_230(f, r_start)
+                records = parser.parse_engine_spec_records_230(f, r_start)
                 for rec in records:
                     print(rec)
 
@@ -1669,7 +1636,7 @@ class TestBlockTypeScan(unittest.TestCase):
         print("\n=== Validating FIG Group Category Blocks ===")
         
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
             
             fig_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
             self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
@@ -1680,7 +1647,7 @@ class TestBlockTypeScan(unittest.TestCase):
             
             for r_start, r_len, num_blocks, block_type in fig_ranges:
                 # Parse all records in this range
-                records = parse_fig_group_category_records_184(f, r_start)
+                records = parser.parse_fig_group_category_records_184(f, r_start)
                 
                 for rec in records:
                     code = rec.fig_group_code
@@ -1727,12 +1694,12 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
 
         # Pad to 2KB block
         data = (record * 2) + b'\x00' * (2048 - 162)
-        self.assertTrue(is_variant_glossary_block_81(data))
+        self.assertTrue(parser.is_variant_glossary_block_81(data))
         
         # Test with leading spaces in first record
         data_padded = b'  ' + (record * 2)
         data_padded = data_padded[:2048].ljust(2048, b'\x00')
-        self.assertTrue(is_variant_glossary_block_81(data_padded))
+        self.assertTrue(parser.is_variant_glossary_block_81(data_padded))
 
     def test_detect_variant_glossary_block_81(self):
         """Test detect_block_type identifies variant_glossary_81"""
@@ -1744,7 +1711,7 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
             f.seek(0x0E6E9000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0E6E9000)
+        block_type = parser.detect_block_type(data, offset=0x0E6E9000)
         self.assertEqual(block_type, 'variant_glossary_81')
 
     def test_validate_all_variant_glossary_blocks81(self):
@@ -1752,7 +1719,7 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
         print("\n=== Validating Variant Glossary Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             glossary_ranges = [r for r in ranges if r[3] == 'variant_glossary_81']
             self.assertGreater(len(glossary_ranges), 0, "No Variant Glossary blocks found")
@@ -1760,7 +1727,7 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
             print(f"Found {len(glossary_ranges)} Variant Glossary blocks (covering {sum(r[2] for r in glossary_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in glossary_ranges:
-                records = parse_variant_glossary_records_81(f, r_start)
+                records = parser.parse_variant_glossary_records_81(f, r_start)
                 for rec in records:
                     print(rec)
                     self.assertIsInstance(rec, VariantGlossaryRecord81)
@@ -1794,7 +1761,7 @@ class TestInventoryRecord199(unittest.TestCase):
 
         # Pad to 2KB block
         data = (record * 2) + b'\x00' * (2048 - 398)
-        self.assertTrue(is_inventory_block_199(data))
+        self.assertTrue(parser.is_inventory_block_199(data))
 
     def test_detect_inventory_block_199(self):
         """Test detect_block_type identifies inventory_199"""
@@ -1806,7 +1773,7 @@ class TestInventoryRecord199(unittest.TestCase):
             f.seek(0x0E147000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0E147000)
+        block_type = parser.detect_block_type(data, offset=0x0E147000)
         self.assertEqual(block_type, 'inventory_199')
 
     def test_validate_all_inventory_blocks199(self):
@@ -1817,7 +1784,7 @@ class TestInventoryRecord199(unittest.TestCase):
         print("\n=== Validating Inventory Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             inv_ranges = [r for r in ranges if r[3] == 'inventory_199']
             self.assertGreater(len(inv_ranges), 0, "No Inventory blocks found")
@@ -1825,7 +1792,7 @@ class TestInventoryRecord199(unittest.TestCase):
             print(f"Found {len(inv_ranges)} Inventory blocks (covering {sum(r[2] for r in inv_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in inv_ranges:
-                records = parse_inventory_records_199(f, r_start, max_records=10)
+                records = parser.parse_inventory_records_199(f, r_start, max_records=10)
                 for rec in records:
                     print(rec)
                     self.assertIsInstance(rec, InventoryRecord199)
@@ -1858,7 +1825,7 @@ class TestMultilingualPartRecords182(unittest.TestCase):
 
         # Pad to 2KB block
         data = (record * 2) + b'\x00' * (2048 - 364)
-        self.assertTrue(is_multilingual_part_block_182(data))
+        self.assertTrue(parser.is_multilingual_part_block_182(data))
 
     def test_detect_multilingual_part_block_182(self):
         """Test detect_block_type identifies multilingual_part_182"""
@@ -1870,7 +1837,7 @@ class TestMultilingualPartRecords182(unittest.TestCase):
             f.seek(0x0E73B000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0E73B000)
+        block_type = parser.detect_block_type(data, offset=0x0E73B000)
         self.assertEqual(block_type, 'multilingual_part_182')
 
     def test_validate_all_multilingual_part_blocks182(self):
@@ -1881,7 +1848,7 @@ class TestMultilingualPartRecords182(unittest.TestCase):
         print("\n=== Validating 182-byte Multilingual Part Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             rel_ranges = [r for r in ranges if r[3] == 'multilingual_part_182']
             self.assertGreater(len(rel_ranges), 0, "No 182-byte Multilingual blocks found")
@@ -1889,7 +1856,7 @@ class TestMultilingualPartRecords182(unittest.TestCase):
             print(f"Found {len(rel_ranges)} blocks (covering {sum(r[2] for r in rel_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in rel_ranges:
-                records = parse_multilingual_part_records_182(f, r_start, max_records=10)
+                records = parser.parse_multilingual_part_records_182(f, r_start, max_records=10)
                 for rec in records:
                     print(f"0x{rec.offset:08X}", rec)
                     self.assertIsInstance(rec, MultilingualPartRecord182)
@@ -1914,7 +1881,7 @@ class TestFigureIndexRecords22(unittest.TestCase):
             f.seek(0x0E75D800)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x0E75D800)
+        block_type = parser.detect_block_type(data, offset=0x0E75D800)
         self.assertEqual(block_type, 'figure_index_22')
 
     def test_validate_all_figure_index_blocks22(self):
@@ -1925,7 +1892,7 @@ class TestFigureIndexRecords22(unittest.TestCase):
         print("\n=== Validating Figure Index Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             idx_ranges = [r for r in ranges if r[3] == 'figure_index_22']
             self.assertGreater(len(idx_ranges), 0, "No Figure Index blocks found")
@@ -1933,7 +1900,7 @@ class TestFigureIndexRecords22(unittest.TestCase):
             print(f"Found {len(idx_ranges)} Figure Index blocks (covering {sum(r[2] for r in idx_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in idx_ranges:
-                records = parse_figure_index_records_22(f, r_start, max_records=10)
+                records = parser.parse_figure_index_records_22(f, r_start, max_records=10)
                 print(r_start)
                 for rec in records:
                     print(f"0x{rec.offset:08X}", rec)
@@ -1951,15 +1918,24 @@ class TestSpecMappingRecords22(unittest.TestCase):
 
     def test_detect_spec_mapping_block_22(self):
         """Test detect_block_type identifies spec_mapping_22"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
             # Read block at 0x17BA7000
             f.seek(0x17BA7000)
             data = f.read(2048)
 
-        block_type = detect_block_type(data, offset=0x17BA7000)
+        block_type = parser.detect_block_type(data, offset=0x17BA7000)
+        self.assertEqual(block_type, 'spec_mapping_22')
+
+    def test_detect_spec_mapping_block_22_2(self):
+        """Test detect_block_type identifies spec_mapping_22"""
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x17BA7000
+            f.seek(0x15C85000)
+            data = f.read(2048)
+
+        block_type = parser.detect_block_type(data, offset=0x15C85000)
         self.assertEqual(block_type, 'spec_mapping_22')
 
     def test_validate_all_spec_mapping_blocks22(self):
@@ -1970,7 +1946,7 @@ class TestSpecMappingRecords22(unittest.TestCase):
         print("\n=== Validating Spec Mapping Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = scan_block_types(f)
+            ranges = parser.scan_block_types(f)
 
             mapping_ranges = [r for r in ranges if r[3] == 'spec_mapping_22']
             self.assertGreater(len(mapping_ranges), 0, "No Spec Mapping blocks found")
@@ -1978,7 +1954,7 @@ class TestSpecMappingRecords22(unittest.TestCase):
             print(f"Found {len(mapping_ranges)} Spec Mapping blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
 
             for r_start, r_len, num_blocks, block_type in mapping_ranges:
-                records = parse_spec_mapping_records_22(f, r_start, max_records=10)
+                records = parser.parse_spec_mapping_records_22(f, r_start, max_records=10)
                 for rec in records:
                     print(f"0x{rec.offset:08X}", rec)
                     self.assertIsInstance(rec, SpecMappingRecord22)
