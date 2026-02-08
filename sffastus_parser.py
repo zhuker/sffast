@@ -796,6 +796,53 @@ class SffastusBlockParser:
     def is_part_num(self, partnum: bytes) -> bool:
         return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
 
+    def _is_block_20(self, data: bytes) -> bool:
+        """Common check for 20-byte record blocks: valid model codes, same model, terminated by 0x2A."""
+        if len(data) < 40:
+            return False
+        try:
+            if not is_valid_model_code(data[0:6]):
+                return False
+            if not is_valid_model_code(data[20:26]):
+                return False
+            if data[0:6] != data[20:26]:
+                return False
+            if not (0x41 <= data[6] <= 0x5A):
+                return False
+            if not (0x41 <= data[26] <= 0x5A):
+                return False
+            for i in range(2, 2048 // 20):
+                rec_start = i * 20
+                if rec_start >= len(data):
+                    return False
+                if data[rec_start] == 0x2A:
+                    return True
+                if all(b == 0 for b in data[rec_start:rec_start + 20]):
+                    return True
+                if not is_valid_model_code(data[rec_start:rec_start + 6]):
+                    return False
+                if data[rec_start:rec_start + 6] != data[0:6]:
+                    return False
+            return False
+        except Exception:
+            return False
+
+    def is_category_index_block_20(self, data: bytes) -> bool:
+        """Detect 20-byte category index blocks (text variant). Byte 7 is a letter (C/T)."""
+        if len(data) < 40:
+            return False
+        if not (0x41 <= data[7] <= 0x5A):  # byte 7 must be letter
+            return False
+        return self._is_block_20(data)
+
+    def is_version_index_block_20(self, data: bytes) -> bool:
+        """Detect 20-byte version index blocks (binary variant). Byte 7 is a digit (1-9)."""
+        if len(data) < 40:
+            return False
+        if not (0x31 <= data[7] <= 0x39):  # byte 7 must be digit
+            return False
+        return self._is_block_20(data)
+
     def is_model_year_block_44(self, data: bytes) -> bool:
         if len(data) < 44:
             return False
@@ -1523,6 +1570,45 @@ class SffastusBlockParser:
             count += 1
 
         return records
+
+    def _parse_records_20(self, f, start_offset, record_class, max_records=None, verbose=False):
+        RECORD_SIZE = 20
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            if all(b == 0x2a for b in data) or all(b == 0 for b in data):
+                break
+
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = record_class.parse_20(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+    def parse_category_index_records_20(self, f, start_offset, max_records=None, verbose=False):
+        return self._parse_records_20(f, start_offset, CategoryIndexRecord20, max_records, verbose)
+
+    def parse_version_index_records_20(self, f, start_offset, max_records=None, verbose=False):
+        return self._parse_records_20(f, start_offset, VersionIndexRecord20, max_records, verbose)
 
     def parse_part_index_records_34(self, f, start_offset, max_records=None, verbose=False):
         RECORD_SIZE = 34
@@ -2402,6 +2488,12 @@ class SffastusBlockParser:
         if self.is_part_range_block_24(data):
             return 'part_range_24'
 
+        if self.is_category_index_block_20(data):
+            return CategoryIndexRecord20.ID
+
+        if self.is_version_index_block_20(data):
+            return VersionIndexRecord20.ID
+
         if self.is_multilingual_part_block(data):
             return 'multilingual_part'
 
@@ -2985,6 +3077,74 @@ class VariantGlossaryRecord81:
             model_code=clean(data[0:6]),
             variant_code=clean(data[6:21]),
             description=clean(data[21:81]),
+        )
+
+
+@dataclass
+class CategoryIndexRecord20:
+    """20-byte category index record (text variant)
+
+    One block per model code (10 blocks in SFCDUS2).
+    Label is a category code: byte 6 = letter A-J, byte 7 = letter (C or T).
+    Payload is printable ASCII.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (2):  Label (e.g., "AC", "ET", "GT")
+        0x08 (8):  Payload (ASCII)
+        0x10 (4):  Pointer (binary)
+    """
+    ID = 'category_index_20'
+    offset: int
+    model_code: str
+    label: str
+    payload: bytes
+    pointer: bytes
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_20(data: bytes, offset: int = 0):
+        return CategoryIndexRecord20(
+            offset=offset,
+            raw_data=data,
+            model_code=data[0:6].decode(CHARSET, errors='replace'),
+            label=data[6:8].decode(CHARSET, errors='replace'),
+            payload=data[8:16],
+            pointer=data[16:20],
+        )
+
+
+@dataclass
+class VersionIndexRecord20:
+    """20-byte version index record (binary variant)
+
+    One block per model code (10 blocks in SFCDUS2).
+    Label is version letter + digit: byte 6 = letter A-D, byte 7 = digit 1-9.
+    Payload is binary data.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (2):  Label (e.g., "A1", "B3", "D2")
+        0x08 (8):  Payload (binary)
+        0x10 (4):  Pointer (binary)
+    """
+    ID = 'version_index_20'
+    offset: int
+    model_code: str
+    label: str
+    payload: bytes
+    pointer: bytes
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_20(data: bytes, offset: int = 0):
+        return VersionIndexRecord20(
+            offset=offset,
+            raw_data=data,
+            model_code=data[0:6].decode(CHARSET, errors='replace'),
+            label=data[6:8].decode(CHARSET, errors='replace'),
+            payload=data[8:16],
+            pointer=data[16:20],
         )
 
 

@@ -660,6 +660,50 @@ Offset  Size  Field               Examples
 
 **Validation:** Parse records from known offsets and verify engine/transmission/trim combinations match known Subaru specifications.
 
+### Category Index Records (20-byte Type, Text Variant) (0x0CD42000+) - **NEW**
+
+**Record size:** 20 bytes
+**Encoding:** CP437
+
+One block per model code (10 blocks in SFCDUS2). Each record maps a 2-letter category code to a binary pointer. The label byte 6 is a letter A-J and byte 7 is a letter (C or T). The 8-byte payload is printable ASCII text.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   `, `G11   ` |
+| 0x06 | 2 | Label | Category code letter pair (e.g. `AC`, `ET`, `GT`) |
+| 0x08 | 8 | Payload | Printable ASCII data |
+| 0x10 | 4 | Pointer | Binary pointer/metadata |
+
+**Notes:**
+- Blocks are terminated by `0x2A` (`*`) fill bytes after the last valid record
+- All records within a block share the same model code
+- Byte 7 distinguishes this from the version index variant (letter vs digit)
+- 20-byte records can false-match as `multilingual_part_180` (20x9=180 aligns model codes); detection must occur before 180-byte checks
+
+### Version Index Records (20-byte Type, Binary Variant) (0x0E6ED000+) - **NEW**
+
+**Record size:** 20 bytes
+**Encoding:** CP437
+
+One block per model code (10 blocks in SFCDUS2). Each record maps a version letter + digit to binary data. The label byte 6 is a letter A-D and byte 7 is a digit 1-9. The 8-byte payload is binary (not printable text).
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   `, `G11   ` |
+| 0x06 | 2 | Label | Version letter + digit (e.g. `A1`, `B3`, `D2`) |
+| 0x08 | 8 | Payload | Binary data |
+| 0x10 | 4 | Pointer | Binary pointer/metadata |
+
+**Notes:**
+- Same block structure as category index variant (terminated by `0x2A` fill)
+- All records within a block share the same model code
+- Byte 7 distinguishes this from the category index variant (digit vs letter)
+- 20 blocks total in SFCDUS2: 10 category index + 10 version index (one of each per model)
+
 ### Part Range Records (24-byte Type) (0x0CD42800+) - **NEW**
 
 **Record size:** 24 bytes

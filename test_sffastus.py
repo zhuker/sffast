@@ -47,6 +47,8 @@ from sffastus_parser import (
     FigureIndexRecord22,
     SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog, PartRangeIndex34, PartIndex21, ItcaRecord,
     ModelYearRecord44,
+    CategoryIndexRecord20,
+    VersionIndexRecord20,
 )
 
 # Test data paths
@@ -479,6 +481,9 @@ class TestBlockTypeDetection(unittest.TestCase):
             assert_binary(0x1E56F800)
             assert_binary(0x1E53E000)
             assert_binary(0x0E6AE800)
+
+            assert_block(CategoryIndexRecord20.ID, 0x0CD42000)
+            assert_block(VersionIndexRecord20.ID, 0x0E6ED000)
 
             assert_block(ModelSpecRecord103.ID, 0x0E76C800)
 
@@ -1456,6 +1461,8 @@ class TestBlockTypeScan(unittest.TestCase):
             self.validate_21(f, ranges)
             self.validate_itca_251(f, ranges)
             self.validate_model_year_44(f, ranges)
+            self.validate_category_index_20(f, ranges)
+            self.validate_version_index_20(f, ranges)
 
 
     def validate_itca_251(self, f: BufferedReader, ranges: list[Any]):
@@ -1489,7 +1496,7 @@ class TestBlockTypeScan(unittest.TestCase):
                 records = parser.parse_model_year_records_44(f, offset)
                 self.assertTrue(len(records) > 0, f"No records parsed at 0x{offset:08X}")
                 for rec in records:
-                    print(rec)
+                    #print(rec)
                     self.assertIsInstance(rec, ModelYearRecord44)
                     # version letter at offset 6 must equal tail at offset 43
                     ver_byte = rec.raw_data[6:7]
@@ -1506,6 +1513,44 @@ class TestBlockTypeScan(unittest.TestCase):
                 total_records += len(records)
 
         print(f"Successfully validated {total_records} ModelYearRecord44 records (version==tail, valid dates, valid models).")
+
+    def validate_category_index_20(self, f: BufferedReader, ranges: list[Any]):
+        cr_ranges = [r for r in ranges if r[3] == CategoryIndexRecord20.ID]
+        self.assertGreater(len(cr_ranges), 0, "No CategoryIndexRecord20 blocks found")
+        print(f"Found {len(cr_ranges)} CategoryIndexRecord20 blocks (covering {sum(r[2] for r in cr_ranges)} blocks)")
+        total_records = 0
+        for r_start, r_len, num_blocks, block_type in cr_ranges:
+            for block in range(num_blocks):
+                offset = r_start + block * 2048
+                records = parser.parse_category_index_records_20(f, offset)
+                self.assertTrue(len(records) > 0, f"No records parsed at 0x{offset:08X}")
+                for rec in records:
+                    self.assertIsInstance(rec, CategoryIndexRecord20)
+                    self.assertTrue(rec.model_code.strip() in VALID_MODEL_CODES,
+                                    f"Bad model at 0x{rec.offset:08X}: {rec.model_code}")
+                    self.assertTrue(rec.label[1].isalpha(),
+                                    f"Bad label at 0x{rec.offset:08X}: {rec.label!r}")
+                total_records += len(records)
+        print(f"Validated {total_records} CategoryIndexRecord20 records.")
+
+    def validate_version_index_20(self, f: BufferedReader, ranges: list[Any]):
+        vr_ranges = [r for r in ranges if r[3] == VersionIndexRecord20.ID]
+        self.assertGreater(len(vr_ranges), 0, "No VersionIndexRecord20 blocks found")
+        print(f"Found {len(vr_ranges)} VersionIndexRecord20 blocks (covering {sum(r[2] for r in vr_ranges)} blocks)")
+        total_records = 0
+        for r_start, r_len, num_blocks, block_type in vr_ranges:
+            for block in range(num_blocks):
+                offset = r_start + block * 2048
+                records = parser.parse_version_index_records_20(f, offset)
+                self.assertTrue(len(records) > 0, f"No records parsed at 0x{offset:08X}")
+                for rec in records:
+                    self.assertIsInstance(rec, VersionIndexRecord20)
+                    self.assertTrue(rec.model_code.strip() in VALID_MODEL_CODES,
+                                    f"Bad model at 0x{rec.offset:08X}: {rec.model_code}")
+                    self.assertTrue(rec.label[1].isdigit(),
+                                    f"Bad label at 0x{rec.offset:08X}: {rec.label!r}")
+                total_records += len(records)
+        print(f"Validated {total_records} VersionIndexRecord20 records.")
 
     def validate_230(self, f: BufferedReader, ranges: list[Any]):
         spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
