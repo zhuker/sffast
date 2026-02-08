@@ -2378,6 +2378,12 @@ class SffastusBlockParser:
         if all(b == 0 for b in data):
             return 'padding'
 
+        # 2b. Asterisk-padded empty block: contiguous 0x2A then contiguous 0x00
+        if data[0] == 0x2A:
+            first_zero = data.index(0x00) if 0x00 in data else BLOCK_SIZE
+            if first_zero > 0 and data[:first_zero] == b'\x2a' * first_zero and all(b == 0 for b in data[first_zero:]):
+                return 'empty'
+
         # 3. VIN block - first 17 bytes are a valid Subaru VIN
         # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
         try:

@@ -482,8 +482,7 @@ class TestBlockTypeDetection(unittest.TestCase):
 
             assert_block(ModelSpecRecord103.ID, 0x0E76C800)
 
-            assert_block("text", 0x0FED7000)
-            assert_block("text", 0x0FED7000)
+            assert_block("empty", 0x0FED7000)
 
             assert_block(VariantGlossaryRecord81.ID, 0x10819800)
 

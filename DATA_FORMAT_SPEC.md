@@ -845,6 +845,39 @@ One block per model code (10 blocks in SFCDUS2). Maps version letters to product
 
 **Validation Status:** ✓ 61 records across 10 blocks. Version letter at byte 43 matches byte 6 in all records.
 
+### Empty Blocks (Asterisk-Padded) - **VALIDATED ✓**
+
+**Block size:** 2048 bytes
+**Content:** Variable number of `0x2A` (`*`) bytes followed by `0x00` bytes — no other values.
+
+These blocks appear at the end of record ranges where the last block is only partially filled. The asterisk fill marks the end of valid data (same sentinel used within record blocks, e.g. Model Year), and the remaining bytes are zero-padded.
+
+**17 blocks in SFCDUS2:**
+
+| Offset | Asterisks | Zeros |
+|--------|-----------|-------|
+| 0x0FED7000 | 91 | 1957 |
+| 0x10889000 | 167 | 1881 |
+| 0x1308D800 | 180 | 1868 |
+| 0x13109000 | 192 | 1856 |
+| 0x13D59800 | 192 | 1856 |
+| 0x15C1B000 | 183 | 1865 |
+| 0x15D4E000 | 192 | 1856 |
+| 0x1729A000 | 230 | 1818 |
+| 0x17B42000 | 183 | 1865 |
+| 0x17BA8000 | 167 | 1881 |
+| 0x187E1800 | 199 | 1849 |
+| 0x18BF4800 | 182 | 1866 |
+| 0x1BF42000 | 466 | 1582 |
+| 0x1C6B5000 | 180 | 1868 |
+| 0x1DF8E000 | 91 | 1957 |
+| 0x1E581800 | 183 | 1865 |
+| 0x1FE9D800 | 251 | 1797 |
+
+**Notes:**
+- Asterisk counts correspond to record sizes of adjacent block types (e.g. 91 = ColorRecord91, 183 = FIGIllustrationRecord183, 192 = multilingual_part)
+- Detected as block type `'empty'` in the parser
+
 ### Part Number Index Records (21-byte Type) (0x1E5DE800+) - **NEW**
 
 **Record size:** 21 bytes
