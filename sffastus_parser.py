@@ -678,7 +678,7 @@ class SffastusBlockParser:
 
             # If we have at least 2 records, check the second one too
             if len(data) >= 199*2:
-                if not is_valid_model_code(data[199:199+6]):
+                if not (is_valid_model_code(data[199:199+6]) or (data[199:199+199].decode(CHARSET, errors='replace') == "*"*199)):
                     return False
 
             return True
@@ -708,8 +708,9 @@ class SffastusBlockParser:
                 return False
 
             # If we have at least 2 records, check the second one too
-            if len(data) >= 185*2:
-                if not is_valid_model_code(data[185:185+6]):
+            if len(data) >= 185 * 2:
+                if not (is_valid_model_code(data[185:185 + 6]) or (
+                        data[185:185 + 185].decode(CHARSET, errors='replace') == "*" * 185)):
                     return False
 
             return True
@@ -766,7 +767,7 @@ class SffastusBlockParser:
                 return False
             # If we have at least 2 records, check the second one too
             if len(data) >= 183*2:
-                if not is_valid_model_code(data[183:183+6]):
+                if not (is_valid_model_code(data[183:183+6]) or (data[183:183+183].decode(CHARSET, errors="replace") == "*"*183)):
                     return False
 
             return True
@@ -785,16 +786,12 @@ class SffastusBlockParser:
         if len(data) < 162:  # Need at least 2 records to verify consistency
             return False
 
-        try:
-            # Check common offsets for model code (0, 2, 4...)
-            for start_offset in range(10):
-                if is_valid_model_code(data[start_offset:start_offset+6]):
-                    # Verify consistency with next record
-                    if is_valid_model_code(data[start_offset+81:start_offset+81+6]):
-                        return True
-            return False
-        except:
-            return False
+        if is_valid_model_code(data[0:0 + 6]) and \
+                (is_valid_model_code(data[81:81 + 6]) or
+                 (data[81:81 + 81].decode(CHARSET, errors="replace") == "*" * 81)):
+            return True
+
+        return False
 
     def is_part_num(self, partnum: bytes) -> bool:
         return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
@@ -877,7 +874,8 @@ class SffastusBlockParser:
                     return False
 
             # Verify second record
-            if not is_valid_model_code(data[22:28]):
+            if not (is_valid_model_code(data[22:28]) or (
+                    data[22:22 + 22].decode(CHARSET, errors="replace") == "*" * 22)):
                 return False
 
             return True
@@ -928,7 +926,7 @@ class SffastusBlockParser:
 
             # If we have at least 2 records, check the second one too
             if len(data) >= 932:  # 466 * 2
-                if not is_valid_model_code(data[466:466+6]):
+                if not (is_valid_model_code(data[466:466+6]) or (data[466:466+466].decode(CHARSET, errors="replace") == "*"*466)):
                     return False
 
             return True
@@ -953,7 +951,7 @@ class SffastusBlockParser:
 
             # If we have at least 2 records, check the second one too
             if len(data) >= 206:
-                if not is_valid_model_code(data[103:103+6]):
+                if not (is_valid_model_code(data[103:103+6]) or (data[103:103+103].decode(CHARSET, errors="replace") == "*"*103)):
                     return False
 
             return True
@@ -1012,7 +1010,7 @@ class SffastusBlockParser:
         if len(data) < 167:
             return False
         if len(data) >= 167 * 2:
-            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[167:167 + 6])
+            return is_valid_model_code(data[0:6]) and (is_valid_model_code(data[167:167 + 6]) or (data[167:167+167].decode(CHARSET, errors="replace") == "*"*167))
 
         try:
             # Check model code
@@ -1043,7 +1041,7 @@ class SffastusBlockParser:
         if len(data) < 180:
             return False
         if len(data) >= 180 * 2:
-            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[180:180 + 6])
+            return is_valid_model_code(data[0:6]) and (is_valid_model_code(data[180:180 + 6]) or (data[180:180+180].decode(CHARSET, errors="replace") == "*"*180))
 
 
         try:
@@ -2354,18 +2352,18 @@ class SffastusBlockParser:
             return 'multilingual_part_180'
 
         if self.is_multilingual_part_block_167(data):
-            return 'multilingual_part_167'
+            return MultilingualPartRecord167.ID
 
         if self.is_model_spec_block_103(data):
-            return 'model_spec_103'
+            return ModelSpecRecord103.ID
 
         # 4f. Catalog applicability block (466-byte) - NEW
         if self.is_catalog_applicability_block_466(data):
-            return 'catalog_applicability_466'
+            return CatalogApplicabilityRecord466.ID
 
         # 4g. Color record block (91-byte) - NEW
         if self.is_color_record_block_91(data):
-            return 'color_record_91'
+            return ColorRecord91.ID
 
         # 4h. Glossary record block (28-byte) - NEW
         if self.is_glossary_record_block_28(data):
@@ -2385,7 +2383,7 @@ class SffastusBlockParser:
 
         # 4l. FIG illustration block (183-byte) - NEW
         if self.is_fig_illustration_block_183(data):
-            return 'fig_illustration_183'
+            return FIGIllustrationRecord183.ID
 
         # 4m. FIG illustration page block (89-byte) - NEW
         if self.is_fig_illustration_page_block_89(data):
@@ -2397,15 +2395,15 @@ class SffastusBlockParser:
 
         # 4o. Part group block (185-byte) - NEW
         if self.is_part_group_block_185(data):
-            return 'part_group_185'
+            return PartGroupRecord185.ID
 
         # 4p. Variant glossary block (81-byte) - NEW
         if self.is_variant_glossary_block_81(data):
-            return 'variant_glossary_81'
+            return VariantGlossaryRecord81.ID
 
         # 4q. Inventory record block (199-byte) - NEW
         if self.is_inventory_block_199(data):
-            return 'inventory_199'
+            return InventoryRecord199.ID
 
         # 4r. Multilingual part block (182-byte) - NEW
         if self.is_multilingual_part_block_182(data):
@@ -2417,7 +2415,7 @@ class SffastusBlockParser:
 
         # 4t. Spec mapping block (22-byte) - NEW
         if self.is_spec_mapping_block_22(data):
-            return 'spec_mapping_22'
+            return SpecMappingRecord22.ID
 
         if self.is_part_index_block_34(data):
             return PartRangeIndex34.ID
@@ -2556,6 +2554,7 @@ class GlossaryRecord28:
 
 @dataclass
 class ColorRecord91:
+    ID = 'color_record_91'
     """Represents a color/paint code record from sffastus (91 bytes)
 
     Located at 0x0DE1F800+
@@ -2599,6 +2598,7 @@ class ColorRecord91:
 
 @dataclass
 class FIGIllustrationRecord183:
+    ID = 'fig_illustration_183'
     """Represents a FIG illustration description record from sffastus (183 bytes)
 
     Located at 0x0DF9B000+
@@ -2740,6 +2740,7 @@ class FIGIllustrationPage89:
 
 @dataclass
 class InventoryRecord199:
+    ID = 'inventory_199'
     """Represents a 199-byte inventory/part name record from sffastus
 
     Located at 0x0E147000+
@@ -2843,6 +2844,7 @@ class MultilingualPartRecord182:
 
 @dataclass
 class PartGroupRecord185:
+    ID = 'part_group_185'
     """Represents a 185-byte part group description record from sffastus
 
     Located at 0x0DFD3000+
@@ -2894,6 +2896,7 @@ class PartGroupRecord185:
 
 @dataclass
 class VariantGlossaryRecord81:
+    ID = 'variant_glossary_81'
     """Represents a variant glossary record from sffastus (81 bytes)
 
     Located at 0x0E6E9000+
@@ -3005,6 +3008,7 @@ class PartRangeIndex34:
 
 @dataclass
 class SpecMappingRecord22:
+    ID = 'spec_mapping_22'
     """Represents a 22-byte spec mapping record from sffastus
 
     Located at 0x17BA7000+
@@ -3085,6 +3089,7 @@ class FIGGroupCategoryRecord184:
 
 @dataclass
 class CatalogApplicabilityRecord466:
+    ID = 'catalog_applicability_466'
     offset: int
 
     model_code: str
@@ -3139,6 +3144,7 @@ class CatalogApplicabilityRecord466:
 
 @dataclass
 class ModelSpecRecord103:
+    ID = 'model_spec_103'
     """
     Parsed representation of a Subaru Applied Model string.
     Handles variable-length fields found in B11, B13, and G11 chassis codes.
@@ -3296,6 +3302,7 @@ class ModelIndexRecord288:
 
 @dataclass
 class MultilingualPartRecord167:
+    ID = 'multilingual_part_167'
     """Represents a multilingual part name record from sffastus (167 bytes)
 
     Located at 0x0CD41000+

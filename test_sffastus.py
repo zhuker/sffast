@@ -463,19 +463,36 @@ class TestBlockTypeDetection(unittest.TestCase):
         # 0x1C686800
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            def assert_binary(offset):
+            def assert_block(expected_type, offset):
                 f.seek(offset)
                 data = f.read(2048)
-                self.assertEqual("binary", parser.detect_block_type(data, offset))
+                self.assertEqual(expected_type, parser.detect_block_type(data, offset))
 
-            f.seek(0x1C686800)
-            data = f.read(2048)
-            self.assertEqual("text", parser.detect_block_type(data, 0x1C686800))
+            def assert_binary(offset):
+                assert_block("binary", offset)
+
+            assert_block("text", 0x1C686800)
 
             assert_binary(0x0E182000)
             assert_binary(0x1E56F800)
             assert_binary(0x1E53E000)
             assert_binary(0x0E6AE800)
+
+            assert_block(ModelSpecRecord103.ID, 0x0E76C800)
+
+            assert_block("text", 0x0FED7000)
+            assert_block("text", 0x0FED7000)
+
+            assert_block(VariantGlossaryRecord81.ID, 0x10819800)
+
+            assert_block(SpecMappingRecord22.ID, 0x10887000)
+            assert_block(InventoryRecord199.ID, 0x129B8800)
+            assert_block(FIGIllustrationRecord183.ID, 0x1301B000)
+            assert_block(MultilingualPartRecord167.ID, 0x13C9C000)
+            assert_block(CatalogApplicabilityRecord466.ID, 0x1525B800)
+            assert_block(PartGroupRecord185.ID, 0x155B0000)
+
+
 
 
 
