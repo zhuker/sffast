@@ -901,6 +901,79 @@ class InventoryRecord199:
         )
 
 
+@dataclass
+class MultilingualPartRecord182:
+    """Represents a 182-byte multilingual part name record from sffastus
+
+    Located at 0x0E73B000+
+    Encoding: CP437
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (7):  Part Code (e.g., "10101  ")
+        0x0D (5):  Figure Index (e.g., "010  ")
+        0x12 (40): English Name
+        0x3A (40): German Name
+        0x62 (40): French Name
+        0x8A (40): Spanish Name
+        0xB2 (4):  Trailer/Metadata (e.g., [0x19, 0x1E, Index, 0x00])
+    """
+    offset: int
+    model_code: str
+    part_code: str
+    figure: str
+    name_en: str
+    name_de: str
+    name_fr: str
+    name_es: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_182(data: bytes, offset: int = 0):
+        """Parse a 182-byte multilingual part record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return MultilingualPartRecord182(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            part_code=clean(data[6:13]),
+            figure=clean(data[13:18]),
+            name_en=clean(data[18:58]),
+            name_de=clean(data[58:98]),
+            name_fr=clean(data[98:138]),
+            name_es=clean(data[138:178]),
+            trailer=data[178:182],
+        )
+
+
+def is_multilingual_part_block_182(data: bytes) -> bool:
+    """
+    Check if data looks like a 182-byte multilingual part record block.
+    """
+    if len(data) < 182:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # Check for the separator pattern nearby (often at +178 or similar)
+        # Note: Separators may not be at fixed offsets if record length varies slightly,
+        # but for a block-based check we look at the next potential record start.
+        if len(data) >= 182*2:
+             # Next record might start with signature or model code
+             if not is_valid_model_code(data[182:182+6]):
+                 return False
+
+        return True
+    except:
+        return False
+
+
 def is_inventory_block_199(data: bytes) -> bool:
     """
     Check if data looks like a 199-byte inventory record block.
@@ -1874,6 +1947,63 @@ def parse_variant_glossary_records_81(f, start_offset, max_records=None, verbose
 
         if verbose and count % 1000 == 0:
             print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+    return records
+
+
+def parse_multilingual_part_records_182(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse multilingual part records (182 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of MultilingualPartRecord182 objects
+    """
+    f.seek(start_offset)
+    records = []
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        # Peek for separator or model code
+        pos = f.tell()
+        data = f.read(10)
+        if len(data) < 10:
+            break
+
+        # If it starts with the 19 1e separator, skip it or include it?
+        # Based on analysis, the struct might be 182 bytes including the separator.
+        if data.startswith(b'\x19\x1e'):
+            f.seek(pos)
+            data = f.read(182)
+        elif is_valid_model_code(data[:6]):
+            f.seek(pos)
+            data = f.read(182)
+        else:
+            break
+
+        if len(data) < 182:
+            break
+
+        try:
+            record = MultilingualPartRecord182.parse_182(data, pos)
+            records.append(record)
+            if verbose and count % 100 == 0:
+                print(f"  Parsed {count} 182-byte records...")
+        except:
+            break
 
         count += 1
 
@@ -2882,6 +3012,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4q. Inventory record block (199-byte) - NEW
     if is_inventory_block_199(data):
         return 'inventory_199'
+
+    # 4r. Multilingual part block (182-byte) - NEW
+    if is_multilingual_part_block_182(data):
+        return 'multilingual_part_182'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"

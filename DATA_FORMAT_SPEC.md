@@ -700,6 +700,31 @@ Located in blocks around `0x0E147000`.
 - All names are space-padded to 40 bytes.
 - Record is a superset of information, linking figure/page to actual global part numbers.
 
+### Multilingual Part Records (182-byte Type) (0x0E73B000+) - **VALIDATED ✓**
+
+**Record size:** 182 bytes
+**Encoding:** CP437
+
+Another variant of multilingual part names, likely linking model codes and figures to specific part designations.
+Located in blocks around `0x0E73B000`.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   ` |
+| 0x06 | 7 | Part Code | 7-char part code (e.g. `10101  `) |
+| 0x0D | 5 | Figure | FIG index (e.g. `010  `) |
+| 0x12 | 40 | Name EN | English part name |
+| 0x3A | 40 | Name DE | German part name |
+| 0x62 | 40 | Name FR | French part name |
+| 0x8A | 40 | Name ES | Spanish part name |
+| 0xB2 | 4 | Trailer/Metadata | Binary metadata (e.g. counter) |
+
+**Notes:**
+- High density of records (Found 43 blocks in SFCDUS2).
+- Similar to 192-byte and 180-byte variants but with different field alignment.
+
 ### Multilingual Part Records (192-byte Type) (0x0CD4D000+) - **VALIDATED ✓**
 
 **Record size:** 192 bytes

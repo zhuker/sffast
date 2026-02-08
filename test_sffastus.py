@@ -30,6 +30,7 @@ from sffastus_parser import (
     parse_part_group_records_185,
     parse_variant_glossary_records_81,
     parse_inventory_records_199,
+    parse_multilingual_part_records_182,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -52,6 +53,7 @@ from sffastus_parser import (
     is_part_group_block_185,
     is_variant_glossary_block_81,
     is_inventory_block_199,
+    is_multilingual_part_block_182,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -77,6 +79,7 @@ from sffastus_parser import (
     PartGroupRecord185,
     VariantGlossaryRecord81,
     InventoryRecord199,
+    MultilingualPartRecord182,
 )
 
 # Test data paths
@@ -1820,6 +1823,70 @@ class TestInventoryRecord199(unittest.TestCase):
                 for rec in records:
                     print(rec)
                     self.assertIsInstance(rec, InventoryRecord199)
+                    self.assertTrue(len(rec.model_code) >= 3)
+                    self.assertTrue(len(rec.part_code) > 0)
+
+
+class TestMultilingualPartRecords182(unittest.TestCase):
+    """Tests for 182-byte multilingual part records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_is_multilingual_part_block_182(self):
+        """Test detection of 182-byte multilingual part block pattern"""
+        # Create a fake 182-byte record
+        # model(6) + part(7) + fig(5) + names(40*4) + trailer(4) = 182
+        model_code = b'B11   '
+        part_code = b'10101  '
+        figure = b'010  '
+        name_en = b'CYLINDER BLOCK' + b' ' * 26
+        name_de = b'MOTORBLOCK' + b' ' * 30
+        name_fr = b'BLOC CYLINDRE' + b' ' * 27
+        name_es = b'BLOQUE DE CILINDROS' + b' ' * 21
+        trailer = b'\x19\x1e \x00'
+        
+        record = model_code + part_code + figure + name_en + name_de + name_fr + name_es + trailer
+        self.assertEqual(len(record), 182)
+
+        # Pad to 2KB block
+        data = (record * 2) + b'\x00' * (2048 - 364)
+        self.assertTrue(is_multilingual_part_block_182(data))
+
+    def test_detect_multilingual_part_block_182(self):
+        """Test detect_block_type identifies multilingual_part_182"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E73B000 which contains 182-byte records
+            f.seek(0x0E73B000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0E73B000)
+        self.assertEqual(block_type, 'multilingual_part_182')
+
+    def test_validate_all_multilingual_part_blocks182(self):
+        """Validate multilingual_part_182 blocks in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Validating 182-byte Multilingual Part Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            rel_ranges = [r for r in ranges if r[3] == 'multilingual_part_182']
+            self.assertGreater(len(rel_ranges), 0, "No 182-byte Multilingual blocks found")
+
+            print(f"Found {len(rel_ranges)} blocks (covering {sum(r[2] for r in rel_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in rel_ranges:
+                records = parse_multilingual_part_records_182(f, r_start, max_records=10)
+                for rec in records:
+                    print(f"0x{rec.offset:08X}", rec)
+                    self.assertIsInstance(rec, MultilingualPartRecord182)
                     self.assertTrue(len(rec.model_code) >= 3)
                     self.assertTrue(len(rec.part_code) > 0)
 
