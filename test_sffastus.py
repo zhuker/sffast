@@ -26,6 +26,7 @@ from sffastus_parser import (
     parse_fig_group_category_records_184,
     parse_fig_illustration_records_183,
     parse_fig_illustration_page_records_89,
+    parse_engine_spec_records_230,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -44,12 +45,13 @@ from sffastus_parser import (
     is_fig_group_category_block_184,
     is_fig_illustration_block_183,
     is_fig_illustration_page_block_89,
+    is_engine_spec_block_230,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
     print_block_type_map,
     SUBARU_VIN_PREFIXES,
-    MODEL_CODE_PREFIXES,
+    VALID_MODEL_CODES,
     VINRecord,
     VINModelRecord,
     MultilingualPartRecord,
@@ -65,6 +67,7 @@ from sffastus_parser import (
     FIGGroupCategoryRecord184,
     FIGIllustrationRecord183,
     FIGIllustrationPage89,
+    EngineSpecRecord230,
 )
 
 # Test data paths
@@ -357,12 +360,12 @@ class TestVINBlocks2KB(unittest.TestCase):
 class TestBlockTypeDetection(unittest.TestCase):
     """Tests for block type detection functions"""
 
-    def test_model_code_prefixes_constant(self):
-        """Test that MODEL_CODE_PREFIXES includes expected values"""
-        self.assertIn('B', MODEL_CODE_PREFIXES)
-        self.assertIn('G', MODEL_CODE_PREFIXES)
-        self.assertIn('S', MODEL_CODE_PREFIXES)
-        self.assertIn('W', MODEL_CODE_PREFIXES)
+    def test_valid_model_codes_constant(self):
+        """Test that VALID_MODEL_CODES includes expected values"""
+        self.assertIn('B11', VALID_MODEL_CODES)
+        self.assertIn('G10', VALID_MODEL_CODES)
+        self.assertIn('S10', VALID_MODEL_CODES)
+        self.assertIn('W10', VALID_MODEL_CODES)
 
     def test_is_valid_model_code_valid(self):
         """Test valid model codes"""
@@ -1098,6 +1101,44 @@ class TestFIGIllustrationPageRecords89(unittest.TestCase):
             print(f"Record {i}: Fig={r.fig_index} Page={r.page_index} Label='{r.label}'")
 
 
+class TestEngineSpecRecords230(unittest.TestCase):
+    """Tests for 230-byte Engine Spec records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_engine_spec_block_230(self):
+        """Test detect_block_type identifies engine_spec_230"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DFB1000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DFB1000)
+        self.assertEqual(block_type, 'engine_spec_230')
+
+    def test_parse_engine_spec_records_230_us2(self):
+        """Parse 230-byte Engine Spec records from 0x0DFB1000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_engine_spec_records_230(f, start_offset=0x0DFB1000, max_records=10)
+
+        self.assertEqual(len(records), 8) # Block only fits 8 records (230*8=1840)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], EngineSpecRecord230)
+        # Check date fields
+        self.assertEqual(records[0].start_date, '199310')
+        
+        # Print for inspection
+        for i, r in enumerate(records[:5]):
+            print(f"Record {i}: Fig={r.figure} Page={r.figure_page} Model='{r.applicable_model}' Period={r.start_date}-{r.end_date}")
+
+
 class TestCodeIndexRecords33(unittest.TestCase):
     """Tests for 33-byte code index records (NEW)"""
 
@@ -1499,6 +1540,28 @@ class TestBlockTypeScan(unittest.TestCase):
                                     f"Field 1 padding at offset 0x{rec.offset+9:08X} is not empty: {pad1.hex()}")
 
         print("Successfully validated all 89-byte FIG Illustration Page padding fields.")
+
+
+    def test_validate_all_engine_spec_blocks230(self):
+        """Validate all engine_spec_230 blocks in the file"""
+        print("\n=== Validating Engine Spec Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
+            self.assertGreater(len(spec_ranges), 0, "No Engine Spec blocks found")
+
+            print(f"Found {len(spec_ranges)} Engine Spec blocks (covering {sum(r[2] for r in spec_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in spec_ranges:
+                print(r_start)
+                records = parse_engine_spec_records_230(f, r_start)
+                for rec in records:
+                    print(rec)
+
+        print("Successfully parsed all 230-byte Engine Spec records.")
+
 
     def test_validate_all_fig_group_category_blocks(self):
         """Validate all fig_group_category_184 blocks in the file"""

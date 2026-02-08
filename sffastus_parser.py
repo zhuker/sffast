@@ -725,6 +725,85 @@ class FIGIllustrationRecord183:
 
 
 @dataclass
+class EngineSpecRecord230:
+    """Represents a 230-byte engine specification record from sffastus
+
+    Located at 0x0DFB1000+
+    Encoding: CP437
+
+    Contains engine types and production periods.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (2):  Group Code (usually "00")
+        0x08 (40): Description (EN)
+        0x30 (40): Description (DE)
+        0x58 (5):  Padding
+        0x5D (6):  Start Date (YYYYMM)
+        0x63 (6):  End Date (YYYYMM)
+        0x69 (125): Trailer/Metadata
+    """
+    offset: int
+    model_code: str
+    figure: str
+    figure_page: str
+    applicable_model: str
+    start_date: str
+    end_date: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_230(data: bytes, offset: int = 0):
+        """Parse a 230-byte engine specification record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return EngineSpecRecord230(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            figure=clean(data[6:9]),
+            figure_page=clean(data[9:9 + 4]),
+            applicable_model=clean(data[9 + 4:88]),
+            start_date=clean(data[93:99]),
+            end_date=clean(data[99:105]),
+            trailer=data[105:230],
+        )
+
+
+def is_engine_spec_block_230(data: bytes) -> bool:
+    """
+    Check if data looks like a 230-byte engine specification block.
+
+    Detection heuristics:
+    - Consistent model codes every 230 bytes.
+    - Numeric date patterns at offset 93.
+    """
+    if len(data) < 230:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+            
+        # Check first record date fields (offset 93 is Start Date)
+        start_date = data[93:99].decode(CHARSET, errors='replace').strip()
+        if start_date and not start_date.isdigit():
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 230*2:
+            if not is_valid_model_code(data[230:230+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class FIGIllustrationPage89:
     """Represents a FIG illustration page/sub-index record from sffastus (89 bytes)
 
@@ -1495,6 +1574,94 @@ def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
     return records
 
 
+
+
+def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse engine specification records (230 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of EngineSpecRecord230 objects
+    """
+    RECORD_SIZE = 230
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = EngineSpecRecord230.parse_230(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse engine specification records (230 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of EngineSpecRecord230 objects
+    """
+    RECORD_SIZE = 230
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = EngineSpecRecord230.parse_230(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_fig_illustration_page_records_89(f, start_offset, max_records=None, verbose=False):
@@ -2283,28 +2450,30 @@ def analyze_vin_blocks_2kb(f, min_contiguous=5):
     return regions
 
 
-# Valid model code prefixes (first character of 6-byte model code)
-MODEL_CODE_PREFIXES = ('A', 'B', 'C', 'G', 'J', 'S', 'V', 'W', 'Z')
+# Valid model codes from WINDOWS_APP_GUIDE.md
+VALID_MODEL_CODES = (
+    'A10', 'A11',
+    'B10', 'B11', 'B12', 'B13', 'B14', 'B15',
+    'C10', 'C11', 'C12',
+    'G10', 'G11', 'G12', 'G13', 'G14', 'G23', 'G24', 'G33',
+    'J10',
+    'S10', 'S11', 'S12', 'S13',
+    'V10',
+    'W10',
+    'Z10'
+)
 
 
 def is_valid_model_code(data: bytes) -> bool:
     """
-    Check if 6 bytes look like a valid model code (e.g., 'B11   ', 'W10   ').
-
-    Model codes are 3 alphanumeric chars followed by spaces.
-    First char is a letter (A, B, C, G, J, S, V, W, Z).
-    Next 2 chars are digits.
+    Check if 6 bytes look like a valid model code from the official list.
+    Model codes are 3 chars followed by spaces in the records.
     """
     if len(data) < 6:
         return False
     try:
-        text = data[:6].decode(CHARSET)
-        if not text[0] in MODEL_CODE_PREFIXES:
-            return False
-        if not text[1:3].isdigit():
-            return False
-        # Rest should be spaces or alphanumeric
-        return all(c.isalnum() or c == ' ' for c in text[3:6])
+        text = data[:6].decode(CHARSET).strip()
+        return text in VALID_MODEL_CODES
     except:
         return False
 
@@ -2395,6 +2564,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4m. FIG illustration page block (89-byte) - NEW
     if is_fig_illustration_page_block_89(data):
         return 'fig_illustration_page_89'
+
+    # 4n. Engine spec block (230-byte) - NEW
+    if is_engine_spec_block_230(data):
+        return 'engine_spec_230'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"

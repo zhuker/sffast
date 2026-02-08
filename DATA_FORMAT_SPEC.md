@@ -470,6 +470,34 @@ Offset  Size  Field               Description
 
 **Validation:** Index numbers and labels match the illustrations documented in the 183-byte records.
 
+### Engine Spec Records (230-byte Type) (0x0DFB1000+) - **NEW**
+
+**Record size:** 230 bytes
+**Encoding:** CP437
+
+Contains engine specifications, types, and production periods for specific model series. These records likely define the powerplant configurations available for selection in the catalog.
+Located in blocks around `0x0DFB1000`.
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    3     Figure              FIG index (e.g., "002")
+0x09    4     Figure Page         Section/Page within figure (e.g., "01  ")
+0x0D    75    Applicable Model    Engine/Spec description (e.g., "EJ22# +EJ25D...")
+0x58    5     Padding             Usually spaces
+0x5D    6     Start Date          Production start (YYYYMM)
+0x63    6     End Date            Production end (YYYYMM)
+0x69    125   Trailer/Metadata    Binary metadata
+```
+
+**Notes:**
+- Date fields are ASCII strings (e.g., "199310").
+- The trailer contains binary data that might link to further specifications or engine-specific part modifications.
+
+**Validation:** Engine types match the production periods known for the respective Subaru models.
+
 ### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
 
 **Record size:** 91 bytes
