@@ -31,6 +31,8 @@ from sffastus_parser import (
     parse_variant_glossary_records_81,
     parse_inventory_records_199,
     parse_multilingual_part_records_182,
+    parse_figure_index_records_22,
+    parse_spec_mapping_records_22,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -54,6 +56,8 @@ from sffastus_parser import (
     is_variant_glossary_block_81,
     is_inventory_block_199,
     is_multilingual_part_block_182,
+    is_figure_index_block_22,
+    is_spec_mapping_block_22,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -80,6 +84,8 @@ from sffastus_parser import (
     VariantGlossaryRecord81,
     InventoryRecord199,
     MultilingualPartRecord182,
+    FigureIndexRecord22,
+    SpecMappingRecord22,
 )
 
 # Test data paths
@@ -1220,12 +1226,12 @@ class TestCodeIndexRecords33(unittest.TestCase):
         self.assertEqual(records[0].model_code, 'B11')
         self.assertIsInstance(records[0], CodeIndexRecord33)
         # Check that we have codes
-        self.assertTrue(len(records[0].code) > 0)
+        self.assertTrue(len(records[0].option_code) > 0)
 
         # Print for inspection
         for i, r in enumerate(records[:5]):
             cat_char = chr(r.category) if 32 <= r.category <= 126 else f'0x{r.category:02X}'
-            print(f"Record {i}: Cat={cat_char} Code='{r.code}'")
+            print(f"Record {i}: Cat={cat_char} Code='{r.option_code}'")
 
     def test_validate_all_code_index_blocks(self):
         """Validate structure of ALL code_index_record_33 blocks"""
@@ -1282,7 +1288,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
                                 size_variant_patterns.get(size_variant_stripped, 0) + 1
 
                         # Track code length distribution
-                        code_len = len(record.code)
+                        code_len = len(record.option_code)
                         code_length_distribution[code_len] = code_length_distribution.get(code_len, 0) + 1
 
         print(f"\nTotal records parsed: {len(all_records)}")
@@ -1308,7 +1314,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
                 cat_char = chr(rec.category) if 32 <= rec.category <= 126 else f'0x{rec.category:02X}'
                 print(f"  {samples_shown+1}. Offset 0x{rec.offset:08X}")
                 print(f"     Model: {rec.model_code}, Category: {cat_char}")
-                print(f"     Part Code: '{rec.code}' (len={len(rec.code)})")
+                print(f"     Part Code: '{rec.option_code}' (len={len(rec.option_code)})")
                 print(f"     Size/Variant: '{rec.size_variant.strip()}'")
                 samples_shown += 1
 
@@ -1317,7 +1323,7 @@ class TestCodeIndexRecords33(unittest.TestCase):
 
         # Validate structure:
         # 1. Part codes should be <= 7 characters
-        max_code_len = max(len(r.code) for r in all_records)
+        max_code_len = max(len(r.option_code) for r in all_records)
         print(f"\nMax part code length: {max_code_len} chars")
         self.assertLessEqual(max_code_len, 7, "Part codes should be <= 7 characters")
 
@@ -1889,6 +1895,95 @@ class TestMultilingualPartRecords182(unittest.TestCase):
                     self.assertIsInstance(rec, MultilingualPartRecord182)
                     self.assertTrue(len(rec.model_code) >= 3)
                     self.assertTrue(len(rec.part_code) > 0)
+
+
+class TestFigureIndexRecords22(unittest.TestCase):
+    """Tests for 22-byte figure index records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_figure_index_block_22(self):
+        """Test detect_block_type identifies figure_index_22"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E75D800
+            f.seek(0x0E75D800)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0E75D800)
+        self.assertEqual(block_type, 'figure_index_22')
+
+    def test_validate_all_figure_index_blocks22(self):
+        """Validate figure_index_22 blocks in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Validating Figure Index Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            idx_ranges = [r for r in ranges if r[3] == 'figure_index_22']
+            self.assertGreater(len(idx_ranges), 0, "No Figure Index blocks found")
+
+            print(f"Found {len(idx_ranges)} Figure Index blocks (covering {sum(r[2] for r in idx_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in idx_ranges:
+                records = parse_figure_index_records_22(f, r_start, max_records=10)
+                print(r_start)
+                for rec in records:
+                    print(f"0x{rec.offset:08X}", rec)
+                    self.assertIsInstance(rec, FigureIndexRecord22)
+                    self.assertTrue(len(rec.model_code) >= 3)
+                    self.assertTrue(len(rec.figure) > 0)
+
+
+class TestSpecMappingRecords22(unittest.TestCase):
+    """Tests for 22-byte spec mapping records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_spec_mapping_block_22(self):
+        """Test detect_block_type identifies spec_mapping_22"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x17BA7000
+            f.seek(0x17BA7000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x17BA7000)
+        self.assertEqual(block_type, 'spec_mapping_22')
+
+    def test_validate_all_spec_mapping_blocks22(self):
+        """Validate spec_mapping_22 blocks in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        print("\n=== Validating Spec Mapping Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            mapping_ranges = [r for r in ranges if r[3] == 'spec_mapping_22']
+            self.assertGreater(len(mapping_ranges), 0, "No Spec Mapping blocks found")
+
+            print(f"Found {len(mapping_ranges)} Spec Mapping blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in mapping_ranges:
+                records = parse_spec_mapping_records_22(f, r_start, max_records=10)
+                for rec in records:
+                    print(f"0x{rec.offset:08X}", rec)
+                    self.assertIsInstance(rec, SpecMappingRecord22)
+                    self.assertTrue(len(rec.model_code) >= 3)
+                    self.assertTrue(len(rec.option_code) > 0)
 
 
 if __name__ == '__main__':

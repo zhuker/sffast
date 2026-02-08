@@ -585,6 +585,49 @@ Offset  Size  Field
 
 **Validation:** Cross-reference paint codes with known Subaru color catalogs.
 
+### Figure Index Records (22-byte Type) (0x0E75D800+) - **VALIDATED ✓**
+
+**Record size:** 22 bytes
+**Encoding:** CP437
+
+Maps model-specific figures and item codes to numeric metadata.
+
+**Structure:**
+
+| Offset | Width | Field                    | Description |
+|--------|-------|--------------------------|-------------|
+| 0x00 | 6 | Model Code               | e.g. `B11   `, `W10   ` |
+| 0x06 | 5 | Not Verified Figure      | FIG index (numeric, e.g. `003  `, `010  `) |
+| 0x0B | 7 | Not Verified Item Index | Identification sub-code (numeric, e.g. `01004  `) |
+| 0x12 | 4 | Metadata                 | Binary metadata (possibly record pointers) |
+
+### Spec Mapping Records (22-byte Type) (0x17BA7000+) - **VALIDATED ✓**
+
+**Record size:** 22 bytes
+**Encoding:** CP437
+
+Maps model-specific spec codes to short descriptions (e.g., `AAICN` -> `OFOR A/C`).
+
+**Structure:**
+
+| Offset | Width | Field       | Description |
+|--------|-------|-------------|-------------|
+| 0x00 | 6 | Model Code  | e.g. `G11   ` |
+| 0x06 | 5 | Option Code | Alpha spec code (e.g. `AAICN`) |
+| 0x0B | 11 | Description | Short description text (e.g. `OFOR A/C   `) |
+
+Example Option Codes:
+- AAICN: Air Conditioning (O = For A/C, X = Excluding A/C)
+- ABRSD: Anti-lock Brakes (O = For ABS, X = Excluding ABS)
+- ACRUI: Cruise Control (O = For Cruise, X = Excluding Cruise)
+- ARFRL: Roof Rails (O = For R/R, X = Excluding R/R)
+- ASDAB: Side Airbags (O = For Side-A/B)
+
+**Notes for 22-byte records:**
+- High density of records throughout the latter half of the file.
+- Records are strictly 22-byte aligned and typically grouped in full 2KB blocks.
+- Distinction between `Figure Index` and `Spec Mapping` is primarily based on the presence of digits in the 5-char code field (bytes 6-11).
+
 ### Model Specification Records (103-byte Type) (0x0CD4B800+) - **VALIDATED ✓**
 
 **Record size:** 103 bytes

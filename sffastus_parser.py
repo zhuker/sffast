@@ -1192,6 +1192,134 @@ def is_variant_glossary_block_81(data: bytes) -> bool:
 
 
 @dataclass
+class FigureIndexRecord22:
+    """Represents a 22-byte figure index record from sffastus
+
+    Located at 0x0E75D800+
+    Encoding: CHARSET
+
+    Structure:
+        0x00 (6): Model Code (e.g., "B11   ")
+        0x06 (5): Figure (e.g., "003  ")
+        0x0B (7): Item Index (e.g., "01004  ")
+        0x12 (4): Metadata/Flags
+    """
+    offset: int
+    model_code: str
+    figure: str
+    item_index: str
+    metadata: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_22(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return FigureIndexRecord22(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            figure=clean(data[6:11]),
+            item_index=clean(data[11:18]),
+            metadata=data[18:22],
+        )
+
+
+@dataclass
+class SpecMappingRecord22:
+    """Represents a 22-byte spec mapping record from sffastus
+
+    Located at 0x17BA7000+
+    Encoding: CHARSET
+
+    Structure:
+        0x00 (6): Model Code (e.g., "G11   ")
+        0x06 (5): Code (e.g., "AAICN")
+        0x0B (11): Description (e.g., "OFOR A/C   ")
+    """
+    offset: int
+    model_code: str
+    option_code: str
+    description: str
+    raw_data: bytes
+
+    @staticmethod
+    def parse_22(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return SpecMappingRecord22(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            option_code=clean(data[6:11]),
+            description=clean(data[11:22]),
+        )
+
+
+def is_figure_index_block_22(data: bytes) -> bool:
+    """
+    Check if data looks like a 22-byte figure index record block.
+    Heuristic: figure field (6-11) contains digits.
+    """
+    if len(data) < 44:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # First record figure code
+        figure = data[6:11].decode(CHARSET, errors='replace')
+        if not any(c.isdigit() for c in figure):
+            return False
+
+        # Verify second record
+        if not is_valid_model_code(data[22:28]):
+            return False
+
+        return True
+    except:
+        return False
+
+
+def is_spec_mapping_block_22(data: bytes) -> bool:
+    """
+    Check if data looks like a 22-byte spec mapping record block.
+    Heuristic: figure field (6-11) is non-numeric/alpha.
+    """
+    if len(data) < 44:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+
+        # Code field (6-11) should be alpha if it's the spec mapping flavor
+        # (Based on "AAICN" example)
+        code = data[6:11].decode(CHARSET, errors='replace')
+        if any(c.isdigit() for c in code):
+            # If it has digits, it might be the numeric FigureIndex type instead
+            return False
+
+        # Description should have text
+        desc = data[11:22].decode(CHARSET, errors='replace')
+        if not any(c.isalpha() for c in desc):
+             return False
+
+        # Verify second record
+        if not is_valid_model_code(data[22:28]):
+            return False
+
+        return True
+    except:
+        return False
+
+
+@dataclass
 class FIGGroupCategoryRecord184:
     """Represents a FIG group category description record from sffastus (184 bytes)
 
@@ -2086,6 +2214,94 @@ def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=Fal
             break
 
         record = EngineSpecRecord230.parse_230(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_figure_index_records_22(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse figure index records (22 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of FigureIndexRecord22 objects
+    """
+    RECORD_SIZE = 22
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = FigureIndexRecord22.parse_22(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
+
+
+def parse_spec_mapping_records_22(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse spec mapping records (22 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of SpecMappingRecord22 objects
+    """
+    RECORD_SIZE = 22
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = SpecMappingRecord22.parse_22(data, offset)
         records.append(record)
 
         if verbose and count % 1000 == 0:
@@ -3016,6 +3232,14 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4r. Multilingual part block (182-byte) - NEW
     if is_multilingual_part_block_182(data):
         return 'multilingual_part_182'
+
+    # 4s. Figure index block (22-byte) - NEW
+    if is_figure_index_block_22(data):
+        return 'figure_index_22'
+
+    # 4t. Spec mapping block (22-byte) - NEW
+    if is_spec_mapping_block_22(data):
+        return 'spec_mapping_22'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
