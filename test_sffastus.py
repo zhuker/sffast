@@ -459,19 +459,33 @@ class TestBlockTypeDetection(unittest.TestCase):
         data = b'\x00' * 1000
         self.assertEqual(parser.detect_block_type(data, offset=0x1000), 'incomplete')
 
+    def test_detect_block_types(self):
+        # 0x1C686800
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            def assert_binary(offset):
+                f.seek(offset)
+                data = f.read(2048)
+                self.assertEqual("binary", parser.detect_block_type(data, offset))
+
+            f.seek(0x1C686800)
+            data = f.read(2048)
+            self.assertEqual("text", parser.detect_block_type(data, 0x1C686800))
+
+            assert_binary(0x0E182000)
+            assert_binary(0x1E56F800)
+            assert_binary(0x1E53E000)
+            assert_binary(0x0E6AE800)
+
+
+
+
 
 class TestVINModelRecords(unittest.TestCase):
     """Tests for 69-byte VIN-Model record parsing"""
 
-    @classmethod
-    def setUpClass(cls):
-        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
-
     def test_parse_vin_model_records_us2(self):
         """Parse VIN-Model records from 0x3E5000 in SFCDUS2"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
         with open(SFCDUS2_PATH, 'rb') as f:
             records = parser.parse_vin_model_records(f, start_offset=0x3E5000, max_records=10)
 

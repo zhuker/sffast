@@ -2442,19 +2442,20 @@ class SffastusBlockParser:
             pass
 
         # 6. Text block - mostly printable ASCII
+        non_zero = sum(1 for b in data if b != 0)
         printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13))
-        printable_ratio = printable_count / len(data)
+        printable_ratio = printable_count / non_zero
+        # print(f"0x{offset:08X} printable_ratio: {printable_ratio} = {printable_count} / {non_zero}")
 
         if printable_ratio >= 0.8:
             return 'text'
 
         # 7. Binary block - low printable ratio, has content
-        non_zero = sum(1 for b in data if b != 0)
-        if non_zero > 0 and printable_ratio < 0.4:
+        if non_zero > 0 and printable_ratio < 0.51:
             return 'binary'
 
         # 8. Mixed content
-        if printable_ratio >= 0.4:
+        if printable_ratio >= 0.51:
             return 'mixed'
 
         return 'unknown'
