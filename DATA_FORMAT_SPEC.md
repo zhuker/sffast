@@ -803,6 +803,78 @@ ES:     PÉNDOLA MOTOR, DELANTERA
 
 **Note:** Name fields include leading digit prefix (e.g., "1FUEL HOSE", "2HANGER COMPLETE-ENGINE").
 
+### Part Number Index Records (21-byte Type) (0x1E5DE800+) - **NEW**
+
+**Record size:** 21 bytes
+**Encoding:** CP437
+**Detection requires:** `ItcaPartsCatalog` (validates part numbers against itca_data.txt)
+
+Simple part number index - each record contains a single part number with a 6-byte metadata/pointer field.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 15 | Part Number | 15-char part number (e.g., `000009513      `) |
+| 0x0F | 6 | Metadata | Binary data (block index or pointer) |
+
+**Notes:**
+- 97 records per 2KB block (2057 bytes) + 11 bytes padding
+- Part numbers match entries in `itca_data.txt`
+- Disambiguation from 34-byte records requires checking at least 2 records (42 bytes)
+
+### Part Number Range Index Records (34-byte Type) (0x1E5D6800+) - **NEW**
+
+**Record size:** 34 bytes
+**Encoding:** CP437
+**Detection requires:** `ItcaPartsCatalog` (validates part numbers against itca_data.txt)
+
+Part number range index that maps sorted part number ranges to block pointers. Each record defines a range covering ~97 records from `itca_data.txt`. Used for binary search lookup of parts.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 15 | Part Number From | Start of range (e.g., `000009513      `) |
+| 0x0F | 15 | Part Number To | End of range (e.g., `002117201      `) |
+| 0x1E | 1 | Constant | Always `0x37` (55) |
+| 0x1F | 2 | Block Index | BE 16-bit block index (e.g., `0x1441` = 5185) |
+| 0x21 | 1 | Constant | Always `0x00` |
+
+**Notes:**
+- 60 records per 2KB block (2040 bytes) + 8 bytes zero padding
+- 16 consecutive blocks at `0x1E5D6800` cover all 94,000 itca_data.txt records
+- Block index increments by 1 per record but is not strictly sequential (gap from `0x144A` to `0x1500`)
+- Part number ranges are sorted and contiguous — `part_number_to` of record N connects to `part_number_from` of record N+1
+
+### ITCA Records in sffastus (251-byte Type) - **NEW**
+
+**Record size:** 251 bytes
+**Encoding:** CP437
+**Detection requires:** `ItcaPartsCatalog` (validates part numbers against itca_data.txt)
+
+Binary representation of ITCA parts catalog records embedded in sffastus. Contains the same data as `itca_data.txt` but with multilingual descriptions (4 languages) and a different field layout.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 15 | Part Number | Current part number |
+| 0x0F | 15 | Supersedes To | Supersedes-to part number |
+| 0x1E | 1 | ITCA Code | Status/type code |
+| 0x1F | 40 | Description EN | English part name |
+| 0x47 | 40 | Description DE | German part name |
+| 0x6F | 40 | Description FR | French part name |
+| 0x97 | 40 | Description ES | Spanish part name |
+| 0xBF | 40 | Quantity | Quantity field (padded) |
+| 0xE7 | 9 | Part Code | Part code |
+| 0xF0 | 11 | Unknown | Trailing binary data |
+
+**Notes:**
+- 8 records per 2KB block (2008 bytes) + 40 bytes padding
+- Extends the text-based `itca_data.txt` format with multilingual descriptions
+- Part numbers validated against `ItcaPartsCatalog` for block detection
+
 ---
 
 ## 2. ITCA_DATA.TXT - Parts Catalog
