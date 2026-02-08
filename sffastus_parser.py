@@ -724,6 +724,81 @@ class FIGIllustrationRecord183:
         )
 
 
+@dataclass
+class FIGIllustrationPage89:
+    """Represents a FIG illustration page/sub-index record from sffastus (89 bytes)
+
+    Located at 0x0DFA5000+
+    Encoding: CP437
+
+    Contains sub-indexing for FIG illustrations, mapping specific FIG indices 
+    to page numbers and labels.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (3):  FIG Index (e.g., "002")
+        0x09 (2):  Padding (usually spaces)
+        0x0B (2):  Page Index (e.g., "01")
+        0x0D (40): Label (e.g., "VALVE")
+        0x35 (36): Trailer/Metadata
+    """
+    offset: int
+    model_code: str
+    fig_index: str
+    page_index: str
+    label: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_89(data: bytes, offset: int = 0):
+        """Parse an 89-byte FIG illustration page record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return FIGIllustrationPage89(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            fig_index=clean(data[6:9]),
+            page_index=clean(data[11:13]),
+            label=clean(data[13:53]),
+            trailer=data[53:89],
+        )
+
+
+def is_fig_illustration_page_block_89(data: bytes) -> bool:
+    """
+    Check if data looks like an 89-byte FIG illustration page record block.
+
+    Detection heuristics:
+    - Consistent model codes every 89 bytes.
+    - Numeric patterns in fig_index and page_index fields.
+    """
+    if len(data) < 89:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+            
+        # Check first record numeric fields
+        fig_idx = data[6:9].decode(CHARSET, errors='replace').strip()
+        page_idx = data[11:13].decode(CHARSET, errors='replace').strip()
+        if not (fig_idx.isdigit() and page_idx.isdigit()):
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 89*2:
+            if not is_valid_model_code(data[89:89+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
 def is_fig_illustration_block_183(data: bytes) -> bool:
     """
     Check if data looks like a 183-byte FIG illustration record block.
@@ -1419,6 +1494,51 @@ def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
 
     return records
 
+
+
+
+def parse_fig_illustration_page_records_89(f, start_offset, max_records=None, verbose=False):
+    """
+    Parse FIG illustration page/sub-index records (89 bytes each).
+
+    Args:
+        f: File handle to sffastus
+        start_offset: Where records begin
+        max_records: Maximum records to parse
+        verbose: Print progress
+
+    Returns:
+        List of FIGIllustrationPage89 objects
+    """
+    RECORD_SIZE = 89
+    records = []
+
+    f.seek(start_offset)
+    count = 0
+
+    while True:
+        if max_records and count >= max_records:
+            break
+
+        offset = f.tell()
+        data = f.read(RECORD_SIZE)
+
+        if len(data) < RECORD_SIZE:
+            break
+
+        # Check if valid record
+        if not is_valid_model_code(data[0:6]):
+            break
+
+        record = FIGIllustrationPage89.parse_89(data, offset)
+        records.append(record)
+
+        if verbose and count % 1000 == 0:
+            print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+        count += 1
+
+    return records
 
 
 def parse_fig_illustration_records_183(f, start_offset, max_records=None, verbose=False):
@@ -2272,6 +2392,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     if is_fig_illustration_block_183(data):
         return 'fig_illustration_183'
 
+    # 4m. FIG illustration page block (89-byte) - NEW
+    if is_fig_illustration_page_block_89(data):
+        return 'fig_illustration_page_89'
+
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
     try:
@@ -2289,7 +2413,7 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     printable_count = sum(1 for b in data if 32 <= b <= 126 or b in (9, 10, 13, 0))
     printable_ratio = printable_count / len(data)
 
-    if printable_ratio >= 0.7:
+    if printable_ratio >= 0.8:
         return 'text'
 
     # 7. Binary block - low printable ratio, has content

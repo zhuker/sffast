@@ -25,6 +25,7 @@ from sffastus_parser import (
     parse_code_index_records_33,
     parse_fig_group_category_records_184,
     parse_fig_illustration_records_183,
+    parse_fig_illustration_page_records_89,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -42,6 +43,7 @@ from sffastus_parser import (
     is_code_index_record_block_33,
     is_fig_group_category_block_184,
     is_fig_illustration_block_183,
+    is_fig_illustration_page_block_89,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -62,6 +64,7 @@ from sffastus_parser import (
     CodeIndexRecord33,
     FIGGroupCategoryRecord184,
     FIGIllustrationRecord183,
+    FIGIllustrationPage89,
 )
 
 # Test data paths
@@ -1056,6 +1059,45 @@ class TestFIGIllustrationRecords183(unittest.TestCase):
             print(f"Record {i}: Group={r.fig_group_code} EN='{r.desc_en}'")
 
 
+class TestFIGIllustrationPageRecords89(unittest.TestCase):
+    """Tests for 89-byte FIG illustration page records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_fig_illustration_page_block_89(self):
+        """Test detect_block_type identifies fig_illustration_page_89"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DFA5000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DFA5000)
+        self.assertEqual(block_type, 'fig_illustration_page_89')
+
+    def test_parse_fig_illustration_page_records_89_us2(self):
+        """Parse 89-byte FIG illustration page records from 0x0DFA5000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_fig_illustration_page_records_89(f, start_offset=0x0DFA5000, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertIsInstance(records[0], FIGIllustrationPage89)
+        # Check numeric fields
+        self.assertEqual(records[0].fig_index, '001')
+        self.assertEqual(records[0].page_index, '01')
+        
+        # Print for inspection
+        for i, r in enumerate(records[:5]):
+            print(f"Record {i}: Fig={r.fig_index} Page={r.page_index} Label='{r.label}'")
+
+
 class TestCodeIndexRecords33(unittest.TestCase):
     """Tests for 33-byte code index records (NEW)"""
 
@@ -1414,27 +1456,6 @@ class TestBlockTypeScan(unittest.TestCase):
 
     def test_validate_all_fig_group_category_blocks183(self):
         """Validate all fig_group_category_184 blocks in the file"""
-
-        expected_categories = {
-            '0A': ['ENGINE MAIN'],
-            '0B': ['ENGINE AUXILIARIES'],
-            '0C': ['ENGINE ELECTRICAL PARTS'],
-            '1A': ['MANUAL TRANSMISSION'],
-            '1B': ['AUTOMATIC TRANSMISSION'],
-            '1C': ['DIFFERENTIAL & PROPELLER SHAFT'],
-            '2A': ['SUSPENSION, AXLE & BRAKE'],
-            '3A': ['STEERING', 'STEERING SYSTEM & CABLE'],
-            '4A': ['ENGINE MOUNT & COOLING', 'ENGINE MOUNTING & COOLING'],
-            '5A': ['BODY & BUMPER', 'BODY, KEY KIT & BUMPER'],
-            '6A': ['DOOR PARTS'],
-            '6B': ['SEAT & INSTRUMENT PANEL'],
-            '7A': ['HEATER & AIR CONDITIONER'],
-            '8A': ['ELECTRICAL PARTS (1)'],
-            '8B': ['ELECTRICAL PARTS (2)'],
-            '9A': ['ACCESSORIES (EXTERIOR)'],
-            '9B': ['ACCESSORIES (INTERIOR)']
-        }
-
         print("\n=== Validating FIG Group Category Blocks ===")
 
         with open(SFCDUS2_PATH, 'rb') as f:
@@ -1455,6 +1476,29 @@ class TestBlockTypeScan(unittest.TestCase):
                 for r in records:
                     print(r)
 
+
+    def test_validate_all_fig_illustration_page_blocks89(self):
+        """Validate all fig_illustration_page_89 blocks in the file"""
+        print("\n=== Validating FIG Illustration Page Padding ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
+            self.assertGreater(len(fig_ranges), 0, "No FIG illustration page blocks found")
+
+            print(f"Found {len(fig_ranges)} FIG illustration page blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in fig_ranges:
+                records = parse_fig_illustration_page_records_89(f, r_start)
+                for rec in records:
+                    print(rec)
+                    pad1 = rec.raw_data[9:11]
+                    # Verify that padding is constant/empty (spaces or zeros)
+                    self.assertTrue(pad1 in (b'  ', b'\x00\x00'), 
+                                    f"Field 1 padding at offset 0x{rec.offset+9:08X} is not empty: {pad1.hex()}")
+
+        print("Successfully validated all 89-byte FIG Illustration Page padding fields.")
 
     def test_validate_all_fig_group_category_blocks(self):
         """Validate all fig_group_category_184 blocks in the file"""

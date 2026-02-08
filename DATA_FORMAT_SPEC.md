@@ -443,6 +443,33 @@ Offset  Size  Field               Description
 
 **Validation:** Matches FIG illustration titles in the illustrated index menu.
 
+### FIG Illustration Page Records (89-byte Type) (0x0DFA5000+) - **NEW**
+
+**Record size:** 89 bytes
+**Encoding:** CP437
+
+Contains sub-indexing for FIG illustrations, mapping specific FIG indices to page numbers and labels (e.g., "VALVE", "CYLINDER BLOCK"). These records likely link illustrations to the actual part data.
+Located in blocks around `0x0DFA5000`.
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    3     FIG Index           Illustration index (e.g., "002")
+0x09    2     Padding             Usually spaces
+0x0B    2     Page Index          Page number (e.g., "01", "02")
+0x0D    40    Label               ASCII label (e.g., "VALVE")
+0x35    36    Trailer/Metadata    Binary data (likely pointers)
+```
+
+**Notes:**
+- Index numbers are ASCII strings, not 16-bit integers.
+- The label field is often padded with spaces.
+- The 36-byte trailer contains binary pointers that likely reference block indices in the part data region.
+
+**Validation:** Index numbers and labels match the illustrations documented in the 183-byte records.
+
 ### Color/Paint Code Records (91-byte Type) (0x0DE1F800+) - **NEW**
 
 **Record size:** 91 bytes
