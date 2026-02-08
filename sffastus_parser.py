@@ -402,7 +402,7 @@ class VINRecord:
     vin_end: str
     section: int
     index: int
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass
@@ -435,7 +435,7 @@ class VINModelRecord:
     date2: str
     date3: str
     suffix: str
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass
@@ -466,7 +466,7 @@ class MultilingualPartRecord:
     name_fr: str
     name_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass
@@ -499,7 +499,7 @@ class CodeIndexRecord33:
     size_variant: str  # 15 bytes - size/variant/modifier code (NOT padding!)
     code: str  # 7-byte part code (space-padded)
     metadata: bytes  # 4 bytes of metadata
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_33(data: bytes, offset: int = 0):
@@ -799,6 +799,12 @@ class SffastusBlockParser:
 
     def is_vin_code(self, vinlike) -> bool:
         return self.parts_catalog.contains(vinlike)
+
+    def is_part_index_block_21(self, data: bytes) -> bool:
+        if len(data) < 21 * 2: # cant distinguish from is_part_index_block_34 if size is less than 2*21
+            return False
+        assert self.parts_catalog is not None
+        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[21:21+15].decode(CHARSET, errors='replace').strip())
 
     def is_part_index_block_34(self, data: bytes) -> bool:
         if len(data) < 34:
@@ -1485,6 +1491,37 @@ class SffastusBlockParser:
                 break
 
             record = PartRangeIndex34.parse_34(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+    def parse_part_index_records_21(self, f, start_offset, max_records=None, verbose=False):
+        RECORD_SIZE = 21
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not self.is_vin_code(data[0:15].decode("cp437", errors="replace")):
+                break
+
+            record = PartIndex21.parse_21(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -2346,7 +2383,10 @@ class SffastusBlockParser:
             return 'spec_mapping_22'
 
         if self.is_part_index_block_34(data):
-            return 'part_index_34'
+            return PartRangeIndex34.ID
+
+        if self.is_part_index_block_21(data):
+            return PartIndex21.ID
 
         # 5. Body model block - 17-byte records with 7-char body code + model code
         # Body codes are 7 alphanumeric chars like "BD6AY1G"
@@ -2455,7 +2495,7 @@ class GlossaryRecord28:
     category: int  # Single byte category
     term: str
     metadata: bytes  # 4 bytes of metadata
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_28(data: bytes, offset: int = 0):
@@ -2496,7 +2536,7 @@ class ColorRecord91:
     color_name_de: str
     color_name_fr: str
     color_name_es: str
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_91(data: bytes, offset: int = 0):
@@ -2544,7 +2584,7 @@ class FIGIllustrationRecord183:
     desc_fr: str
     desc_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_183(data: bytes, offset: int = 0):
@@ -2593,7 +2633,7 @@ class EngineSpecRecord230:
     start_date: str
     end_date: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_230(data: bytes, offset: int = 0):
@@ -2638,7 +2678,7 @@ class FIGIllustrationPage89:
     page_index: str
     label: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_89(data: bytes, offset: int = 0):
@@ -2686,7 +2726,7 @@ class InventoryRecord199:
     name_fr: str
     name_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_199(data: bytes, offset: int = 0):
@@ -2738,7 +2778,7 @@ class MultilingualPartRecord182:
     name_fr: str
     name_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_182(data: bytes, offset: int = 0):
@@ -2788,7 +2828,7 @@ class PartGroupRecord185:
     desc_fr: str
     desc_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_185(data: bytes, offset: int = 0):
@@ -2827,7 +2867,7 @@ class VariantGlossaryRecord81:
     model_code: str
     variant_code: str
     description: str
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_81(data: bytes, offset: int = 0):
@@ -2862,7 +2902,7 @@ class FigureIndexRecord22:
     figure: str
     item_index: str
     metadata: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_22(data: bytes, offset: int = 0):
@@ -2878,13 +2918,35 @@ class FigureIndexRecord22:
             metadata=data[18:22],
         )
 
+
+@dataclass
+class PartIndex21:
+    ID = 'part_index_21'
+    offset: int
+    part_number: str
+    metadata: bytes  # block index maybe
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_21(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return PartIndex21(
+            offset=offset,
+            raw_data=data,
+            part_number=clean(data[0:15]),
+            metadata=data[15:],
+        )
+
 @dataclass
 class PartRangeIndex34:
+    ID = 'part_index_34'
     offset: int
     part_number_from: str
     part_number_to: str
     metadata: bytes # block index maybe BE 16-bit block index (starts 0x1441=5185, increments by 1)
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_34(data: bytes, offset: int = 0):
@@ -2916,7 +2978,7 @@ class SpecMappingRecord22:
     model_code: str
     option_code: str
     description: str
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_22(data: bytes, offset: int = 0):
@@ -2959,7 +3021,7 @@ class FIGGroupCategoryRecord184:
     desc_fr: str
     desc_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_184(data: bytes, offset: int = 0):
@@ -3042,7 +3104,7 @@ class ModelSpecRecord103:
     """
     # Metadata
     offset: int
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     # Identification
     model_code: str  # e.g., "B11", "G11"
@@ -3122,7 +3184,7 @@ class PartRangeRecord24:
     part_start: str
     part_end: str
     metadata: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass
@@ -3163,7 +3225,7 @@ class ModelIndexRecord288:
     category5: str
     category6: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
     @staticmethod
     def parse_288(data: bytes, offset: int = 0):
@@ -3209,7 +3271,7 @@ class MultilingualPartRecord167:
     spec_code: str
     description: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass
@@ -3236,7 +3298,7 @@ class MultilingualPartRecord180:
     name_fr: str
     name_es: str
     trailer: bytes
-    raw_data: bytes
+    raw_data: bytes = field(repr=False)
 
 
 @dataclass

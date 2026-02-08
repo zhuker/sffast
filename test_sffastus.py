@@ -6,8 +6,9 @@ Or directly: python3 test_sffastus.py
 """
 
 import os
-import sys
 import unittest
+from io import BufferedReader
+from typing import Any
 
 # Import parser functions
 from sffastus_parser import (
@@ -23,7 +24,6 @@ from sffastus_parser import (
     SffastusBlockParser,
     SUBARU_VIN_PREFIXES,
     VALID_MODEL_CODES,
-    CHARSET,
     VINRecord,
     VINModelRecord,
     MultilingualPartRecord,
@@ -45,7 +45,7 @@ from sffastus_parser import (
     InventoryRecord199,
     MultilingualPartRecord182,
     FigureIndexRecord22,
-    SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog,
+    SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog, PartRangeIndex34, PartIndex21,
 )
 
 # Test data paths
@@ -1213,108 +1213,6 @@ class TestCodeIndexRecords33(unittest.TestCase):
             cat_char = chr(r.category) if 32 <= r.category <= 126 else f'0x{r.category:02X}'
             print(f"Record {i}: Cat={cat_char} Code='{r.option_code}'")
 
-    def test_validate_all_code_index_blocks(self):
-        """Validate structure of ALL code_index_record_33 blocks"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
-        print("\n=== Validating ALL code_index_record_33 Blocks ===")
-
-        # Step 1: Scan all blocks and find code_index_record_33 blocks
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-        code_index_ranges = [r for r in ranges if r[3] == 'code_index_record_33']
-
-        print(f"Found {len(code_index_ranges)} code_index_record_33 block ranges")
-        total_blocks = sum(r[2] for r in code_index_ranges)
-        print(f"Total blocks: {total_blocks}")
-
-        self.assertGreater(len(code_index_ranges), 0, "Should find at least one code_index_record_33 range")
-
-        # Step 2: Parse all records from these blocks
-        all_records = []
-        size_variant_patterns = {}  # Analyze size_variant field content
-        code_length_distribution = {}  # Track code lengths
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            for start, end, count, block_type in code_index_ranges:
-                f.seek(start)
-                # Parse all records in this range
-                for block_idx in range(count):
-                    block_offset = start + (block_idx * 2048)
-                    f.seek(block_offset)
-                    block_data = f.read(2048)
-
-                    # Parse records in this block (2048 // 33 = 62 records max)
-                    for rec_idx in range(62):
-                        rec_offset = rec_idx * 33
-                        if rec_offset + 33 > len(block_data):
-                            break
-
-                        rec_data = block_data[rec_offset:rec_offset + 33]
-
-                        # Check if valid (starts with model code)
-                        if not is_valid_model_code(rec_data[0:6]):
-                            break  # End of valid records in this block
-
-                        record = CodeIndexRecord33.parse_33(rec_data, block_offset + rec_offset)
-                        all_records.append(record)
-
-                        # Analyze size_variant field
-                        size_variant_stripped = record.size_variant.strip()
-                        if size_variant_stripped:  # Non-empty after stripping
-                            size_variant_patterns[size_variant_stripped] = \
-                                size_variant_patterns.get(size_variant_stripped, 0) + 1
-
-                        # Track code length distribution
-                        code_len = len(record.option_code)
-                        code_length_distribution[code_len] = code_length_distribution.get(code_len, 0) + 1
-
-        print(f"\nTotal records parsed: {len(all_records)}")
-
-        # Print code length distribution
-        print(f"\nPart code length distribution:")
-        for length, count in sorted(code_length_distribution.items()):
-            pct = (count / len(all_records)) * 100
-            print(f"  {length} chars: {count:6d} occurrences ({pct:5.2f}%)")
-
-        # Print size_variant patterns (top 30)
-        print(f"\nSize/Variant field patterns (top 30 by frequency):")
-        sorted_patterns = sorted(size_variant_patterns.items(), key=lambda x: x[1], reverse=True)
-        for pattern, count in sorted_patterns[:30]:
-            pct = (count / len(all_records)) * 100
-            print(f"  '{pattern}': {count:6d} occurrences ({pct:5.2f}%)")
-
-        # Show sample records with interesting size_variant values
-        print(f"\nSample records with non-empty size_variant (first 15):")
-        samples_shown = 0
-        for rec in all_records:
-            if rec.size_variant.strip() and samples_shown < 15:
-                cat_char = chr(rec.category) if 32 <= rec.category <= 126 else f'0x{rec.category:02X}'
-                print(f"  {samples_shown + 1}. Offset 0x{rec.offset:08X}")
-                print(f"     Model: {rec.model_code}, Category: {cat_char}")
-                print(f"     Part Code: '{rec.option_code}' (len={len(rec.option_code)})")
-                print(f"     Size/Variant: '{rec.size_variant.strip()}'")
-                samples_shown += 1
-
-        # Assertions
-        self.assertGreater(len(all_records), 0, "Should parse at least one record")
-
-        # Validate structure:
-        # 1. Part codes should be <= 7 characters
-        max_code_len = max(len(r.option_code) for r in all_records)
-        print(f"\nMax part code length: {max_code_len} chars")
-        self.assertLessEqual(max_code_len, 7, "Part codes should be <= 7 characters")
-
-        # 2. Size/variant field should have content in most records
-        non_empty_size_variant = sum(1 for r in all_records if r.size_variant.strip())
-        non_empty_ratio = non_empty_size_variant / len(all_records)
-        print(f"Size/variant field has content: {non_empty_ratio * 100:.1f}% of records")
-        self.assertGreater(non_empty_ratio, 0.90, "Expected >90% of records to have size/variant data")
-
-        print("\n=== CodeIndexRecord33 structure validated successfully ===")
-
 
 class TestFIGGroupCategoryRecords184(unittest.TestCase):
     """Tests for 184-byte FIG group category records (NEW)"""
@@ -1506,6 +1404,271 @@ class TestBlockTypeScan(unittest.TestCase):
         # VIN blocks should be a significant portion of the file
         self.assertGreater(vin_blocks, 1000)
 
+    def test_parse_all_blocks_full_file(self):
+        print("\n=== Parse all Block Types of SFCDUS2/sffastus ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = parser.scan_block_types(f)
+            self.validate_183(f, ranges)
+            self.validate_89(f, ranges)
+            self.validate_185(f, ranges)
+            self.validate_230(f, ranges)
+            self.validate_184(f, ranges)
+            self.validate_81(f, ranges)
+            self.validate_199(f, ranges)
+            self.validate_182(f, ranges)
+            self.validate_figure_index_22(f, ranges)
+            self.validate_spec_map_22(f, ranges)
+            self.validate_33(f, ranges)
+            self.validate_34(f, ranges)
+            self.validate_21(f, ranges)
+
+    def validate_230(self, f: BufferedReader, ranges: list[Any]):
+        spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
+        self.assertGreater(len(spec_ranges), 0, "No Engine Spec blocks found")
+
+        print(f"Found {len(spec_ranges)} Engine Spec blocks (covering {sum(r[2] for r in spec_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in spec_ranges:
+            records = parser.parse_engine_spec_records_230(f, r_start)
+            self.assertTrue(len(records) > 0)
+
+        print("Successfully parsed all 230-byte Engine Spec records.")
+
+    def validate_185(self, f: BufferedReader, ranges: list[Any]):
+        group_ranges = [r for r in ranges if r[3] == 'part_group_185']
+        self.assertGreater(len(group_ranges), 0, "No Part Group blocks found")
+
+        print(f"Found {len(group_ranges)} Part Group blocks (covering {sum(r[2] for r in group_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in group_ranges:
+            records = parser.parse_part_group_records_185(f, r_start)
+            self.assertTrue(len(records) > 0)
+
+        print("Successfully parsed all 185-byte Part Group records.")
+
+    def validate_89(self, f: BufferedReader, ranges: list[Any]):
+        fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
+        self.assertGreater(len(fig_ranges), 0, "No FIG illustration page blocks found")
+
+        print(
+            f"Found {len(fig_ranges)} FIG illustration page blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in fig_ranges:
+            records = parser.parse_fig_illustration_page_records_89(f, r_start)
+            for rec in records:
+                pad1 = rec.raw_data[9:11]
+                # Verify that padding is constant/empty (spaces or zeros)
+                self.assertTrue(pad1 in (b'  ', b'\x00\x00'),
+                                f"Field 1 padding at offset 0x{rec.offset + 9:08X} is not empty: {pad1.hex()}")
+
+        print("Successfully validated all 89-byte FIG Illustration Page padding fields.")
+
+    def validate_183(self, f: BufferedReader, ranges: list[Any]):
+        fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_183']
+        self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
+
+        print(
+            f"Found {len(fig_ranges)} FIG group category blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
+
+        validated_codes = set()
+
+        for r_start, r_len, num_blocks, block_type in fig_ranges:
+            # Parse all records in this range
+            records = parser.parse_fig_illustration_records_183(f, r_start)
+            self.assertTrue(len(records) > 0)
+
+    def validate_81(self, f: BufferedReader, ranges: list[Any]):
+        glossary_ranges = [r for r in ranges if r[3] == 'variant_glossary_81']
+        self.assertGreater(len(glossary_ranges), 0, "No Variant Glossary blocks found")
+
+        print(
+            f"Found {len(glossary_ranges)} Variant Glossary blocks (covering {sum(r[2] for r in glossary_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in glossary_ranges:
+            records = parser.parse_variant_glossary_records_81(f, r_start)
+            for rec in records:
+                self.assertIsInstance(rec, VariantGlossaryRecord81)
+                # Use a smaller count for validation to avoid huge logs if many records
+                # but check at least some properties
+                self.assertTrue(len(rec.model_code) >= 3)
+
+    def validate_199(self, f: BufferedReader, ranges: list[Any]):
+        inv_ranges = [r for r in ranges if r[3] == 'inventory_199']
+        self.assertGreater(len(inv_ranges), 0, "No Inventory blocks found")
+
+        print(f"Found {len(inv_ranges)} Inventory blocks (covering {sum(r[2] for r in inv_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in inv_ranges:
+            records = parser.parse_inventory_records_199(f, r_start, max_records=10)
+            for rec in records:
+                # print(rec)
+                self.assertIsInstance(rec, InventoryRecord199)
+                self.assertTrue(len(rec.model_code) >= 3)
+                self.assertTrue(len(rec.part_code) > 0)
+
+    def validate_182(self, f: BufferedReader, ranges: list[Any]):
+        rel_ranges = [r for r in ranges if r[3] == 'multilingual_part_182']
+        self.assertGreater(len(rel_ranges), 0, "No 182-byte Multilingual blocks found")
+
+        print(f"Found {len(rel_ranges)} blocks (covering {sum(r[2] for r in rel_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in rel_ranges:
+            records = parser.parse_multilingual_part_records_182(f, r_start, max_records=10)
+            for rec in records:
+                # print(f"0x{rec.offset:08X}", rec)
+                self.assertIsInstance(rec, MultilingualPartRecord182)
+                self.assertTrue(len(rec.model_code) >= 3)
+                self.assertTrue(len(rec.part_code) > 0)
+
+    def validate_figure_index_22(self, f: BufferedReader, ranges: list[Any]):
+        idx_ranges = [r for r in ranges if r[3] == 'figure_index_22']
+        self.assertGreater(len(idx_ranges), 0, "No Figure Index blocks found")
+
+        print(f"Found {len(idx_ranges)} Figure Index blocks (covering {sum(r[2] for r in idx_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in idx_ranges:
+            records = parser.parse_figure_index_records_22(f, r_start, max_records=10)
+            # print(r_start)
+            for rec in records:
+                # print(f"0x{rec.offset:08X}", rec)
+                self.assertIsInstance(rec, FigureIndexRecord22)
+                self.assertTrue(len(rec.model_code) >= 3)
+                self.assertTrue(len(rec.figure) > 0)
+
+    def validate_21(self, f: BufferedReader, ranges: list[Any]):
+        mapping_ranges = [r for r in ranges if r[3] == PartIndex21.ID]
+        self.assertGreater(len(mapping_ranges), 0, "No PartIndex21 blocks found")
+
+        print(
+            f"Found {len(mapping_ranges)} PartIndex21 blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in mapping_ranges:
+            records = parser.parse_part_index_records_21(f, r_start)
+            for rec in records:
+                self.assertIsInstance(rec, PartIndex21)
+                self.assertTrue(len(rec.part_number) >= 3)
+
+    def validate_34(self, f: BufferedReader, ranges: list[Any]):
+        mapping_ranges = [r for r in ranges if r[3] == PartRangeIndex34.ID]
+        self.assertGreater(len(mapping_ranges), 0, "No PartRangeIndex34 blocks found")
+
+        print(
+            f"Found {len(mapping_ranges)} PartRangeIndex34 blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in mapping_ranges:
+            records = parser.parse_part_index_records_34(f, r_start)
+            for rec in records:
+                self.assertIsInstance(rec, PartRangeIndex34)
+                self.assertTrue(len(rec.part_number_from) >= 3)
+                self.assertTrue(len(rec.part_number_to) >= 3)
+
+    def validate_spec_map_22(self, f: BufferedReader, ranges: list[Any]):
+        mapping_ranges = [r for r in ranges if r[3] == 'spec_mapping_22']
+        self.assertGreater(len(mapping_ranges), 0, "No Spec Mapping blocks found")
+
+        print(
+            f"Found {len(mapping_ranges)} Spec Mapping blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in mapping_ranges:
+            records = parser.parse_spec_mapping_records_22(f, r_start, max_records=10)
+            for rec in records:
+                # print(f"0x{rec.offset:08X}", rec)
+                self.assertIsInstance(rec, SpecMappingRecord22)
+                self.assertTrue(len(rec.model_code) >= 3)
+                self.assertTrue(len(rec.option_code) > 0)
+
+    def validate_33(self, f: BufferedReader, ranges: list[Any]):
+        code_index_ranges = [r for r in ranges if r[3] == 'code_index_record_33']
+
+        print(f"Found {len(code_index_ranges)} code_index_record_33 block ranges")
+        total_blocks = sum(r[2] for r in code_index_ranges)
+        print(f"Total blocks: {total_blocks}")
+
+        self.assertGreater(len(code_index_ranges), 0, "Should find at least one code_index_record_33 range")
+
+        # Step 2: Parse all records from these blocks
+        all_records = []
+        size_variant_patterns = {}  # Analyze size_variant field content
+        code_length_distribution = {}  # Track code lengths
+
+        for start, end, count, block_type in code_index_ranges:
+            f.seek(start)
+            # Parse all records in this range
+            for block_idx in range(count):
+                block_offset = start + (block_idx * 2048)
+                f.seek(block_offset)
+                block_data = f.read(2048)
+
+                # Parse records in this block (2048 // 33 = 62 records max)
+                for rec_idx in range(62):
+                    rec_offset = rec_idx * 33
+                    if rec_offset + 33 > len(block_data):
+                        break
+
+                    rec_data = block_data[rec_offset:rec_offset + 33]
+
+                    # Check if valid (starts with model code)
+                    if not is_valid_model_code(rec_data[0:6]):
+                        break  # End of valid records in this block
+
+                    record = CodeIndexRecord33.parse_33(rec_data, block_offset + rec_offset)
+                    all_records.append(record)
+
+                    # Analyze size_variant field
+                    size_variant_stripped = record.size_variant.strip()
+                    if size_variant_stripped:  # Non-empty after stripping
+                        size_variant_patterns[size_variant_stripped] = \
+                            size_variant_patterns.get(size_variant_stripped, 0) + 1
+
+                    # Track code length distribution
+                    code_len = len(record.code)
+                    code_length_distribution[code_len] = code_length_distribution.get(code_len, 0) + 1
+
+        print(f"\nTotal records parsed: {len(all_records)}")
+
+        # Print code length distribution
+        print(f"\nPart code length distribution:")
+        for length, count in sorted(code_length_distribution.items()):
+            pct = (count / len(all_records)) * 100
+            print(f"  {length} chars: {count:6d} occurrences ({pct:5.2f}%)")
+
+        # Print size_variant patterns (top 30)
+        print(f"\nSize/Variant field patterns (top 30 by frequency):")
+        sorted_patterns = sorted(size_variant_patterns.items(), key=lambda x: x[1], reverse=True)
+        for pattern, count in sorted_patterns[:30]:
+            pct = (count / len(all_records)) * 100
+            print(f"  '{pattern}': {count:6d} occurrences ({pct:5.2f}%)")
+
+        # Show sample records with interesting size_variant values
+        print(f"\nSample records with non-empty size_variant (first 15):")
+        samples_shown = 0
+        for rec in all_records:
+            if rec.size_variant.strip() and samples_shown < 15:
+                cat_char = chr(rec.category) if 32 <= rec.category <= 126 else f'0x{rec.category:02X}'
+                print(f"  {samples_shown + 1}. Offset 0x{rec.offset:08X}")
+                print(f"     Model: {rec.model_code}, Category: {cat_char}")
+                print(f"     Part Code: '{rec.code}' (len={len(rec.code)})")
+                print(f"     Size/Variant: '{rec.size_variant.strip()}'")
+                samples_shown += 1
+
+        # Assertions
+        self.assertGreater(len(all_records), 0, "Should parse at least one record")
+
+        # Validate structure:
+        # 1. Part codes should be <= 7 characters
+        max_code_len = max(len(r.code) for r in all_records)
+        print(f"\nMax part code length: {max_code_len} chars")
+        self.assertLessEqual(max_code_len, 7, "Part codes should be <= 7 characters")
+
+        # 2. Size/variant field should have content in most records
+        non_empty_size_variant = sum(1 for r in all_records if r.size_variant.strip())
+        non_empty_ratio = non_empty_size_variant / len(all_records)
+        print(f"Size/variant field has content: {non_empty_ratio * 100:.1f}% of records")
+        self.assertGreater(non_empty_ratio, 0.90, "Expected >90% of records to have size/variant data")
+
+        print("\n=== CodeIndexRecord33 structure validated successfully ===")
+
     def test_scan_matches_vin_scan(self):
         """Verify VIN block ranges match scan_vin_blocks_2kb()"""
         if not self.has_us2:
@@ -1533,95 +1696,7 @@ class TestBlockTypeScan(unittest.TestCase):
         self.assertGreater(ratio, 0.95)
         self.assertLess(ratio, 1.05)
 
-    def test_validate_all_fig_group_category_blocks183(self):
-        """Validate all fig_group_category_184 blocks in the file"""
-        print("\n=== Validating FIG Group Category Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_183']
-            self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
-
-            print(
-                f"Found {len(fig_ranges)} FIG group category blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
-
-            validated_codes = set()
-
-            for r_start, r_len, num_blocks, block_type in fig_ranges:
-                # Parse all records in this range
-                print(r_start)
-                records = parser.parse_fig_illustration_records_183(f, r_start)
-                for r in records:
-                    print(r)
-
-    def test_validate_all_fig_illustration_page_blocks89(self):
-        """Validate all fig_illustration_page_89 blocks in the file"""
-        print("\n=== Validating FIG Illustration Page Padding ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            fig_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
-            self.assertGreater(len(fig_ranges), 0, "No FIG illustration page blocks found")
-
-            print(
-                f"Found {len(fig_ranges)} FIG illustration page blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in fig_ranges:
-                records = parser.parse_fig_illustration_page_records_89(f, r_start)
-                for rec in records:
-                    print(rec)
-                    pad1 = rec.raw_data[9:11]
-                    # Verify that padding is constant/empty (spaces or zeros)
-                    self.assertTrue(pad1 in (b'  ', b'\x00\x00'),
-                                    f"Field 1 padding at offset 0x{rec.offset + 9:08X} is not empty: {pad1.hex()}")
-
-        print("Successfully validated all 89-byte FIG Illustration Page padding fields.")
-
-    def test_validate_all_part_group_blocks185(self):
-        """Validate all part_group_185 blocks in the file"""
-        print("\n=== Validating Part Group Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            group_ranges = [r for r in ranges if r[3] == 'part_group_185']
-            self.assertGreater(len(group_ranges), 0, "No Part Group blocks found")
-
-            print(f"Found {len(group_ranges)} Part Group blocks (covering {sum(r[2] for r in group_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in group_ranges:
-                print(r_start)
-                records = parser.parse_part_group_records_185(f, r_start)
-                for rec in records:
-                    print(rec)
-
-        print("Successfully parsed all 185-byte Part Group records.")
-
-    def test_validate_all_engine_spec_blocks230(self):
-        """Validate all engine_spec_230 blocks in the file"""
-        print("\n=== Validating Engine Spec Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
-            self.assertGreater(len(spec_ranges), 0, "No Engine Spec blocks found")
-
-            print(f"Found {len(spec_ranges)} Engine Spec blocks (covering {sum(r[2] for r in spec_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in spec_ranges:
-                print(r_start)
-                records = parser.parse_engine_spec_records_230(f, r_start)
-                for rec in records:
-                    print(rec)
-
-        print("Successfully parsed all 230-byte Engine Spec records.")
-
-    def test_validate_all_fig_group_category_blocks(self):
-        """Validate all fig_group_category_184 blocks in the file"""
-
+    def validate_184(self, f, ranges):
         expected_categories = {
             '0A': ['ENGINE MAIN'],
             '0B': ['ENGINE AUXILIARIES'],
@@ -1642,46 +1717,41 @@ class TestBlockTypeScan(unittest.TestCase):
             '9B': ['ACCESSORIES (INTERIOR)']
         }
 
-        print("\n=== Validating FIG Group Category Blocks ===")
+        fig_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
+        self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
 
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
+        print(
+            f"Found {len(fig_ranges)} FIG group category blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
 
-            fig_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
-            self.assertGreater(len(fig_ranges), 0, "No FIG group category blocks found")
+        validated_codes = set()
 
-            print(
-                f"Found {len(fig_ranges)} FIG group category blocks (covering {sum(r[2] for r in fig_ranges)} blocks)")
+        for r_start, r_len, num_blocks, block_type in fig_ranges:
+            # Parse all records in this range
+            records = parser.parse_fig_group_category_records_184(f, r_start)
 
-            validated_codes = set()
+            for rec in records:
+                code = rec.fig_group_code
+                desc_en = rec.desc_en
 
-            for r_start, r_len, num_blocks, block_type in fig_ranges:
-                # Parse all records in this range
-                records = parser.parse_fig_group_category_records_184(f, r_start)
+                if code in expected_categories:
+                    expected_descs = expected_categories[code]
+                    # Check if expected description is contained in the record's description
+                    # (allowing for minor padding or case differences if any)
+                    self.assertTrue(desc_en in expected_descs,
+                                    f"Mismatch for code {code} at 0x{rec.offset:08X}: "
+                                    f"Expected '{desc_en}' in '{expected_descs}'")
+                    validated_codes.add(code)
+                else:
+                    # If we find a new code, we should at least note it
+                    print(f"Found unknown FIG group code: {code} ('{desc_en}') at 0x{rec.offset:08X}")
 
-                for rec in records:
-                    code = rec.fig_group_code
-                    desc_en = rec.desc_en
+        print(f"Validated {len(validated_codes)} unique FIG group codes: {sorted(list(validated_codes))}")
 
-                    if code in expected_categories:
-                        expected_descs = expected_categories[code]
-                        # Check if expected description is contained in the record's description
-                        # (allowing for minor padding or case differences if any)
-                        self.assertTrue(desc_en in expected_descs,
-                                        f"Mismatch for code {code} at 0x{rec.offset:08X}: "
-                                        f"Expected '{desc_en}' in '{expected_descs}'")
-                        validated_codes.add(code)
-                    else:
-                        # If we find a new code, we should at least note it
-                        print(f"Found unknown FIG group code: {code} ('{desc_en}') at 0x{rec.offset:08X}")
-
-            print(f"Validated {len(validated_codes)} unique FIG group codes: {sorted(list(validated_codes))}")
-
-            # Ensure we found most of the core categories
-            # Some versions might not have all, but they should have at least the engine ones
-            self.assertIn('0A', validated_codes)
-            self.assertIn('5A', validated_codes)
-            self.assertGreater(len(validated_codes), 10)
+        # Ensure we found most of the core categories
+        # Some versions might not have all, but they should have at least the engine ones
+        self.assertIn('0A', validated_codes)
+        self.assertIn('5A', validated_codes)
+        self.assertGreater(len(validated_codes), 10)
 
 
 class TestVariantGlossaryRecords81(unittest.TestCase):
@@ -1724,28 +1794,6 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
         block_type = parser.detect_block_type(data, offset=0x0E6E9000)
         self.assertEqual(block_type, 'variant_glossary_81')
 
-    def test_validate_all_variant_glossary_blocks81(self):
-        """Validate all variant_glossary_81 blocks in the file"""
-        print("\n=== Validating Variant Glossary Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            glossary_ranges = [r for r in ranges if r[3] == 'variant_glossary_81']
-            self.assertGreater(len(glossary_ranges), 0, "No Variant Glossary blocks found")
-
-            print(
-                f"Found {len(glossary_ranges)} Variant Glossary blocks (covering {sum(r[2] for r in glossary_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in glossary_ranges:
-                records = parser.parse_variant_glossary_records_81(f, r_start)
-                for rec in records:
-                    print(rec)
-                    self.assertIsInstance(rec, VariantGlossaryRecord81)
-                    # Use a smaller count for validation to avoid huge logs if many records
-                    # but check at least some properties
-                    self.assertTrue(len(rec.model_code) >= 3)
-
 
 class TestInventoryRecord199(unittest.TestCase):
     """Tests for 199-byte inventory records (NEW)"""
@@ -1786,29 +1834,6 @@ class TestInventoryRecord199(unittest.TestCase):
 
         block_type = parser.detect_block_type(data, offset=0x0E147000)
         self.assertEqual(block_type, 'inventory_199')
-
-    def test_validate_all_inventory_blocks199(self):
-        """Validate inventory_199 blocks in SFCDUS2"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
-        print("\n=== Validating Inventory Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            inv_ranges = [r for r in ranges if r[3] == 'inventory_199']
-            self.assertGreater(len(inv_ranges), 0, "No Inventory blocks found")
-
-            print(f"Found {len(inv_ranges)} Inventory blocks (covering {sum(r[2] for r in inv_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in inv_ranges:
-                records = parser.parse_inventory_records_199(f, r_start, max_records=10)
-                for rec in records:
-                    print(rec)
-                    self.assertIsInstance(rec, InventoryRecord199)
-                    self.assertTrue(len(rec.model_code) >= 3)
-                    self.assertTrue(len(rec.part_code) > 0)
 
 
 class TestMultilingualPartRecords182(unittest.TestCase):
@@ -1851,29 +1876,6 @@ class TestMultilingualPartRecords182(unittest.TestCase):
         block_type = parser.detect_block_type(data, offset=0x0E73B000)
         self.assertEqual(block_type, 'multilingual_part_182')
 
-    def test_validate_all_multilingual_part_blocks182(self):
-        """Validate multilingual_part_182 blocks in SFCDUS2"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
-        print("\n=== Validating 182-byte Multilingual Part Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            rel_ranges = [r for r in ranges if r[3] == 'multilingual_part_182']
-            self.assertGreater(len(rel_ranges), 0, "No 182-byte Multilingual blocks found")
-
-            print(f"Found {len(rel_ranges)} blocks (covering {sum(r[2] for r in rel_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in rel_ranges:
-                records = parser.parse_multilingual_part_records_182(f, r_start, max_records=10)
-                for rec in records:
-                    print(f"0x{rec.offset:08X}", rec)
-                    self.assertIsInstance(rec, MultilingualPartRecord182)
-                    self.assertTrue(len(rec.model_code) >= 3)
-                    self.assertTrue(len(rec.part_code) > 0)
-
 
 class TestFigureIndexRecords22(unittest.TestCase):
     """Tests for 22-byte figure index records (NEW)"""
@@ -1894,30 +1896,6 @@ class TestFigureIndexRecords22(unittest.TestCase):
 
         block_type = parser.detect_block_type(data, offset=0x0E75D800)
         self.assertEqual(block_type, 'figure_index_22')
-
-    def test_validate_all_figure_index_blocks22(self):
-        """Validate figure_index_22 blocks in SFCDUS2"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
-        print("\n=== Validating Figure Index Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            idx_ranges = [r for r in ranges if r[3] == 'figure_index_22']
-            self.assertGreater(len(idx_ranges), 0, "No Figure Index blocks found")
-
-            print(f"Found {len(idx_ranges)} Figure Index blocks (covering {sum(r[2] for r in idx_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in idx_ranges:
-                records = parser.parse_figure_index_records_22(f, r_start, max_records=10)
-                print(r_start)
-                for rec in records:
-                    print(f"0x{rec.offset:08X}", rec)
-                    self.assertIsInstance(rec, FigureIndexRecord22)
-                    self.assertTrue(len(rec.model_code) >= 3)
-                    self.assertTrue(len(rec.figure) > 0)
 
 
 class TestSpecMappingRecords22(unittest.TestCase):
@@ -1948,30 +1926,6 @@ class TestSpecMappingRecords22(unittest.TestCase):
 
         block_type = parser.detect_block_type(data, offset=0x15C85000)
         self.assertEqual(block_type, 'spec_mapping_22')
-
-    def test_validate_all_spec_mapping_blocks22(self):
-        """Validate spec_mapping_22 blocks in SFCDUS2"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
-
-        print("\n=== Validating Spec Mapping Blocks ===")
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            ranges = parser.scan_block_types(f)
-
-            mapping_ranges = [r for r in ranges if r[3] == 'spec_mapping_22']
-            self.assertGreater(len(mapping_ranges), 0, "No Spec Mapping blocks found")
-
-            print(
-                f"Found {len(mapping_ranges)} Spec Mapping blocks (covering {sum(r[2] for r in mapping_ranges)} blocks)")
-
-            for r_start, r_len, num_blocks, block_type in mapping_ranges:
-                records = parser.parse_spec_mapping_records_22(f, r_start, max_records=10)
-                for rec in records:
-                    print(f"0x{rec.offset:08X}", rec)
-                    self.assertIsInstance(rec, SpecMappingRecord22)
-                    self.assertTrue(len(rec.model_code) >= 3)
-                    self.assertTrue(len(rec.option_code) > 0)
 
 
 if __name__ == '__main__':
