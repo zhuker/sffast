@@ -803,6 +803,48 @@ ES:     PÉNDOLA MOTOR, DELANTERA
 
 **Note:** Name fields include leading digit prefix (e.g., "1FUEL HOSE", "2HANGER COMPLETE-ENGINE").
 
+### Model Year Version Records (44-byte Type) - **VALIDATED ✓**
+
+**Record size:** 44 bytes
+**Encoding:** CP437
+
+One block per model code (10 blocks in SFCDUS2). Maps version letters to production date ranges and model year labels. Used to define the catalog versions available for each model series.
+
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `G11   `, `B11   ` |
+| 0x06 | 1 | Version Letter | Sequential A,B,C... (skips I) |
+| 0x07 | 8 | Date From | Production start `YYYYMMDD` |
+| 0x0F | 8 | Date To | Production end `YYYYMMDD` |
+| 0x17 | 20 | Model Year Label | e.g. `'02MY`, `'08MY(C5:'09MY INC)` |
+| 0x2B | 1 | Version Letter | Repeated (validated: always matches byte 6) |
+
+**Block locations in SFCDUS2:**
+
+| Offset | Model | Versions | Years |
+|--------|-------|----------|-------|
+| 0x0E73A800 | B11 | A-E | '95MY-'99MY |
+| 0x1085E000 | B12 | A-G | '00MY-'06MY |
+| 0x13055800 | B13 | A-E | '05MY-'09MY |
+| 0x13C87800 | C12 | C-F | '94MY-'97MY |
+| 0x15C59800 | G10 | A-J | '93MY-'01MY |
+| 0x17B7A800 | G11 | A-F | '02MY-'07MY |
+| 0x18BDA800 | S10 | A-E | '98MY-'02MY |
+| 0x1A823000 | S11 | A-F | '03MY-'08MY |
+| 0x1C686800 | S12 | A-E | '09MY-'13MY |
+| 0x1E5B4000 | W10 | A-J | '06MY-'14MY |
+
+**Notes:**
+- 46 records per 2KB block (2024 bytes) + 24 bytes padding
+- `******...` (0x2A fill) marks end of valid records, rest is zero-padded
+- Version letters are sequential A-Z but skip I (e.g. G10 goes A..H,J)
+- Date ranges overlap between consecutive versions (production overlap between model years)
+- C12 starts at version C (earlier versions may exist in SFCDUS1)
+
+**Validation Status:** ✓ 61 records across 10 blocks. Version letter at byte 43 matches byte 6 in all records.
+
 ### Part Number Index Records (21-byte Type) (0x1E5DE800+) - **NEW**
 
 **Record size:** 21 bytes

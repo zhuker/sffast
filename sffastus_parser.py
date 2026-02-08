@@ -796,6 +796,23 @@ class SffastusBlockParser:
     def is_part_num(self, partnum: bytes) -> bool:
         return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
 
+    def is_model_year_block_44(self, data: bytes) -> bool:
+        if len(data) < 44:
+            return False
+        try:
+            if not is_valid_model_code(data[0:6]):
+                return False
+            ver = data[6]
+            if not (0x41 <= ver <= 0x5A):  # A-Z
+                return False
+            d1 = data[7:15].decode(CHARSET, errors='replace')
+            d2 = data[15:23].decode(CHARSET, errors='replace')
+            if not (d1.isdigit() and d2.isdigit()):
+                return False
+            return True
+        except:
+            return False
+
     def is_part_index_block_21(self, data: bytes) -> bool:
         if len(data) < 21 * 2: # cant distinguish from is_part_index_block_34 if size is less than 2*21
             return False
@@ -1464,6 +1481,40 @@ class SffastusBlockParser:
                 break
 
             record = EngineSpecRecord230.parse_230(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+    def parse_model_year_records_44(self, f, start_offset, max_records=None, verbose=False):
+        RECORD_SIZE = 44
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # End marker: all 0x2A or all zeros
+            if all(b == 0x2a for b in data) or all(b == 0 for b in data):
+                break
+
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = ModelYearRecord44.parse_44(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -2426,6 +2477,9 @@ class SffastusBlockParser:
         if self.is_itca_251(data):
             return ItcaRecord.ID
 
+        if self.is_model_year_block_44(data):
+            return ModelYearRecord44.ID
+
         # 5. Body model block - 17-byte records with 7-char body code + model code
         # Body codes are 7 alphanumeric chars like "BD6AY1G"
         try:
@@ -2925,6 +2979,46 @@ class VariantGlossaryRecord81:
             model_code=clean(data[0:6]),
             variant_code=clean(data[6:21]),
             description=clean(data[21:81]),
+        )
+
+
+@dataclass
+class ModelYearRecord44:
+    """Represents a 44-byte model year version record from sffastus
+
+    One block per model code (10 blocks in SFCDUS2).
+    Maps version letters to production date ranges and model year labels.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "G11   ")
+        0x06 (1):  Version Letter (A,B,C... skips I)
+        0x07 (8):  Date From (YYYYMMDD)
+        0x0F (8):  Date To (YYYYMMDD)
+        0x17 (20): Model Year Label (e.g., "'02MY")
+        0x2B (1):  Version Letter (repeated)
+    """
+    ID = 'model_year_44'
+    offset: int
+    model_code: str
+    version: str
+    date_from: str
+    date_to: str
+    label: str
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_44(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace')
+
+        return ModelYearRecord44(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            version=clean(data[6:7]),
+            date_from=clean(data[7:15]),
+            date_to=clean(data[15:23]),
+            label=clean(data[23:43]).strip(),
         )
 
 
