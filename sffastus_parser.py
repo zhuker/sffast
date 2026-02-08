@@ -807,10 +807,11 @@ class SffastusBlockParser:
         return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[21:21+15].decode(CHARSET, errors='replace').strip())
 
     def is_part_index_block_34(self, data: bytes) -> bool:
-        if len(data) < 34:
+        if len(data) < 34 * 2:
             return False
         assert self.parts_catalog is not None
-        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[15:30].decode(CHARSET, errors='replace').strip())
+        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[15:30].decode(CHARSET, errors='replace').strip()) \
+                and self.is_vin_code(data[34:34+15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[34+15:34+15+15].decode(CHARSET, errors='replace').strip())
 
 
     def is_figure_index_block_22(self, data: bytes) -> bool:
@@ -1487,7 +1488,7 @@ class SffastusBlockParser:
                 break
 
             # Check if valid record
-            if not self.is_part_index_block_34(data):
+            if not self.is_vin_code(data[0:15].decode(CHARSET, errors="ignore").strip()):
                 break
 
             record = PartRangeIndex34.parse_34(data, offset)
@@ -1518,7 +1519,7 @@ class SffastusBlockParser:
                 break
 
             # Check if valid record
-            if not self.is_vin_code(data[0:15].decode("cp437", errors="replace")):
+            if not self.is_vin_code(data[0:15].decode(CHARSET, errors="replace")):
                 break
 
             record = PartIndex21.parse_21(data, offset)
