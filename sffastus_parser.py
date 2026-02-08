@@ -1797,7 +1797,7 @@ class ItcaPartsCatalog:
     def __init__(self, records: List[ItcaRecord]):
         self.records = records
         self._build_indexes()
-    
+
     def _build_indexes(self):
         self.primary_index = {r.part_number: r for r in self.records}
         # For supersedes, multiple parts might supersede to the same one
@@ -1805,7 +1805,7 @@ class ItcaPartsCatalog:
         for r in self.records:
             if r.supersedes_to and r.supersedes_to.strip():
                 self.supersedes_index[r.supersedes_to.strip()].append(r)
-    
+
     def lookup(self, part_number: str) -> List[ItcaRecord]:
         """Lookup record by current part number or supersedes-to part number."""
         part_number = part_number.strip()
@@ -1815,6 +1815,32 @@ class ItcaPartsCatalog:
         if part_number in self.supersedes_index:
             results.extend(self.supersedes_index[part_number])
         return results
+
+
+@dataclass
+class FigNameRecord:
+    """Represents a figure name record from figname.txt
+
+    Location: SFCDUS*/sffastpg/win/figname.txt
+    Format: Fixed-width ASCII, 44 bytes per line
+
+    Structure:
+        0x00 (3):  Figure Code (e.g., "001", "040")
+        0x03 (41): Description (e.g., "ENGINE ASSEMBLY")
+    """
+    figure_code: str
+    description: str
+
+    @staticmethod
+    def parse(line: str):
+        """Parse a single line from figname.txt"""
+        if len(line) < 3:
+            raise ValueError(f"Line too short: {len(line)} bytes")
+
+        return FigNameRecord(
+            figure_code=line[0:3].strip(),
+            description=line[3:].strip()
+        )
 
 
 def is_multilingual_part_block_180(data: bytes) -> bool:
@@ -2982,6 +3008,43 @@ def parse_itca_data(file_path: str) -> List[ItcaRecord]:
             except Exception as e:
                 print(f"Error parsing line {line_num}: {e}")
                 
+    return records
+
+
+def parse_figname_txt(file_path: str) -> List[FigNameRecord]:
+    """Parse FIGNAME.TXT and return a list of FigNameRecord objects.
+
+    Args:
+        file_path: Path to figname.txt file
+
+    Returns:
+        List of FigNameRecord objects
+
+    File format:
+        - Fixed-width ASCII, 44 bytes per line
+        - 3-char figure code + 41-char description
+        - No delimiters, direct concatenation
+        - Each line is exactly 44 characters
+    """
+    records = []
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return records
+
+    with open(file_path, 'r', encoding='ascii', errors='replace') as f:
+        for line_num, line in enumerate(f, 1):
+            # Remove trailing newline/whitespace but preserve internal spacing
+            line = line.rstrip('\r\n')
+
+            if len(line) < 3:
+                continue
+
+            try:
+                record = FigNameRecord.parse(line)
+                records.append(record)
+            except Exception as e:
+                print(f"Error parsing line {line_num}: {e}")
+
     return records
 
 
