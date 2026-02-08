@@ -470,6 +470,36 @@ Offset  Size  Field               Description
 
 **Validation:** Index numbers and labels match the illustrations documented in the 183-byte records.
 
+### Part Group Records (185-byte Type) (0x0DFD3000+) - **NEW**
+
+**Record size:** 185 bytes
+**Encoding:** CP437
+
+Contains descriptive names for part groups (e.g., "ENGINE ASSEMBLY", "GASKET AND SEAL KIT"). These records provide the text for the group-level navigation in the catalog.
+Located in blocks around `0x0DFD3000`.
+
+**Structure:**
+```
+Offset  Size  Field               Description
+------  ----  -----               -----------
+0x00    6     Model Code          "B11", "G11", etc.
+0x06    3     Figure              FIG index (e.g., "001")
+0x09    4     Figure Page         Section/Page within figure (e.g., "01  ")
+0x0D    8     Part Code           Base part code (e.g., "0110100 ")
+0x15    40    Description (EN)    Multilingual English label
+0x3D    40    Description (DE)    German label
+0x65    40    Description (FR)    French label
+0x8D    40    Description (ES)    Spanish label
+0xB5    4     Trailer/Metadata    Binary metadata
+```
+
+**Notes:**
+- Each multilingual field (EN, DE, FR, ES) is exactly 40 bytes.
+- The first 12 bytes of the EN field often contain a part base code or reference (e.g., "  0110100   ").
+- In other languages, the first 12 bytes are typically spaces, though they may overflow from long descriptions.
+
+**Validation:** Index numbers and labels match the high-level category navigation in the FAST 2 application.
+
 ### Engine Spec Records (230-byte Type) (0x0DFB1000+) - **NEW**
 
 **Record size:** 230 bytes

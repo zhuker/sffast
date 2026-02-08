@@ -27,6 +27,7 @@ from sffastus_parser import (
     parse_fig_illustration_records_183,
     parse_fig_illustration_page_records_89,
     parse_engine_spec_records_230,
+    parse_part_group_records_185,
     analyze_vin_blocks,
     scan_vin_blocks_2kb,
     analyze_vin_blocks_2kb,
@@ -46,6 +47,7 @@ from sffastus_parser import (
     is_fig_illustration_block_183,
     is_fig_illustration_page_block_89,
     is_engine_spec_block_230,
+    is_part_group_block_185,
     detect_block_type,
     detect_vin_record_type,
     scan_block_types,
@@ -68,6 +70,7 @@ from sffastus_parser import (
     FIGIllustrationRecord183,
     FIGIllustrationPage89,
     EngineSpecRecord230,
+    PartGroupRecord185,
 )
 
 # Test data paths
@@ -1139,6 +1142,44 @@ class TestEngineSpecRecords230(unittest.TestCase):
             print(f"Record {i}: Fig={r.figure} Page={r.figure_page} Model='{r.applicable_model}' Period={r.start_date}-{r.end_date}")
 
 
+class TestPartGroupRecords185(unittest.TestCase):
+    """Tests for 185-byte Part Group records (NEW)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
+
+    def test_detect_part_group_block_185(self):
+        """Test detect_block_type identifies part_group_185"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x0DFD3000)
+            data = f.read(2048)
+
+        block_type = detect_block_type(data, offset=0x0DFD3000)
+        self.assertEqual(block_type, 'part_group_185')
+
+    def test_parse_part_group_records_185_us2(self):
+        """Parse 185-byte Part Group records from 0x0DFD3000 in SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = parse_part_group_records_185(f, start_offset=0x0DFD3000, max_records=10)
+
+        self.assertEqual(len(records), 10)
+        self.assertEqual(records[0].model_code, 'B11')
+        self.assertEqual(records[0].figure, '001')
+        self.assertIsInstance(records[0], PartGroupRecord185)
+        self.assertIn('ENGINE ASSEMBLY', records[0].desc_en)
+        
+        # Print for inspection
+        for i, r in enumerate(records[:5]):
+            print(f"Record {i}: Fig={r.figure} Page={r.figure_page} PartCode='{r.part_code}' EN='{r.desc_en}'")
+
+
 class TestCodeIndexRecords33(unittest.TestCase):
     """Tests for 33-byte code index records (NEW)"""
 
@@ -1540,6 +1581,28 @@ class TestBlockTypeScan(unittest.TestCase):
                                     f"Field 1 padding at offset 0x{rec.offset+9:08X} is not empty: {pad1.hex()}")
 
         print("Successfully validated all 89-byte FIG Illustration Page padding fields.")
+
+
+
+    def test_validate_all_part_group_blocks185(self):
+        """Validate all part_group_185 blocks in the file"""
+        print("\n=== Validating Part Group Blocks ===")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = scan_block_types(f)
+
+            group_ranges = [r for r in ranges if r[3] == 'part_group_185']
+            self.assertGreater(len(group_ranges), 0, "No Part Group blocks found")
+
+            print(f"Found {len(group_ranges)} Part Group blocks (covering {sum(r[2] for r in group_ranges)} blocks)")
+
+            for r_start, r_len, num_blocks, block_type in group_ranges:
+                print(r_start)
+                records = parse_part_group_records_185(f, r_start)
+                for rec in records:
+                    print(rec)
+
+        print("Successfully parsed all 185-byte Part Group records.")
 
 
     def test_validate_all_engine_spec_blocks230(self):

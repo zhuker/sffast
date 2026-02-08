@@ -846,6 +846,88 @@ class FIGIllustrationPage89:
         )
 
 
+@dataclass
+class PartGroupRecord185:
+    """Represents a 185-byte part group description record from sffastus
+
+    Located at 0x0DFD3000+
+    Encoding: CP437
+
+    Contains descriptive names for part groups.
+
+    Structure:
+        0x00 (6):  Model Code (e.g., "B11   ")
+        0x06 (3):  Group Index (e.g., "001")
+        0x09 (40): Description (EN) - 12B code + 28B English label
+        0x31 (40): Description (DE)
+        0x59 (40): Description (FR)
+        0x81 (40): Description (ES)
+        0xA9 (16): Trailer/Metadata
+    """
+    offset: int
+    model_code: str
+    figure: str
+    figure_page: str
+    part_code: str
+    desc_en: str
+    desc_de: str
+    desc_fr: str
+    desc_es: str
+    trailer: bytes
+    raw_data: bytes
+
+    @staticmethod
+    def parse_185(data: bytes, offset: int = 0):
+        """Parse a 185-byte part group description record."""
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return PartGroupRecord185(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            figure=clean(data[6:9]),
+            figure_page=clean(data[9:13]),
+            part_code=clean(data[13:9+12]),
+            desc_en=clean(data[9+12:49+12]),
+            desc_de=clean(data[49+12:89+12]),
+            desc_fr=clean(data[89+12:129+12]),
+            desc_es=clean(data[129+12:169+12]),
+            trailer=data[169+12:185],
+        )
+
+
+def is_part_group_block_185(data: bytes) -> bool:
+    """
+    Check if data looks like a 185-byte part group block.
+
+    Detection heuristics:
+    - Consistent model codes every 185 bytes.
+    - Sequential numeric patterns in group_index.
+    """
+    if len(data) < 185:
+        return False
+
+    try:
+        # Check first record model code
+        if not is_valid_model_code(data[0:6]):
+            return False
+            
+        # Check group index is numeric
+        idx = data[6:9].decode(CHARSET, errors='replace').strip()
+        if idx and not idx.isdigit():
+            return False
+
+        # If we have at least 2 records, check the second one too
+        if len(data) >= 185*2:
+            if not is_valid_model_code(data[185:185+6]):
+                return False
+
+        return True
+    except:
+        return False
+
+
 def is_fig_illustration_page_block_89(data: bytes) -> bool:
     """
     Check if data looks like an 89-byte FIG illustration page record block.
@@ -1576,9 +1658,9 @@ def parse_color_records_91(f, start_offset, max_records=None, verbose=False):
 
 
 
-def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=False):
+def parse_part_group_records_185(f, start_offset, max_records=None, verbose=False):
     """
-    Parse engine specification records (230 bytes each).
+    Parse part group description records (185 bytes each).
 
     Args:
         f: File handle to sffastus
@@ -1587,9 +1669,9 @@ def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=Fal
         verbose: Print progress
 
     Returns:
-        List of EngineSpecRecord230 objects
+        List of PartGroupRecord185 objects
     """
-    RECORD_SIZE = 230
+    RECORD_SIZE = 185
     records = []
 
     f.seek(start_offset)
@@ -1609,7 +1691,7 @@ def parse_engine_spec_records_230(f, start_offset, max_records=None, verbose=Fal
         if not is_valid_model_code(data[0:6]):
             break
 
-        record = EngineSpecRecord230.parse_230(data, offset)
+        record = PartGroupRecord185.parse_185(data, offset)
         records.append(record)
 
         if verbose and count % 1000 == 0:
@@ -2472,7 +2554,7 @@ def is_valid_model_code(data: bytes) -> bool:
     if len(data) < 6:
         return False
     try:
-        text = data[:6].decode(CHARSET).strip()
+        text = data[:6].decode(CHARSET).rstrip()
         return text in VALID_MODEL_CODES
     except:
         return False
@@ -2568,6 +2650,10 @@ def detect_block_type(data: bytes, offset: int = 0) -> str:
     # 4n. Engine spec block (230-byte) - NEW
     if is_engine_spec_block_230(data):
         return 'engine_spec_230'
+
+    # 4o. Part group block (185-byte) - NEW
+    if is_part_group_block_185(data):
+        return 'part_group_185'
 
     # 5. Body model block - 17-byte records with 7-char body code + model code
     # Body codes are 7 alphanumeric chars like "BD6AY1G"
