@@ -45,7 +45,7 @@ from sffastus_parser import (
     InventoryRecord199,
     MultilingualPartRecord182,
     FigureIndexRecord22,
-    SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog, PartRangeIndex34, PartIndex21,
+    SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog, PartRangeIndex34, PartIndex21, ItcaRecord,
 )
 
 # Test data paths
@@ -1422,6 +1422,26 @@ class TestBlockTypeScan(unittest.TestCase):
             self.validate_33(f, ranges)
             self.validate_34(f, ranges)
             self.validate_21(f, ranges)
+            self.validate_itca_251(f, ranges)
+
+
+    def validate_itca_251(self, f: BufferedReader, ranges: list[Any]):
+        spec_ranges = [r for r in ranges if r[3] == ItcaRecord.ID]
+        self.assertGreater(len(spec_ranges), 0, "No ItcaRecord blocks found")
+
+        print(f"Found {len(spec_ranges)} ItcaRecord blocks (covering {sum(r[2] for r in spec_ranges)} blocks)")
+
+        for r_start, r_len, num_blocks, block_type in spec_ranges:
+            print(r_start, r_len, num_blocks, block_type)
+            for block in range(num_blocks):
+                offset = r_start + block * 2048
+                # print(f"{block} 0x{offset:08X}")
+                records = parser.parse_itca_records_251(f, offset)
+                self.assertTrue(len(records) > 0)
+                # for r in records:
+                #     print(r)
+
+        print("Successfully parsed all 251-byte ItcaRecord records.")
 
     def validate_230(self, f: BufferedReader, ranges: list[Any]):
         spec_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
@@ -1757,10 +1777,6 @@ class TestBlockTypeScan(unittest.TestCase):
 class TestVariantGlossaryRecords81(unittest.TestCase):
     """Tests for 81-byte variant glossary records (NEW)"""
 
-    @classmethod
-    def setUpClass(cls):
-        cls.has_us2 = os.path.exists(SFCDUS2_PATH)
-
     def test_is_variant_glossary_block_81(self):
         """Test detection of 81-byte variant glossary block pattern"""
         # Create a fake 81-byte record
@@ -1783,8 +1799,6 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
 
     def test_detect_variant_glossary_block_81(self):
         """Test detect_block_type identifies variant_glossary_81"""
-        if not self.has_us2:
-            self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
             # Read block at 0x0E6E9000 which contains 81-byte records
@@ -1794,6 +1808,26 @@ class TestVariantGlossaryRecords81(unittest.TestCase):
         block_type = parser.detect_block_type(data, offset=0x0E6E9000)
         self.assertEqual(block_type, 'variant_glossary_81')
 
+
+class TestItca251(unittest.TestCase):
+    def test_detect_itca_251(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E6E9000 which contains 81-byte records
+            offset = 0x1E7AA800
+            f.seek(offset)
+            data = f.read(2048)
+            block_type = parser.detect_block_type(data, offset=offset)
+            self.assertEqual(block_type, ItcaRecord.ID)
+
+    def test_parse_itca_251_2(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Read block at 0x0E6E9000 which contains 81-byte records
+            offset = 511701243
+            f.seek(offset)
+            data = f.read(251)
+            r = ItcaRecord.parse_itca_251(data, offset=offset)
+            print(r)
+            self.assertEqual('01X10 FIG-842(X10)', r.quantity)
 
 class TestInventoryRecord199(unittest.TestCase):
     """Tests for 199-byte inventory records (NEW)"""

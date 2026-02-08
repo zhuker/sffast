@@ -28,10 +28,10 @@ class TestItcaParser(unittest.TestCase):
         self.assertEqual(r0.part_number, "000009513")
         self.assertEqual(r0.itca_code, "2")
         self.assertEqual(r0.supersedes_to, "000093579")
-        self.assertEqual(r0.quantity, 1) # Wait, why 1? Oh, the spec says 2 bytes for Q'ty.
+        self.assertEqual(int(r0.quantity), 1) # Wait, why 1? Oh, the spec says 2 bytes for Q'ty.
         # Line 1: 000009513       2 000093579       01 Y26916  CLUTCH
         # Index 35-37 is "01" (qty)
-        self.assertEqual(r0.quantity, 1)
+        self.assertEqual(int(r0.quantity), 1)
         self.assertEqual(r0.part_code, "Y26916")
         self.assertEqual(r0.description, "CLUTCH")
 

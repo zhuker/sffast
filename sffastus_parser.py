@@ -796,23 +796,28 @@ class SffastusBlockParser:
         except:
             return False
 
-
-    def is_vin_code(self, vinlike) -> bool:
-        return self.parts_catalog.contains(vinlike)
+    def is_part_num(self, partnum: bytes) -> bool:
+        return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
 
     def is_part_index_block_21(self, data: bytes) -> bool:
         if len(data) < 21 * 2: # cant distinguish from is_part_index_block_34 if size is less than 2*21
             return False
         assert self.parts_catalog is not None
-        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[21:21+15].decode(CHARSET, errors='replace').strip())
+        return self.is_part_num(data[0:15]) and self.is_part_num(data[21:21 + 15])
 
     def is_part_index_block_34(self, data: bytes) -> bool:
         if len(data) < 34 * 2:
             return False
         assert self.parts_catalog is not None
-        return self.is_vin_code(data[0:15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[15:30].decode(CHARSET, errors='replace').strip()) \
-                and self.is_vin_code(data[34:34+15].decode(CHARSET, errors='replace').strip()) and self.is_vin_code(data[34+15:34+15+15].decode(CHARSET, errors='replace').strip())
+        return self.is_part_num(data[0:15]) and self.is_part_num(data[15:30]) \
+            and self.is_part_num(data[34:34 + 15]) and self.is_part_num(data[34 + 15:34 + 15 + 15])
 
+    def is_itca_251(self, data: bytes) -> bool:
+        if len(data) < 251 * 2:
+            return False
+        assert self.parts_catalog is not None
+        return self.is_part_num(data[0:15]) and self.is_part_num(data[15:30]) \
+            and self.is_part_num(data[251:251 + 15]) and self.is_part_num(data[251 + 15:251 + 15 + 15])
 
     def is_figure_index_block_22(self, data: bytes) -> bool:
         """
@@ -1488,10 +1493,41 @@ class SffastusBlockParser:
                 break
 
             # Check if valid record
-            if not self.is_vin_code(data[0:15].decode(CHARSET, errors="ignore").strip()):
+            if not self.is_part_num(data[0:15]):
                 break
 
             record = PartRangeIndex34.parse_34(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+    def parse_itca_records_251(self, f, start_offset, max_records=None, verbose=False):
+        RECORD_SIZE = 251
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record
+            if not self.is_part_num(data[0:15]):
+                break
+
+            record = ItcaRecord.parse_itca_251(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -1519,7 +1555,7 @@ class SffastusBlockParser:
                 break
 
             # Check if valid record
-            if not self.is_vin_code(data[0:15].decode(CHARSET, errors="replace")):
+            if not self.is_part_num(data[0:15]):
                 break
 
             record = PartIndex21.parse_21(data, offset)
@@ -2388,6 +2424,9 @@ class SffastusBlockParser:
 
         if self.is_part_index_block_21(data):
             return PartIndex21.ID
+
+        if self.is_itca_251(data):
+            return ItcaRecord.ID
 
         # 5. Body model block - 17-byte records with 7-char body code + model code
         # Body codes are 7 alphanumeric chars like "BD6AY1G"
@@ -3304,6 +3343,7 @@ class MultilingualPartRecord180:
 
 @dataclass
 class ItcaRecord:
+    ID = "itca_251"
     """Represents a record in ITCA_DATA.TXT (Parts Catalog)
     
     Structure (87 bytes/rec):
@@ -3314,12 +3354,50 @@ class ItcaRecord:
         38-45:  Part code
         46-86:  Part name (Description)
     """
+    offset: int
     part_number: str
     itca_code: str
     supersedes_to: str
-    quantity: int
+    quantity: str
     part_code: str
     description: str
+    description_de: str = ""
+    description_fr: str = ""
+    description_sp: str = ""
+    unknown: bytes = None
+    raw_data: bytes = field(default=None, repr=False)
+
+    @staticmethod
+    def parse_itca_251(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        part_number = data[0:15]
+        supersedes_to = data[15:15 + 15]
+        status = data[15 + 15:15 + 15 + 1]
+        desc_en = data[15 + 15 + 1:15 + 15 + 1 + 40]
+        desc_de = data[15 + 15 + 1 + 40:15 + 15 + 1 + 40 + 40]
+        desc_fr = data[15 + 15 + 1 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40]
+        desc_sp = data[15 + 15 + 1 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40]
+        qty = data[15 + 15 + 1 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40]
+        part_code = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40 + 9]
+        unknown = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 42 + 9:]
+        return ItcaRecord(
+            offset=offset,
+            part_number=clean(part_number),
+            itca_code=clean(status),
+            supersedes_to=clean(supersedes_to),
+            quantity=clean(qty),
+            part_code=clean(part_code),
+            description=clean(desc_en),
+            description_de=clean(desc_de),
+            description_fr=clean(desc_fr),
+            description_sp=clean(desc_sp),
+            unknown=unknown,
+            raw_data=data
+        )
+
+
 
 
 class ItcaPartsCatalog:
@@ -3406,11 +3484,12 @@ def parse_itca_data(file_path: str) -> List[ItcaRecord]:
                 itca_code = line[16:17].strip()
                 supersedes_to = line[18:34].strip()
                 qty_str = line[34:36].strip()
-                quantity = int(qty_str) if qty_str.isdigit() else 0
+                quantity = qty_str
                 part_code = line[37:45].strip()
                 description = line[45:85].strip()
                 
                 records.append(ItcaRecord(
+                    offset=0,
                     part_number=part_number,
                     itca_code=itca_code,
                     supersedes_to=supersedes_to,
