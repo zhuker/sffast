@@ -13,6 +13,7 @@ import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import List, Optional
 
 SFFASTUS_PATH = "sffastus"
 
@@ -1771,6 +1772,51 @@ class MultilingualPartRecord180:
     raw_data: bytes
 
 
+@dataclass
+class ItcaRecord:
+    """Represents a record in ITCA_DATA.TXT (Parts Catalog)
+    
+    Structure (87 bytes/rec):
+        0-15:   Part number (Current)
+        17:     ITCA code (Status)
+        19-34:  ITCA part number (Supersedes-to)
+        35-37:  Q'ty
+        38-45:  Part code
+        46-86:  Part name (Description)
+    """
+    part_number: str
+    itca_code: str
+    supersedes_to: str
+    quantity: int
+    part_code: str
+    description: str
+
+
+class ItcaPartsCatalog:
+    """Catalog of ITCA records with lookup capability."""
+    def __init__(self, records: List[ItcaRecord]):
+        self.records = records
+        self._build_indexes()
+    
+    def _build_indexes(self):
+        self.primary_index = {r.part_number: r for r in self.records}
+        # For supersedes, multiple parts might supersede to the same one
+        self.supersedes_index = defaultdict(list)
+        for r in self.records:
+            if r.supersedes_to and r.supersedes_to.strip():
+                self.supersedes_index[r.supersedes_to.strip()].append(r)
+    
+    def lookup(self, part_number: str) -> List[ItcaRecord]:
+        """Lookup record by current part number or supersedes-to part number."""
+        part_number = part_number.strip()
+        results = []
+        if part_number in self.primary_index:
+            results.append(self.primary_index[part_number])
+        if part_number in self.supersedes_index:
+            results.extend(self.supersedes_index[part_number])
+        return results
+
+
 def is_multilingual_part_block_180(data: bytes) -> bool:
     """
     Check if data looks like a 180-byte multilingual part record block.
@@ -2893,6 +2939,49 @@ def parse_vin_model_records(f, start_offset, max_records=None, verbose=False):
 
         count += 1
 
+    return records
+
+
+def parse_itca_data(file_path: str) -> List[ItcaRecord]:
+    """Parse ITCA_DATA.TXT and return an ItcaPartsCatalog."""
+    records = []
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return records
+        
+    with open(file_path, 'r', encoding=CHARSET, errors='replace') as f:
+        for line_num, line in enumerate(f, 1):
+            if len(line) < 86:
+                continue
+            
+            try:
+                # Based on empirical analysis of ITCA_DATA.TXT:
+                # 0-15: Part number (Current) - 16 bytes
+                # 16:   ITCA code (Status)    - 1 byte
+                # 18-33: ITCA part number      - 16 bytes
+                # 34-35: Q'ty                  - 2 bytes
+                # 37-44: Part code             - 8 bytes
+                # 45-84: Part name (Description) - 40 bytes
+                
+                part_number = line[0:16].strip()
+                itca_code = line[16:17].strip()
+                supersedes_to = line[18:34].strip()
+                qty_str = line[34:36].strip()
+                quantity = int(qty_str) if qty_str.isdigit() else 0
+                part_code = line[37:45].strip()
+                description = line[45:85].strip()
+                
+                records.append(ItcaRecord(
+                    part_number=part_number,
+                    itca_code=itca_code,
+                    supersedes_to=supersedes_to,
+                    quantity=quantity,
+                    part_code=part_code,
+                    description=description
+                ))
+            except Exception as e:
+                print(f"Error parsing line {line_num}: {e}")
+                
     return records
 
 

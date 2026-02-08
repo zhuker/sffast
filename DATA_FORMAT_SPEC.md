@@ -819,19 +819,23 @@ ES:     PÉNDOLA MOTOR, DELANTERA
 
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
-| 0 | 15 | Part number | Current part number |
-| 15 | 1 | Blank | Separator |
-| 16 | 1 | Blank | Separator |
-| 17 | 1 | ITCA code | Status/type code |
-| 18 | 1 | Blank | Separator |
-| 19 | 15 | ITCA part number | Supersedes-to part number |
-| 34 | 1 | Blank | Separator |
-| 35 | 2 | Q'ty | Quantity |
-| 37 | 1 | Blank | Separator |
-| 38 | 7 | Part code | Figure/category code |
-| 45 | 1 | Blank | Separator |
-| 46 | 40 | Part name | Description text |
-| 86 | 1 | CR.LF | Line terminator |
+| 0 | 16 | Part number | Current part number |
+| 16 | 1 | ITCA code | Status/type code |
+| 17 | 1 | Blank | Separator |
+| 18 | 16 | ITCA part number | Supersedes-to part number |
+| 34 | 2 | Q'ty | Quantity |
+| 36 | 1 | Blank | Separator |
+| 37 | 8 | Part code | Figure/category code |
+| 45 | 40 | Part name | Description text |
+| 85 | 2 | CR.LF | Line terminator |
+
+**Empirical Offsets (Validated against SFCDUS1):**
+- **Part Number:** `line[0:16]`
+- **ITCA Code:** `line[16:17]`
+- **Supersedes:** `line[18:34]`
+- **Qty:** `line[34:36]`
+- **Part Code:** `line[37:45]`
+- **Description:** `line[45:85]`
 
 **Note:** Manual states 87 bytes total. Field widths sum to 86 + terminator.
 
