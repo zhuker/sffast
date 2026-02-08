@@ -474,6 +474,8 @@ class TestBlockTypeDetection(unittest.TestCase):
             def assert_binary(offset):
                 assert_block("binary", offset)
 
+            assert_binary(0x1A3C1800)
+
             assert_block(ModelYearRecord44.ID, 0x1C686800)
             assert_block(ModelYearRecord44.ID, 0x17B7A800)
 

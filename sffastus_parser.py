@@ -2602,11 +2602,11 @@ class SffastusBlockParser:
             return 'text'
 
         # 7. Binary block - low printable ratio, has content
-        if non_zero > 0 and printable_ratio < 0.51:
+        if non_zero > 0 and printable_ratio < 0.55:
             return 'binary'
 
         # 8. Mixed content
-        if printable_ratio >= 0.51:
+        if printable_ratio >= 0.55:
             return 'mixed'
 
         return 'unknown'
