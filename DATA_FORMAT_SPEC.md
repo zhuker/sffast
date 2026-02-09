@@ -169,21 +169,24 @@ The records are aligned to **2KB blocks** (similar to VIN blocks).
 
 **Validation Status:** ✓ Structure validated by parsing records from 0x13000
 
-### Body Model Map (0x3E1800 - 0x3E5000) - **CONFIRMED**
+### Body Model Records (17-byte Type) (0x3E1800 - 0x3E5000) - **VALIDATED ✓**
 
-This region maps specific **Body Model Codes** (7 chars) to the **Model Code** (e.g., B11) and a specific configuration index.
+Maps **Body Model Codes** (7 chars) to **Model Codes** (e.g., B11) and a configuration index.
 *   **Block Alignment:** 2KB blocks.
 *   **Records per Block:** 120 records (2040 bytes) + 8 bytes padding.
-*   **Range:** 7 blocks total.
+*   **Range:** 7 blocks in SFCDUS2 (754 records total, all 10 models).
+*   Terminated by `0x2A` (`*`) fill bytes after the last valid record.
 
 **Record Structure (17 bytes)**
 
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
-| 0x00 | 7 | Body Model | e.g., `BD6AY1G`, `GGEEY6R` |
-| 0x07 | 2 | Unknown 1 | Always `0x0001` (Big Endian) in samples |
-| 0x09 | 6 | Model Code | e.g., `B11   `, `G11   ` |
-| 0x0F | 2 | Config Index | Index into the Model's Block List? (Big Endian) |
+| 0x00 | 7 | Body Model | e.g., `BD6AY1G`, `SHMDY6S`, `WXEAY2U` |
+| 0x07 | 2 | Constant | Always `0x0001` (Big Endian) |
+| 0x09 | 6 | Model Code | e.g., `B11   `, `S12   ` |
+| 0x0F | 2 | Config Index | BE uint16 (range 0x0001-0x0197, 116 unique values) |
+
+**Validation Status:** ✓ 754 records parsed and validated across 7 blocks.
 
 ### US VIN Records (0x800+) - **TO VALIDATE**
 

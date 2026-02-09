@@ -444,7 +444,41 @@ class VINModelRecord:
 
 
 @dataclass
-class MultilingualPartRecord:
+class BodyModelRecord17:
+    """Represents a 17-byte body model mapping record from sffastus
+
+    Maps body model codes (7-char, e.g., "BD6AY1G") to model codes (e.g., "B11")
+    and a configuration index.
+
+    Structure:
+        0x00 (7):  Body Model Code (e.g., "BD6AY1G", "SHMDY6S")
+        0x07 (2):  Constant (always 0x0001 BE)
+        0x09 (6):  Model Code (e.g., "B11   ", "S12   ")
+        0x0F (2):  Config Index (BE uint16)
+    """
+    ID = 'body_model'
+    offset: int
+    body_model: str
+    constant: int
+    model_code: str
+    config_index: int
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_17(data: bytes, offset: int = 0):
+        return BodyModelRecord17(
+            offset=offset,
+            body_model=data[0:7].decode(CHARSET, errors='replace'),
+            constant=(data[7] << 8) | data[8],
+            model_code=data[9:15].decode(CHARSET, errors='replace').strip(),
+            config_index=(data[15] << 8) | data[16],
+            raw_data=data,
+        )
+
+
+@dataclass
+class MultilingualPartRecord192:
+    ID = 'multilingual_part_192'
     """Represents a multilingual part name record from sffastus (192 bytes)
 
     Contains part names in 4 languages: English, German, French, Spanish.
@@ -848,6 +882,35 @@ class SffastusBlockParser:
         if not (0x31 <= data[7] <= 0x39):  # byte 7 must be digit
             return False
         return self._is_block_20(data)
+
+    def is_body_model_block_17(self, data: bytes) -> bool:
+        """Detect 17-byte body model mapping blocks.
+
+        Records are 7-char alphanumeric body code + 2-byte constant (0x0001) + 6-char model code + 2-byte config index.
+        120 records per block (2040 bytes) + 8 bytes padding.
+        """
+        if len(data) < 34:
+            return False
+        try:
+            # Check first record
+            body1 = data[0:7].decode(CHARSET)
+            if not (body1[0].isalpha() and body1.isalnum()):
+                return False
+            if data[7] != 0x00 or data[8] != 0x01:
+                return False
+            if not is_valid_model_code(data[9:15]):
+                return False
+            # Check second record
+            body2 = data[17:24].decode(CHARSET)
+            if not (body2[0].isalpha() and body2.isalnum()):
+                return False
+            if data[24] != 0x00 or data[25] != 0x01:
+                return False
+            if not is_valid_model_code(data[26:32]):
+                return False
+            return True
+        except Exception:
+            return False
 
     def is_model_year_block_44(self, data: bytes) -> bool:
         if len(data) < 44:
@@ -2591,17 +2654,8 @@ class SffastusBlockParser:
             return ModelYearRecord44.ID
 
         # 5. Body model block - 17-byte records with 7-char body code + model code
-        # Body codes are 7 alphanumeric chars like "BD6AY1G"
-        try:
-            # Check first record pattern: 7-char body code + 2 bytes + 6-char model code
-            body_code = data[0:7].decode(CHARSET)
-            if (len(body_code) == 7 and
-                body_code.isalnum() and
-                body_code[0].isalpha() and
-                is_valid_model_code(data[9:15])):
-                return 'body_model'
-        except:
-            pass
+        if self.is_body_model_block_17(data):
+            return BodyModelRecord17.ID
 
         # 6. Text block - mostly printable ASCII
         non_zero = sum(1 for b in data if b != 0)

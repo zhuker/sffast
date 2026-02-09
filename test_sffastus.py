@@ -49,6 +49,7 @@ from sffastus_parser import (
     ModelYearRecord44,
     CategoryIndexRecord20,
     VersionIndexRecord20,
+    BodyModelRecord17,
 )
 
 # Test data paths
@@ -512,6 +513,8 @@ class TestBlockTypeDetection(unittest.TestCase):
             assert_binary(0x1E56F800)
             assert_binary(0x1E53E000)
             assert_binary(0x0E6AE800)
+
+            assert_block(BodyModelRecord17.ID, 0x003E1800)
 
             assert_block(CategoryIndexRecord20.ID, 0x0CD42000)
             assert_block(VersionIndexRecord20.ID, 0x0E6ED000)
@@ -1524,7 +1527,30 @@ class TestBlockTypeScan(unittest.TestCase):
             self.validate_model_year_44(f, ranges)
             self.validate_category_index_20(f, ranges)
             self.validate_version_index_20(f, ranges)
+            self.validate_body_model_17(f, ranges)
 
+
+    def validate_body_model_17(self, f: BufferedReader, ranges: list[Any]):
+        bm_ranges = [r for r in ranges if r[3] == BodyModelRecord17.ID]
+        self.assertGreater(len(bm_ranges), 0, "No BodyModelRecord17 blocks found")
+
+        total_records = 0
+        models_seen = set()
+        for r_start, r_end, num_blocks, block_type in bm_ranges:
+            for block in range(num_blocks):
+                offset = r_start + block * 2048
+                records = parser.parse_body_model_records_17(f, offset)
+                self.assertTrue(len(records) > 0, f"No records at 0x{offset:08X}")
+                for rec in records:
+                    self.assertIsInstance(rec, BodyModelRecord17)
+                    self.assertEqual(rec.constant, 1, f"Unexpected constant 0x{rec.constant:04X} at 0x{rec.offset:08X}")
+                    self.assertTrue(rec.body_model[0].isalpha(), f"Bad body model {rec.body_model!r}")
+                    self.assertIn(rec.model_code, VALID_MODEL_CODES, f"Bad model code {rec.model_code!r}")
+                    models_seen.add(rec.model_code)
+                total_records += len(records)
+
+        print(f"Validated {total_records} BodyModelRecord17 records across {sum(r[2] for r in bm_ranges)} blocks.")
+        print(f"  Models: {sorted(models_seen)}")
 
     def validate_itca_251(self, f: BufferedReader, ranges: list[Any]):
         spec_ranges = [r for r in ranges if r[3] == ItcaRecord.ID]
