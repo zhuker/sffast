@@ -138,6 +138,95 @@ class TestMyQueries(unittest.TestCase):
         mysti = list(filter(lambda r: r.vin == MYSTI_VIN, all_records))
         print(mysti)
 
+    def test_extended_block_map(self):
+        """Print block map with block numbers and one example record per range"""
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = parser.scan_block_types(f)
+
+            # Dispatch: block_type -> parse function returning list of records
+            parse_one = {
+                'body_model': lambda off: parser.parse_body_model_records_17(f, start_offset=off, max_records=1),
+                'vin_range': lambda off: parser.parse_vin_blocks(f, start_offset=off, max_records=1),
+                'vin_model': lambda off: parser.parse_vin_model_records(f, off, max_records=1),
+                'model_index_288': lambda off: parser.parse_model_index_records_288(f, off, max_records=2),
+                'part_range_24': lambda off: parser.parse_part_range_records_24(f, off, max_records=1),
+                'category_index_20': lambda off: parser.parse_category_index_records_20(f, off, max_records=1),
+                'version_index_20': lambda off: parser.parse_version_index_records_20(f, off, max_records=1),
+                'multilingual_part_192': lambda off: parser.parse_multilingual_part_records_192(f, off, max_records=1),
+                'multilingual_part_180': lambda off: parser.parse_multilingual_part_records_180(f, off, max_records=1),
+                'multilingual_part_167': lambda off: parser.parse_multilingual_part_records_167(f, off, max_records=1),
+                'multilingual_part_182': lambda off: parser.parse_multilingual_part_records_182(f, off, max_records=1),
+                'model_spec_103': lambda off: parser.parse_model_spec_records_103(f, off, max_records=1),
+                'catalog_applicability_466': lambda off: parser.parse_catalog_applicability_records_466(f, off, max_records=1),
+                'color_record_91': lambda off: parser.parse_color_records_91(f, off, max_records=1),
+                'glossary_record_28': lambda off: parser.parse_glossary_records_28(f, off, max_records=1),
+                'code_index_record_33': lambda off: parser.parse_code_index_records_33(f, off, max_records=1),
+                'fig_group_category_184': lambda off: parser.parse_fig_group_category_records_184(f, off, max_records=1),
+                'fig_illustration_183': lambda off: parser.parse_fig_illustration_records_183(f, off, max_records=1),
+                'fig_illustration_page_89': lambda off: parser.parse_fig_illustration_page_records_89(f, off, max_records=1),
+                'engine_spec_230': lambda off: parser.parse_engine_spec_records_230(f, off, max_records=1),
+                'part_group_185': lambda off: parser.parse_part_group_records_185(f, off, max_records=1),
+                'variant_glossary_81': lambda off: parser.parse_variant_glossary_records_81(f, off, max_records=1),
+                'inventory_199': lambda off: parser.parse_inventory_records_199(f, off, max_records=1),
+                'figure_index_22': lambda off: parser.parse_figure_index_records_22(f, off, max_records=1),
+                'spec_mapping_22': lambda off: parser.parse_spec_mapping_records_22(f, off, max_records=1),
+                'part_index_34': lambda off: parser.parse_part_index_records_34(f, off, max_records=1),
+                'part_index_21': lambda off: parser.parse_part_index_records_21(f, off, max_records=1),
+                'itca_251': lambda off: parser.parse_itca_records_251(f, off, max_records=1),
+                'model_year_44': lambda off: parser.parse_model_year_records_44(f, off, max_records=1),
+            }
+
+            total_blocks = 0
+            print(f"\n{'#':>4} {'Start':>12} {'End':>12} {'Blocks':>8} {'Type'}")
+            print("-" * 70)
+
+            for start, end, count, block_type in ranges:
+                block_num_in_file = start//2048
+                print(f"{block_num_in_file:4d} 0x{start:08X}  0x{end:08X}  {count:8d}  {block_type}")
+                total_blocks += count
+
+                if block_type in parse_one:
+                    try:
+                        records = parse_one[block_type](start)
+                        for rec in records:
+                            print(f"      -> {rec}")
+                    except Exception as e:
+                        print(f"      -> ERROR: {e}")
+
+            print("-" * 70)
+            print(f"{'Total':>30}  {total_blocks:8d}")
+
+
+    def test_figures(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            ranges = parser.scan_block_types(f)
+
+            for r in ranges:
+                r_start, r_len, num_blocks, block_type = r
+                if block_type == FIGIllustrationRecord183.ID:
+                    for i in range(num_blocks):
+                        offset = r_start + i * 2048
+                        records = parser.parse_fig_illustration_records_183(f, offset)
+                        for rec in records:
+                            if "G11" in rec.model_code and "081" == rec.fig_group_code2:
+                                print(rec)
+                elif block_type == MultilingualPartRecord182.ID:
+                    for i in range(num_blocks):
+                        offset = r_start + i * 2048
+                        records = parser.parse_multilingual_part_records_182(f, offset)
+                        for rec in records:
+                            if "G11" in rec.model_code and "081" == rec.figure:
+                                print(rec)
+                elif block_type == MultilingualPartRecord192.ID:
+                    for i in range(num_blocks):
+                        offset = r_start + i * 2048
+                        records = parser.parse_multilingual_part_records_192(f, offset)
+                        for rec in records:
+                            if "G11" in rec.model_code and "081" == rec.figure_code:
+                                print(rec)
+
+
+
 
 class TestVINBlocks(unittest.TestCase):
     """Tests for VIN block parsing"""
