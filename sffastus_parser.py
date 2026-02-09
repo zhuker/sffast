@@ -1202,7 +1202,7 @@ class SffastusBlockParser:
             return False
 
 
-    def is_multilingual_part_block(self, data: bytes) -> bool:
+    def is_multilingual_part_block_192(self, data: bytes) -> bool:
         """
         Check if data looks like a multilingual part record block (192-byte records).
 
@@ -2263,7 +2263,7 @@ class SffastusBlockParser:
         return records
 
 
-    def parse_multilingual_part_records(self, f, start_offset, max_records=None, verbose=False):
+    def parse_multilingual_part_records_192(self, f, start_offset, max_records=None, verbose=False):
         """
         Parse multilingual part name records (192 bytes each).
 
@@ -2308,7 +2308,7 @@ class SffastusBlockParser:
             name_es = data[139+1:179+1].decode(CHARSET, errors='replace').strip()
             trailer = data[179+1:192]
 
-            record = MultilingualPartRecord(
+            record = MultilingualPartRecord192(
                 offset=offset,
                 model_code=model_code,
                 part_code=part_code,
@@ -2569,8 +2569,8 @@ class SffastusBlockParser:
         if self.is_version_index_block_20(data):
             return VersionIndexRecord20.ID
 
-        if self.is_multilingual_part_block(data):
-            return 'multilingual_part'
+        if self.is_multilingual_part_block_192(data):
+            return MultilingualPartRecord192.ID
 
         if self.is_multilingual_part_block_180(data):
             return 'multilingual_part_180'

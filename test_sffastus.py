@@ -26,7 +26,7 @@ from sffastus_parser import (
     VALID_MODEL_CODES,
     VINRecord,
     VINModelRecord,
-    MultilingualPartRecord,
+    MultilingualPartRecord192,
     MultilingualPartRecord180,
     MultilingualPartRecord167,
     PartRangeRecord24,
@@ -634,7 +634,7 @@ class TestMultilingualPartRecords(unittest.TestCase):
 
         # Pad to 2KB block
         data = record + b'\x00' * (2048 - 192)
-        self.assertTrue(parser.is_multilingual_part_block(data))
+        self.assertTrue(parser.is_multilingual_part_block_192(data))
 
     def test_detect_multilingual_part_block(self):
         """Test detect_block_type identifies multilingual_part"""
@@ -655,13 +655,13 @@ class TestMultilingualPartRecords(unittest.TestCase):
             self.skipTest("SFCDUS2/sffastus not found")
 
         with open(SFCDUS2_PATH, 'rb') as f:
-            records = parser.parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
+            records = parser.parse_multilingual_part_records_192(f, start_offset=0x0CD4D000, max_records=10)
 
         self.assertEqual(len(records), 10)
 
         # First record should be B11 model
         self.assertEqual(records[0].model_code, 'B11')
-        self.assertIsInstance(records[0], MultilingualPartRecord)
+        self.assertIsInstance(records[0], MultilingualPartRecord192)
 
         # Check all 4 languages have content
         self.assertTrue(len(records[0].name_en) > 0)
@@ -671,7 +671,7 @@ class TestMultilingualPartRecords(unittest.TestCase):
 
     def test_multilingual_part_record_dataclass(self):
         """Test MultilingualPartRecord dataclass structure"""
-        rec = MultilingualPartRecord(
+        rec = MultilingualPartRecord192(
             offset=0x0CD4D000,
             model_code="B11",
             part_code="0951S",
@@ -1459,7 +1459,7 @@ class TestBlockTypeScan(unittest.TestCase):
 
     def test_print_a_couple(self):
         with open('SFCDUS2/sffastus', 'rb') as f:
-            records = parser.parse_multilingual_part_records(f, start_offset=0x0CD4D000, max_records=10)
+            records = parser.parse_multilingual_part_records_192(f, start_offset=0x0CD4D000, max_records=10)
 
         print('Multilingual Part Records (192 bytes each)')
         print('=' * 80)
