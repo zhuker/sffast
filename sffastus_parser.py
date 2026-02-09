@@ -3416,6 +3416,22 @@ class FIGGroupCategoryRecord184:
 @dataclass
 class CatalogApplicabilityRecord466:
     ID = 'catalog_applicability_466'
+    """Represents a 466-byte catalog applicability record from sffastus.
+
+    Structure:
+        0x00  (6):  Model Code (e.g., "B11   ")
+        0x06  (5):  Group/Category (e.g., "0951S")
+        0x0B  (2):  Padding (spaces)
+        0x0D  (10): Part ID (e.g., "42162AC190")
+        0x17  (5):  Padding (spaces)
+        0x1C  (1):  Date Flag (A-H letter code)
+        0x1D  (16): Date Range YYYYMMDDYYYYMMDD
+        0x2D  (19): Destination Codes (e.g., "C0U4", "U5U6")
+        0x40  (64): Spec Logic expression (e.g., "EJ22# +EJ25D")
+        0x80  (32): Usage Notes (e.g., "USA")
+        0xA0  (20): Internal Flags
+        0xB4  (286): Binary feature mask / unknown tail
+    """
     offset: int
 
     model_code: str
@@ -3424,6 +3440,7 @@ class CatalogApplicabilityRecord466:
 
     date_flag: str
     date: str
+    destination_codes: str
 
     spec_logic: str
     usage_notes: str
@@ -3453,7 +3470,10 @@ class CatalogApplicabilityRecord466:
 
             # Validity Range
             date_flag=clean(data[28:29]),
-            date=clean(data[29:46]),
+            date=clean(data[29:45]),
+
+            # Destination / Market Codes (e.g., C0=Canada, U4/U5/U6=US)
+            destination_codes=clean(data[45:64]),
 
             # The Logic String (Fixed window at 0x40/64 decimal)
             spec_logic=clean(data[64:128]),

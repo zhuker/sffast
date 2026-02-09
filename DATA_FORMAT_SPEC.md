@@ -310,32 +310,66 @@ Offset  Size  Field
 
 **Validation:** Search for a known part number in the app, check if model code matches.
 
-### Part Detail Records (466-byte Type) (0x0CE04000+) - **NEW**
+### Catalog Applicability Records (466-byte Type) (0x0CDF9000+) - **VALIDATED ✓**
 
 **Record size:** 466 bytes
 **Encoding:** CP437
 
-Detailed part information including part numbers, date ranges, and specifications.
-Located in blocks around `0x0CE04000`.
+Defines part applicability per model: which parts apply to which engine/body/trim configurations, with date ranges and destination market codes. The largest block type in the file (~97,000 blocks in SFCDUS2, ~389,000 records).
 
-**Preliminary Structure:**
+**Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   `, `G11   ` |
+| 0x06 | 5 | Group/Category | Part group code (e.g. `0951S`, `10004`) |
+| 0x0B | 2 | Padding | Spaces |
+| 0x0D | 10 | Part ID | Part number (e.g. `42162AC190`, `10004AA011`) |
+| 0x17 | 5 | Padding | Spaces |
+| 0x1C | 1 | Date Flag | Letter code A-H indicating validity period type |
+| 0x1D | 16 | Date Range | `YYYYMMDDYYYYMMDD` (start + end, e.g. `1997100119990531`) |
+| 0x2D | 19 | Destination Codes | Market/destination codes (e.g. `C0U4`, `U5U6`, spaces if universal) |
+| 0x40 | 64 | Spec Logic | Boolean expression for applicability (e.g. `EJ22# +EJ25D`, `S +W`) |
+| 0x80 | 32 | Usage Notes | Constraint text (e.g. `USA`) |
+| 0xA0 | 20 | Internal Flags | Text-based integer fields |
+| 0xB4 | 286 | Unknown Tail | Binary feature mask, `0x2A` (`*`) end marker, `0x40` (`@`) padding |
+
+**Destination Codes (offset 0x2D, 19 bytes):**
+
+Present in ~23% of records. Codes appear in pairs and can be concatenated:
+
+| Code | Meaning |
+|------|---------|
+| C0 | Canada |
+| C4, C5, C6 | Canada variants |
+| U0, U1 | US variants (early models) |
+| U4, U5, U6 | US variants (common) |
+| UT | US (other) |
+
+Records with empty destination codes (spaces) apply universally to all markets.
+
+**Spec Logic Expression Syntax:**
+- `+` separates alternatives (OR): `EJ22# +EJ25D` = EJ22x or EJ25D
+- `.` combines requirements (AND): `WOBK.25GT.255` = Wagon Outback AND 25GT AND EJ255
+- Parentheses for grouping: `S.(I#+25GT+25GTLTD) +WOBK`
+- Single letters for body types: `S` = Sedan, `W` = Wagon, `P` = ?
+- Engine codes: `EJ22#` (# = wildcard), `EJ25D`, `253`, `255`, `30D`
+- Trim codes: `25GT`, `25GLI`, `STI`, `BASE`
+
+**Example Records:**
 ```
-Offset  Size  Field
-------  ----  -----
-0x00    6     Model Code (e.g., "B11   ")
-0x06    ~20   Part Number Fields (e.g., "10103  10103AA810")
-0x1A    ~20   Date Range (e.g., "D1996070119980331")
-0x2E    ~20   Engine/Spec (e.g., "EJ25D")
-...     ~400  Additional metadata, padding, and delimiters
+Model B11, Part 42162AC190: Date E 1997.10.01-1999.05.31, Spec "EJ22# +EJ25D"
+Model B13, Part 010006107: Date A 2003.11.01-2005.05.31, Spec "A25GLI.255 +WOBK.25GT.255"
+Model C12, Part 10024AA000: Date C 1993.08.01-1994.06.30, Dest "U0U1", Spec "2C"
 ```
 
 **Notes:**
-- Contains extensive padding with null bytes and delimiter characters (@, *)
-- Multiple part number references within single record
-- Date ranges appear in YYYYMMDDYYYYMMDD format
-- Further analysis needed to determine exact field boundaries
+- 4 records per 2KB block (466×4 = 1864 bytes, 184 bytes padding)
+- Blocks terminated by invalid model code in padding region
+- Tail contains `0x2A` (`*`) end marker at offset ~414, followed by `0x40` (`@`) fill
+- The 286-byte tail likely contains a binary feature/spec bitmask (mostly zeros)
 
-**Validation:** Parse records and verify part numbers match known Subaru part catalogs.
+**Validation Status:** ✓ 389,192 records validated across 97,303 blocks (10 model ranges). All model codes valid, all dates 16-digit numeric, all group_category and part_id non-empty.
 
 ### Code Index Records (33-byte Type) (0x0DE42800+) - **VALIDATED ✓**
 

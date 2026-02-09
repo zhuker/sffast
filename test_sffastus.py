@@ -1527,8 +1527,40 @@ class TestBlockTypeScan(unittest.TestCase):
             self.validate_model_year_44(f, ranges)
             self.validate_category_index_20(f, ranges)
             self.validate_version_index_20(f, ranges)
+            self.validate_466(f, ranges)
             self.validate_body_model_17(f, ranges)
 
+
+    def validate_466(self, f: BufferedReader, ranges: list[Any]):
+        cat_ranges = [r for r in ranges if r[3] == CatalogApplicabilityRecord466.ID]
+        self.assertGreater(len(cat_ranges), 0, "No CatalogApplicabilityRecord466 blocks found")
+
+        total_blocks = sum(r[2] for r in cat_ranges)
+        print(f"Found {len(cat_ranges)} CatalogApplicabilityRecord466 ranges (covering {total_blocks} blocks)")
+
+        total_records = 0
+        models_seen = set()
+        for r_start, r_end, num_blocks, block_type in cat_ranges:
+            for block in range(num_blocks):
+                offset = r_start + block * 2048
+                records = parser.parse_catalog_applicability_records_466(f, offset)
+                self.assertTrue(len(records) > 0, f"No records at 0x{offset:08X}")
+                for rec in records:
+                    self.assertIsInstance(rec, CatalogApplicabilityRecord466)
+                    self.assertIn(rec.model_code, VALID_MODEL_CODES,
+                                  f"Bad model code {rec.model_code!r} at 0x{rec.offset:08X}")
+                    self.assertTrue(len(rec.group_category) > 0,
+                                    f"Empty group_category at 0x{rec.offset:08X}")
+                    self.assertTrue(len(rec.part_id) > 0,
+                                    f"Empty part_id at 0x{rec.offset:08X}")
+                    if rec.date:
+                        self.assertTrue(rec.date.isdigit() and len(rec.date) == 16,
+                                        f"Bad date {rec.date!r} at 0x{rec.offset:08X}")
+                    models_seen.add(rec.model_code)
+                total_records += len(records)
+
+        print(f"Validated {total_records} CatalogApplicabilityRecord466 records across {total_blocks} blocks.")
+        print(f"  Models: {sorted(models_seen)}")
 
     def validate_body_model_17(self, f: BufferedReader, ranges: list[Any]):
         bm_ranges = [r for r in ranges if r[3] == BodyModelRecord17.ID]
