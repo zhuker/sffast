@@ -4340,15 +4340,17 @@ def is_valid_model_code(data: bytes) -> bool:
 
 
 def decode_block_pointer(ptr: bytes) -> int:
-    """Decode a 4-byte block pointer to an absolute block number.
+    """Decode a 3-byte block pointer to an absolute block number.
 
-    Pointer format: 00 [b1] [b2] 00
-    Block number = (b1 - 4) * 75 + b2
-    File offset  = block_number * 2048
+    Format: [byte0] [byte1] [byte2] (in a 4-byte field, byte3 is padding)
+    Formula from SFCOMMON.DLL FUN_100012f0:
+      block_number = (byte1 - 4 + byte0 * 60) * 75 + byte2
+      file_offset  = block_number * 2048
 
+    For section-level pointers where byte0=0, reduces to (byte1 - 4) * 75 + byte2.
     Verified across SFCDUS1/2/3 for all section-level pointers.
     """
-    return (ptr[1] - 4) * 75 + ptr[2]
+    return (ptr[1] - 4 + ptr[0] * 60) * 75 + ptr[2]
 
 
 def encode_block_pointer(block: int) -> bytes:
@@ -4359,6 +4361,20 @@ def encode_block_pointer(block: int) -> bytes:
     b1 = block // 75 + 4
     b2 = block % 75
     return bytes([0x00, b1, b2, 0x00])
+
+
+def decode_fig_data_pointer(ptr: bytes) -> int:
+    """Decode a 4-byte figure data pointer to an absolute file offset.
+
+    Format: [marker] [byte1] [byte2] [byte3]
+    Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
+      offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
+
+    The marker byte is the highest-order address component (mega-section),
+    not a flag. Constants 60, 75, 2048 are shared with decode_block_pointer.
+    """
+    block_number = (ptr[1] - 4 + ptr[0] * 60) * 75 + ptr[2]
+    return block_number * 2048 + ptr[3] * 8
 
 
 def print_block_type_map(ranges):

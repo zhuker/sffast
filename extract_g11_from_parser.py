@@ -8,6 +8,9 @@ extract_g11_from_parser.py - Extract G11 figure illustrations using the parser.
 4. Filters for G11 figures only
 5. Decodes ptr3 to file offsets, extracts raw G4 data, saves as PNG
 
+ptr3 decode formula (from SFCOMMON.DLL OffsetCalculator FUN_100012f0):
+  offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
+
 Usage: .venv/bin/python extract_g11_from_parser.py
 """
 
@@ -28,10 +31,6 @@ SFCDUS2_PATH = Path("SFCDUS2/sffastus")
 FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
 ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
 OUTPUT_DIR = Path("g11_figures_parsed")
-
-# G11-specific constants for ptr3 decoding
-G11_BASE = 0x1745D000
-G11_REF_BYTE1 = 0x1A
 
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 640
@@ -55,13 +54,18 @@ def create_parser():
 def decode_fig_ptr(ptr3_bytes):
     """Decode 4-byte figure data pointer to file offset.
 
-    Format: [marker] [byte1] [byte2] [byte3]
-    position = (byte1 - ref) * 19200 + byte2 * 256 + byte3
-    offset = base + position * 8
+    Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
+      offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
+
+    The marker byte is the highest-order address component:
+      marker: mega-section (60 * 75 * 2048 = 9,216,000 bytes each)
+      byte1:  section (75 * 2048 = 153,600 bytes each)
+      byte2:  block (2048 bytes each)
+      byte3:  position within block (8 bytes each)
     """
-    byte1, byte2, byte3 = ptr3_bytes[1], ptr3_bytes[2], ptr3_bytes[3]
-    position = (byte1 - G11_REF_BYTE1) * 19200 + byte2 * 256 + byte3
-    return G11_BASE + position * 8
+    marker, byte1, byte2, byte3 = ptr3_bytes[0], ptr3_bytes[1], ptr3_bytes[2], ptr3_bytes[3]
+    block_number = (byte1 - 4 + marker * 60) * 75 + byte2
+    return block_number * 2048 + byte3 * 8
 
 
 def make_g4_tiff(raw_data, width, height):

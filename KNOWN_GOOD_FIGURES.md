@@ -127,54 +127,89 @@ ImageMagick `magick input.tif output.png`
 ## Figure Data Pointer Encoding (ptr3)
 
 The 4-byte ptr3 field at record bytes [69:73] encodes a file offset to the
-raw G4 image data. The encoding was reverse-engineered by using the known
-fig001 offset (0x17471000) as a calibration point, then verifying the formula
-across all 23 G11 records.
+raw G4 image data.
+
+### Decompiled source (SFCOMMON.DLL)
+
+The formula was confirmed by decompiling `FUN_100012f0` (OffsetCalculator) in
+`SFCOMMON.DLL` via Ghidra. This function is called by 54 other functions
+including `FIG_GET`, `GETFC31`, `BuCD_Get`, etc.
+
+```c
+/* SFCOMMON.DLL :: FUN_100012f0 — OffsetCalculator */
+
+int __cdecl FUN_100012f0(char *param_1)
+{
+  return ((param_1[1] + -4 + *param_1 * 0x3c) * 0x4b + (int)param_1[2]) * 0x800;
+}
+```
+
+This computes: `offset = ((byte1 - 4 + byte0 * 60) * 75 + byte2) * 2048`
+
+For 3-byte block pointers `[byte0, byte1, byte2]`, this gives a block-aligned
+file offset. The same formula extends to 4-byte figure data pointers with
+sub-block precision.
 
 ### Format
 
 ```
 ptr3 = [marker] [byte1] [byte2] [byte3]
-         0x2A     0x1A+   0x00+   0x00+
 ```
 
 ### Decoding formula
 
 ```
-position = (byte1 - ref_byte1) * 19200 + byte2 * 256 + byte3
-file_offset = base + position * 8
+offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
 ```
 
-For G11: `ref_byte1 = 0x1A`, `base = 0x1745D000`
+This is a 4-level hierarchical address — the marker byte IS part of the
+address, not a flag:
 
-### Structure
+| Component | Multiplier | Unit size | Role |
+|-----------|-----------|-----------|------|
+| marker (byte 0) | `60 * 75 * 2048` | 9,216,000 bytes | Mega-section |
+| byte1 | `75 * 2048` | 153,600 bytes | Section |
+| byte2 | `2048` | 2,048 bytes | Block |
+| byte3 | `8` | 8 bytes | Position within block |
 
-| Component | Value | Role |
-|-----------|-------|------|
-| Byte 0 | `0x2A` | Constant marker (same for all G11 records) |
-| Byte 1 | `0x1A`, `0x1B`, `0x1C` | Section counter; increments when byte2:byte3 range is exhausted |
-| Bytes 2-3 | `0x0000`-`0xFFFF` | Position within section (big-endian) |
-| Unit | 8 bytes | Each position unit = 8 bytes of file data |
-| Section size | 19200 units = 153,600 bytes | `75 * 256 * 8` — same factor 75 as section-level block pointers |
+The constants 60, 75, and 2048 are shared with the block pointer system.
+The `byte1 - 4` offset accounts for the file header (first 4 sections are
+reserved).
 
 ### Verification
 
-- Tested against all 23 G11 records with **zero errors**
-- Sequential consistency: each figure's data starts at `ceil(prev_s2 / 8) * 8`
+- **704 G11 records**: 490 with marker `0x2A` + 214 with marker `0x2B` —
+  ALL decode successfully with **zero errors**
+- Sequential consistency: each figure's data starts at `ceil(prev_size / 8) * 8`
   bytes after the previous, with 0-8 bytes of alignment padding
 - Data at every computed offset starts with valid G4 bitstream bytes
-- The s2 field is confirmed as the **exact byte count** of raw G4 data
+  (first byte `0xFF` for white-background images)
+- The image_size field is confirmed as the **exact byte count** of raw G4 data
+- The `0x2B` data region follows immediately after the `0x2A` data region
+  (2 bytes of alignment padding between them)
 
-### Example
+### G11 marker ranges
+
+| Marker | byte1 range | Figure range | Records | File offset range |
+|--------|-------------|-------------|---------|-------------------|
+| `0x2A` | `0x1A`–`0x1C` | fig001–fig607 | 490 | `0x17471000`–`0x1795A366` |
+| `0x2B` | `0x00`–`0x0C` | fig620–fig970 | 214 | `0x1795A368`–`0x17B35FC0` |
+
+### Examples
 
 ```
-fig001: ptr3 = 2A 1A 28 00
-  position = (0x1A - 0x1A) * 19200 + 0x28 * 256 + 0x00 = 10240
-  offset   = 0x1745D000 + 10240 * 8 = 0x17471000  ✓
+fig001/01: ptr3 = 2A 1A 28 00
+  block = (0x1A - 4 + 0x2A * 60) * 75 + 0x28 = (22 + 2520) * 75 + 40 = 190690
+  offset = 190690 * 2048 + 0 * 8 = 0x17471000  ✓
 
 fig002/05: ptr3 = 2A 1B 02 E9
-  position = (0x1B - 0x1A) * 19200 + 0x02 * 256 + 0xE9 = 19945
-  offset   = 0x1745D000 + 19945 * 8 = 0x17483F48  ✓
+  block = (0x1B - 4 + 0x2A * 60) * 75 + 0x02 = (23 + 2520) * 75 + 2 = 190727
+  offset = 190727 * 2048 + 0xE9 * 8 = 0x17483F48  ✓
+
+fig620/01: ptr3 = 2B 00 04 6D  (first 0x2B record)
+  block = (0x00 - 4 + 0x2B * 60) * 75 + 0x04 = (-4 + 2580) * 75 + 4 = 193204
+  offset = 193204 * 2048 + 0x6D * 8 = 0x1795A368  ✓
+  (immediately after last 0x2A data at 0x1795A366, 8-byte aligned)
 ```
 
 ## All G11 Figures (23 pages)
