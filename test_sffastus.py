@@ -2347,22 +2347,20 @@ class TestFigurePartsLookup(unittest.TestCase):
 
     @staticmethod
     def _parse_callout(part_code):
-        """Parse part_code into (gc5, variant_letter, suffix).
+        """Parse part_code into (callout_code, variant_letter).
 
         Space-separated trailing letter = variant (matches spec_logic prefix):
-            '98281  A' -> ('98281', 'A', '')
-        Attached suffix = part of code:
-            '98201A'  -> ('98201', '', 'A')
-            'N450024' -> ('N4500', '', '24')
-            '98271'   -> ('98271', '', '')
+            '98281  A' -> ('98281', 'A')
+        Everything else = callout code directly (matches group_category 7-byte field):
+            '98201A'  -> ('98201A', '')
+            'N450024' -> ('N450024', '')
+            '98271'   -> ('98271', '')
         """
         if '  ' in part_code or (len(part_code) > 5 and part_code[5] == ' '):
             parts = part_code.split()
             if len(parts) == 2 and len(parts[1]) == 1 and parts[1].isalpha():
-                return (parts[0][:5], parts[1], '')
-        gc5 = part_code[:5]
-        suffix = part_code[5:] if len(part_code) > 5 else ''
-        return (gc5, '', suffix)
+                return (parts[0], parts[1])
+        return (part_code.strip(), '')
 
     def _build_spec_matcher(self):
         """Build spec_logic matching functions for MYSTI VIN."""
@@ -2492,19 +2490,13 @@ class TestFigurePartsLookup(unittest.TestCase):
             if fr == fig_ref:
                 fig_catalog.append((rec, pg))
 
-        # Track gc5 occurrences for L/R ordering disambiguation
-        from collections import defaultdict
-        gc5_occurrence = defaultdict(int)
-
         resolved = []
         for pgr in page_callouts:
-            gc5, variant, suffix = self._parse_callout(pgr.part_code)
-            gc5_occurrence[gc5] += 1
-            occurrence = gc5_occurrence[gc5]
+            callout_code, variant = self._parse_callout(pgr.part_code)
 
             candidates = []
             for rec, pg in fig_catalog:
-                if rec.group_category != gc5:
+                if rec.group_category != callout_code:
                     continue
                 if pg and pg != figure_page:
                     continue
@@ -2524,30 +2516,6 @@ class TestFigurePartsLookup(unittest.TestCase):
                 if not self._dest_ok(rec):
                     continue
                 candidates.append(rec)
-
-            # Suffix disambiguation
-            if suffix and len(set(r.part_id for r in candidates)) > 1:
-                if suffix.isdigit():
-                    filtered = [r for r in candidates if r.part_id.endswith(suffix)]
-                    if filtered:
-                        candidates = filtered
-
-            # L/R ordering disambiguation: when multiple distinct part_ids remain
-            # and the same gc5 appears multiple times without variant prefix,
-            # use catalog record ordering to assign Nth occurrence -> Nth part_id
-            unique_pids = sorted(set(r.part_id for r in candidates))
-            if len(unique_pids) > 1 and not variant:
-                total = sum(1 for r in page_callouts
-                            if self._parse_callout(r.part_code)[0] == gc5
-                            and self._parse_callout(r.part_code)[1] == '')
-                if total == len(unique_pids):
-                    pid_offset = {}
-                    for r in candidates:
-                        if r.part_id not in pid_offset or r.offset < pid_offset[r.part_id]:
-                            pid_offset[r.part_id] = r.offset
-                    ordered = sorted(pid_offset, key=lambda p: pid_offset[p])
-                    if occurrence <= len(ordered):
-                        candidates = [r for r in candidates if r.part_id == ordered[occurrence - 1]]
 
             # Deduplicate
             seen = set()

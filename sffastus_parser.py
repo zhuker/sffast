@@ -3500,8 +3500,7 @@ class CatalogApplicabilityRecord466:
 
     Structure:
         0x00  (6):  Model Code (e.g., "B11   ")
-        0x06  (5):  Group/Category (e.g., "0951S")
-        0x0B  (2):  Padding (spaces)
+        0x06  (7):  Group/Category a.k.a. Callout Code (e.g., "H505301", "14878")
         0x0D  (12): Part ID (e.g., "98271FE090OE")
         0x19  (3):  Padding (spaces)
         0x1C  (1):  Date Flag (A-H letter code)
@@ -3545,7 +3544,7 @@ class CatalogApplicabilityRecord466:
             offset=offset,
             raw_data=data,
             model_code=clean(data[0:6]),
-            group_category=clean(data[6:11]),
+            group_category=clean(data[6:13]),
             part_id=clean(data[13:25]),
 
             # Validity Range
