@@ -598,32 +598,63 @@ Offset  Size  Field               Description
 
 **Validation:** Matches FIG illustration titles in the illustrated index menu.
 
-### FIG Illustration Page Records (89-byte Type) (0x0DFA5000+) - **NEW**
+### FIG Illustration Page Records (89-byte Type) (0x0DFA5000+) - **VALIDATED ✓**
 
 **Record size:** 89 bytes
 **Encoding:** CP437
 
-Contains sub-indexing for FIG illustrations, mapping specific FIG indices to page numbers and labels (e.g., "VALVE", "CYLINDER BLOCK"). These records likely link illustrations to the actual part data.
+Contains sub-indexing for FIG illustrations, mapping specific FIG indices to page numbers, labels, and pointers to CCITT Group 4 compressed image data (1280x640, 1-bit bilevel).
 Located in blocks around `0x0DFA5000`.
 
 **Structure:**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 6 | Model Code | e.g. `B11   `, `G11   ` |
+| 0x06 | 3 | FIG Index | Illustration index (e.g., `002`) |
+| 0x09 | 2 | Padding | Usually spaces |
+| 0x0B | 2 | Page Index | Page number (e.g., `01`, `02`) |
+| 0x0D | 40 | Label | ASCII label (e.g., `VALVE`, `SHORT BLOCK ENGINE ASSEMBLY`) |
+| 0x35 | 4 | ptr1 | Model-level pointer (constant within a model group) |
+| 0x39 | 4 | ptr2 | Model-level pointer (constant within a model group) |
+| 0x3D | 8 | Reserved | Zeros |
+| 0x45 | 4 | ptr3 | Figure image data pointer (per-page, see encoding below) |
+| 0x49 | 12 | Unknown | Other metadata fields |
+| 0x55 | 2 | Image Size | Raw G4 data byte count (big-endian uint16) |
+| 0x57 | 2 | Reserved | Zeros |
+
+**ptr3 Encoding (4 bytes):**
+
 ```
-Offset  Size  Field               Description
-------  ----  -----               -----------
-0x00    6     Model Code          "B11", "G11", etc.
-0x06    3     FIG Index           Illustration index (e.g., "002")
-0x09    2     Padding             Usually spaces
-0x0B    2     Page Index          Page number (e.g., "01", "02")
-0x0D    40    Label               ASCII label (e.g., "VALVE")
-0x35    36    Trailer/Metadata    Binary data (likely pointers)
+Format: [marker] [byte1] [byte2] [byte3]
+          0x2A
+
+position   = (byte1 - ref_byte1) * 19200 + byte2 * 256 + byte3
+file_offset = base + position * 8
 ```
+
+- 19200 = 75 × 256 (same factor 75 as section-level block pointers)
+- Each `byte1` section covers 153,600 bytes (19200 × 8)
+- `base` and `ref_byte1` are model-specific constants
+- Figure data is packed contiguously, 8-byte aligned
+
+**Known model constants:**
+
+| Model | ref_byte1 | base | Records offset |
+|-------|-----------|------|----------------|
+| G11 | `0x1A` | `0x1745D000` | `0x1725E800` |
+
+**Image Size (s2):**
+
+The 2-byte big-endian value at record offset 0x55 is the exact byte count of raw CCITT Group 4 data at the ptr3 offset. Verified for all 23 G11 records.
 
 **Notes:**
 - Index numbers are ASCII strings, not 16-bit integers.
-- The label field is often padded with spaces.
-- The 36-byte trailer contains binary pointers that likely reference block indices in the part data region.
+- ptr1 and ptr2 are constant for all records within a model group.
+- All images decode to 1280×640 pixels (height is a fixed constant, not stored in the record).
+- Figure pages use T.6 uncompressed mode extensions; requires ImageMagick/Wand for decoding (Pillow/libtiff does not support uncompressed mode).
 
-**Validation:** Index numbers and labels match the illustrations documented in the 183-byte records.
+**Validation Status:** ✓ ptr3 formula verified across all 23 G11 records with zero errors. All 23 figure pages successfully decoded to 1280×640 PNG images matching the Windows application display. See `known_good_g11_23.py` and `KNOWN_GOOD_FIGURES.md`.
 
 ### Variant Glossary Records (81-byte Type) (0x0E6E9000+) - **VALIDATED ✓**
  

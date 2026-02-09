@@ -668,6 +668,91 @@ class CodeIndexRecord33:
         )
 
 
+@dataclass
+class ItcaRecord:
+    ID = "itca_251"
+    """Represents a record in ITCA_DATA.TXT (Parts Catalog)
+
+    Structure (87 bytes/rec):
+        0-15:   Part number (Current)
+        17:     ITCA code (Status)
+        19-34:  ITCA part number (Supersedes-to)
+        35-37:  Q'ty
+        38-45:  Part code
+        46-86:  Part name (Description)
+    """
+    offset: int
+    part_number: str
+    itca_code: str
+    supersedes_to: str
+    quantity: str
+    part_code: str
+    description: str
+    description_de: str = ""
+    description_fr: str = ""
+    description_sp: str = ""
+    unknown: bytes = None
+    raw_data: bytes = field(default=None, repr=False)
+
+    @staticmethod
+    def parse_itca_251(data: bytes, offset: int = 0):
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        part_number = data[0:15]
+        supersedes_to = data[15:15 + 15]
+        status = data[15 + 15:15 + 15 + 1]
+        desc_en = data[15 + 15 + 1:15 + 15 + 1 + 40]
+        desc_de = data[15 + 15 + 1 + 40:15 + 15 + 1 + 40 + 40]
+        desc_fr = data[15 + 15 + 1 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40]
+        desc_sp = data[15 + 15 + 1 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40]
+        qty = data[15 + 15 + 1 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40]
+        part_code = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40 + 9]
+        unknown = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 42 + 9:]
+        return ItcaRecord(
+            offset=offset,
+            part_number=clean(part_number),
+            itca_code=clean(status),
+            supersedes_to=clean(supersedes_to),
+            quantity=clean(qty),
+            part_code=clean(part_code),
+            description=clean(desc_en),
+            description_de=clean(desc_de),
+            description_fr=clean(desc_fr),
+            description_sp=clean(desc_sp),
+            unknown=unknown,
+            raw_data=data
+        )
+
+
+class ItcaPartsCatalog:
+    """Catalog of ITCA records with lookup capability."""
+    def __init__(self, records: List[ItcaRecord]):
+        self.records = records
+        self._build_indexes()
+
+    def _build_indexes(self):
+        self.primary_index = {r.part_number: r for r in self.records}
+        # For supersedes, multiple parts might supersede to the same one
+        self.supersedes_index = defaultdict(list)
+        for r in self.records:
+            if r.supersedes_to and r.supersedes_to.strip():
+                self.supersedes_index[r.supersedes_to.strip()].append(r)
+
+    def contains(self, part_number: str) -> bool:
+        part_number = part_number.strip()
+        return (part_number in self.primary_index) or (part_number in self.supersedes_index)
+
+    def lookup(self, part_number: str) -> List[ItcaRecord]:
+        """Lookup record by current part number or supersedes-to part number."""
+        part_number = part_number.strip()
+        results = []
+        if part_number in self.primary_index:
+            results.append(self.primary_index[part_number])
+        if part_number in self.supersedes_index:
+            results.extend(self.supersedes_index[part_number])
+        return results
+
 class SffastusBlockParser:
     """Block type detection and record parsing for sffastus files.
 
@@ -3162,8 +3247,8 @@ class FIGIllustrationPage89:
     Located at 0x0DFA5000+
     Encoding: CP437
 
-    Contains sub-indexing for FIG illustrations, mapping specific FIG indices 
-    to page numbers and labels.
+    Contains sub-indexing for FIG illustrations, mapping specific FIG indices
+    to page numbers and labels, with pointers to CCITT Group 4 image data.
 
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
@@ -3171,13 +3256,31 @@ class FIGIllustrationPage89:
         0x09 (2):  Padding (usually spaces)
         0x0B (2):  Page Index (e.g., "01")
         0x0D (40): Label (e.g., "VALVE")
-        0x35 (36): Trailer/Metadata
+        Trailer (36 bytes at 0x35):
+        0x35 (4):  ptr1 - model-level pointer (same for all pages in a model)
+        0x39 (4):  ptr2 - model-level pointer (same for all pages in a model)
+        0x3D (8):  zeros
+        0x45 (4):  ptr3 - figure image data pointer (per-page)
+        0x49 (12): other fields
+        0x55 (2):  image_size - raw G4 data byte count (big-endian uint16)
+        0x57 (2):  zeros
+
+    ptr3 encoding (4 bytes): [marker] [byte1] [byte2] [byte3]
+        position = (byte1 - ref_byte1) * 19200 + byte2 * 256 + byte3
+        file_offset = base + position * 8
+        where 19200 = 75 * 256 (factor 75 matches section-level block pointers)
+        base and ref_byte1 are model-specific constants.
+        Verified for G11: ref_byte1=0x1A, base=0x1745D000 (23/23 records, 0 errors).
     """
     offset: int
     model_code: str
     fig_index: str
     page_index: str
     label: str
+    ptr1: bytes
+    ptr2: bytes
+    ptr3: bytes
+    image_size: int
     trailer: bytes
     raw_data: bytes = field(repr=False)
 
@@ -3187,6 +3290,7 @@ class FIGIllustrationPage89:
         def clean(b: bytes) -> str:
             return b.decode(CHARSET, errors='replace').strip()
 
+        trailer = data[53:89]
         return FIGIllustrationPage89(
             offset=offset,
             raw_data=data,
@@ -3194,7 +3298,11 @@ class FIGIllustrationPage89:
             fig_index=clean(data[6:9]),
             page_index=clean(data[11:13]),
             label=clean(data[13:53]),
-            trailer=data[53:89],
+            ptr1=trailer[0:4],
+            ptr2=trailer[4:8],
+            ptr3=trailer[16:20],
+            image_size=(trailer[32] << 8) | trailer[33],
+            trailer=trailer,
         )
 
 
@@ -3947,92 +4055,10 @@ class MultilingualPartRecord180:
     raw_data: bytes = field(repr=False)
 
 
-@dataclass
-class ItcaRecord:
-    ID = "itca_251"
-    """Represents a record in ITCA_DATA.TXT (Parts Catalog)
-    
-    Structure (87 bytes/rec):
-        0-15:   Part number (Current)
-        17:     ITCA code (Status)
-        19-34:  ITCA part number (Supersedes-to)
-        35-37:  Q'ty
-        38-45:  Part code
-        46-86:  Part name (Description)
-    """
-    offset: int
-    part_number: str
-    itca_code: str
-    supersedes_to: str
-    quantity: str
-    part_code: str
-    description: str
-    description_de: str = ""
-    description_fr: str = ""
-    description_sp: str = ""
-    unknown: bytes = None
-    raw_data: bytes = field(default=None, repr=False)
-
-    @staticmethod
-    def parse_itca_251(data: bytes, offset: int = 0):
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
-        part_number = data[0:15]
-        supersedes_to = data[15:15 + 15]
-        status = data[15 + 15:15 + 15 + 1]
-        desc_en = data[15 + 15 + 1:15 + 15 + 1 + 40]
-        desc_de = data[15 + 15 + 1 + 40:15 + 15 + 1 + 40 + 40]
-        desc_fr = data[15 + 15 + 1 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40]
-        desc_sp = data[15 + 15 + 1 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40]
-        qty = data[15 + 15 + 1 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40]
-        part_code = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 40:15 + 15 + 1 + 40 + 40 + 40 + 40 + 40 + 9]
-        unknown = data[15 + 15 + 1 + 40 + 40 + 40 + 40 + 42 + 9:]
-        return ItcaRecord(
-            offset=offset,
-            part_number=clean(part_number),
-            itca_code=clean(status),
-            supersedes_to=clean(supersedes_to),
-            quantity=clean(qty),
-            part_code=clean(part_code),
-            description=clean(desc_en),
-            description_de=clean(desc_de),
-            description_fr=clean(desc_fr),
-            description_sp=clean(desc_sp),
-            unknown=unknown,
-            raw_data=data
-        )
 
 
 
 
-class ItcaPartsCatalog:
-    """Catalog of ITCA records with lookup capability."""
-    def __init__(self, records: List[ItcaRecord]):
-        self.records = records
-        self._build_indexes()
-
-    def _build_indexes(self):
-        self.primary_index = {r.part_number: r for r in self.records}
-        # For supersedes, multiple parts might supersede to the same one
-        self.supersedes_index = defaultdict(list)
-        for r in self.records:
-            if r.supersedes_to and r.supersedes_to.strip():
-                self.supersedes_index[r.supersedes_to.strip()].append(r)
-
-    def contains(self, part_number: str) -> bool:
-        part_number = part_number.strip()
-        return (part_number in self.primary_index) or (part_number in self.supersedes_index)
-
-    def lookup(self, part_number: str) -> List[ItcaRecord]:
-        """Lookup record by current part number or supersedes-to part number."""
-        part_number = part_number.strip()
-        results = []
-        if part_number in self.primary_index:
-            results.append(self.primary_index[part_number])
-        if part_number in self.supersedes_index:
-            results.extend(self.supersedes_index[part_number])
-        return results
 
 
 @dataclass
