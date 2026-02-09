@@ -510,6 +510,7 @@ class MultilingualPartRecord192:
 
 @dataclass
 class CodeIndexRecord33:
+    ID = 'code_index_record_33'
     """Represents a code/ID index record from sffastus (33 bytes)
 
     Located at 0x0DE42800+
@@ -1606,6 +1607,84 @@ class SffastusBlockParser:
 
         return records
 
+    def parse_catalog_applicability_records_466(self, f, start_offset, max_records=None, verbose=False):
+        """
+        Parse catalog applicability records (466 bytes each).
+
+        Args:
+            f: File handle to sffastus
+            start_offset: Where records begin
+            max_records: Maximum records to parse
+            verbose: Print progress
+
+        Returns:
+            List of CatalogApplicabilityRecord466 objects
+        """
+        RECORD_SIZE = 466
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # Check if valid record (model code or asterisk terminator)
+            if not is_valid_model_code(data[0:6]):
+                break
+
+            record = CatalogApplicabilityRecord466.parse_466(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
+    def parse_body_model_records_17(self, f, start_offset, max_records=None, verbose=False):
+        RECORD_SIZE = 17
+        records = []
+
+        f.seek(start_offset)
+        count = 0
+
+        while True:
+            if max_records and count >= max_records:
+                break
+
+            offset = f.tell()
+            data = f.read(RECORD_SIZE)
+
+            if len(data) < RECORD_SIZE:
+                break
+
+            # End marker: asterisks or all zeros
+            if data[0] == 0x2A or all(b == 0 for b in data):
+                break
+
+            body = data[0:7].decode(CHARSET, errors='replace')
+            if not (body[0].isalpha() and body.isalnum()):
+                break
+
+            record = BodyModelRecord17.parse_17(data, offset)
+            records.append(record)
+
+            if verbose and count % 1000 == 0:
+                print(f"  Parsed {count} records at 0x{offset:08X}...")
+
+            count += 1
+
+        return records
+
     def parse_model_year_records_44(self, f, start_offset, max_records=None, verbose=False):
         RECORD_SIZE = 44
         records = []
@@ -2595,7 +2674,7 @@ class SffastusBlockParser:
 
         # 4i. Code index record block (33-byte) - NEW
         if self.is_code_index_record_block_33(data):
-            return 'code_index_record_33'
+            return CodeIndexRecord33.ID
 
         # 4j. Model index block (288-byte) - NEW
         if self.is_model_index_block_288(data):
@@ -2631,7 +2710,7 @@ class SffastusBlockParser:
 
         # 4r. Multilingual part block (182-byte) - NEW
         if self.is_multilingual_part_block_182(data):
-            return 'multilingual_part_182'
+            return MultilingualPartRecord182.ID
 
         # 4s. Figure index block (22-byte) - NEW
         if self.is_figure_index_block_22(data):
@@ -2849,7 +2928,7 @@ class FIGIllustrationRecord183:
     def parse_183(data: bytes, offset: int = 0):
         """Parse a 183-byte FIG illustration record."""
         def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
+            return b.decode(CHARSET, errors='replace').strip()
 
         return FIGIllustrationRecord183(
             offset=offset,
@@ -3014,6 +3093,7 @@ class InventoryRecord199:
 
 @dataclass
 class MultilingualPartRecord182:
+    ID = 'multilingual_part_182'
     """Represents a 182-byte multilingual part name record from sffastus
 
     Located at 0x0E73B000+
@@ -3173,8 +3253,8 @@ class CategoryIndexRecord20:
         return CategoryIndexRecord20(
             offset=offset,
             raw_data=data,
-            model_code=data[0:6].decode(CHARSET, errors='replace'),
-            label=data[6:8].decode(CHARSET, errors='replace'),
+            model_code=data[0:6].decode(CHARSET, errors='replace').strip(),
+            label=data[6:8].decode(CHARSET, errors='replace').strip(),
             payload=data[8:16],
             pointer=data[16:20],
         )
@@ -3207,8 +3287,8 @@ class VersionIndexRecord20:
         return VersionIndexRecord20(
             offset=offset,
             raw_data=data,
-            model_code=data[0:6].decode(CHARSET, errors='replace'),
-            label=data[6:8].decode(CHARSET, errors='replace'),
+            model_code=data[0:6].decode(CHARSET, errors='replace').strip(),
+            label=data[6:8].decode(CHARSET, errors='replace').strip(),
             payload=data[8:16],
             pointer=data[16:20],
         )
@@ -3277,7 +3357,7 @@ class FigureIndexRecord22:
     @staticmethod
     def parse_22(data: bytes, offset: int = 0):
         def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
+            return b.decode(CHARSET, errors='replace').strip()
 
         return FigureIndexRecord22(
             offset=offset,
@@ -3354,7 +3434,7 @@ class SpecMappingRecord22:
     @staticmethod
     def parse_22(data: bytes, offset: int = 0):
         def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
+            return b.decode(CHARSET, errors='replace').strip()
 
         return SpecMappingRecord22(
             offset=offset,
