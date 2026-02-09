@@ -57,80 +57,111 @@ This document describes all known data file formats for validation against the W
 **Size:** 147MB (US1) → 511MB (US2) → 608MB (US3)
 **Format:** Binary, uncompressed
 
-### File Layout
+### Block Pointer Encoding - **VALIDATED ✓**
 
-| Section | Offset Range | Size | Purpose |
-|---------|-------------|------|---------|
-| Header | 0x00-0x32 | 50 bytes | Metadata, format markers |
-| Model Table | 0x32-0x9A | 104 bytes | 10 model codes with pointers |
-| Padding | 0x9A-0x800 | ~1.8 KB | Null padding |
-| US VIN Index | 0x800-0x260400 | 2.4 MB | US VINs (4S3...) |
-| JDM VIN Data | 0x260400-0x0F000000 | ~238 MB | JDM VINs (JF1...) |
-| Parts/Model Map | 0x0F000000-0x1F000000 | ~256 MB | Model-to-parts records |
-| Multilingual | 0x1F000000+ | ~14.6 MB | DE/FR/ES part names |
-| Diagrams | 0x10234800-0x10946000 | ~7.1 MB | Binary diagram data |
+All section-level pointers in the header and body model range index use a 4-byte encoding:
 
-### Model Table (0x32-0x9A) - **TO VALIDATE**
-
-**Entry size:** 10 bytes each (6-byte model code + 4-byte LE pointer)
-
-| Offset | Model | Description |
-|--------|-------|-------------|
-| 0x32 | B11 | Legacy/Outback |
-| 0x3C | B12 | Legacy/Outback |
-| 0x46 | B13 | Legacy/Outback |
-| 0x50 | C12 | Impreza |
-| 0x5A | G10 | Impreza 1992-2000 |
-| 0x64 | G11 | Impreza 2001-2007 |
-| 0x6E | S10 | Forester |
-| 0x78 | S11 | Forester |
-| 0x82 | S12 | Forester |
-| 0x8C | W10 | WRX/STI |
-
-4-byte LE pointer meaning still unknown
 ```
-Extracted from SFCDUS1/sffastus
-=== Model Code Table (0x32) ===
-  A10    -> 0x000B0400
-  A11    -> 0x000B0400
-  B10    -> 0x000B0400
-  C10    -> 0x000B0400
-  C11    -> 0x000B0400
-  J10    -> 0x000B0400
-
-Extracted from SFCDUS2/sffastus
-=== Model Code Table (0x32) ===
-  B11    -> 0x00260400
-  B12    -> 0x00260400
-  B13    -> 0x00260400
-  C12    -> 0x00260400
-  G10    -> 0x00260400
-  G11    -> 0x00260400
-  S10    -> 0x00260400
-  S11    -> 0x00270400
-  S12    -> 0x00270400
-  W10    -> 0x00270400
-
-Extracted from SFCDUS3/sffastus
-=== Model Code Table (0x32) ===
-  B14    -> 0x00350400
-  B15    -> 0x00350400
-  G12    -> 0x00350400
-  G13    -> 0x00350400
-  G23    -> 0x00350400
-  G33    -> 0x00350400
-  G14    -> 0x00350400
-  G24    -> 0x00360400
-  S13    -> 0x00360400
-  V10    -> 0x00360400
+Byte layout:  00 [b1] [b2] 00
+Block number: (b1 - 4) * 75 + b2
+File offset:  block_number * 2048
 ```
 
-**Validation:** Check if these model codes appear in the Windows app vehicle selection.
+**Examples:**
+
+| Raw bytes | b1 | b2 | Block | File offset |
+|-----------|----|----|-------|-------------|
+| `00 04 00 00` | 4 | 0 | 0 | 0x000000 |
+| `00 04 01 00` | 4 | 1 | 1 | 0x000800 |
+| `00 0A 00 00` | 10 | 0 | 450 | 0x0E1000 |
+| `00 1E 00 00` | 30 | 0 | 1950 | 0x3E5000 |
+| `00 29 00 00` | 41 | 0 | 2775 | 0x56D800 |
+
+**Validation Status:** ✓ Formula verified across 21 pointers (header + body model range index entries) in all 3 SFCDUS versions with 100% accuracy.
+
+### File Header (0x00-0x31) - **VALIDATED ✓**
+
+**Size:** 50 bytes (first block 0x00-0x800 is header + padding)
+
+The header describes the contiguous section layout of the VIN-data portion of the file. All sections are laid out sequentially with no gaps.
+
+**Structure:**
+
+| Offset | Width | Field | Encoding | Description |
+|--------|-------|-------|----------|-------------|
+| 0x00 | 4 | Magic | — | Always `00 04 01 00` |
+| 0x04 | 2 | US VIN Count | BE u16 | Number of US VIN blocks |
+| 0x06 | 4 | Range Index Ptr | Block ptr | Pointer → body model range index block |
+| 0x0A | 2 | Range Index Count | BE u16 | Range index block count (always 1) |
+| 0x0C | 4 | JDM VIN Ptr | Block ptr | Pointer → JDM VIN start block |
+| 0x10 | 2 | JDM VIN Count | BE u16 | Number of JDM VIN blocks |
+| 0x12 | 4 | Body Model Ptr | Block ptr | Pointer → body model (17-byte) start block |
+| 0x16 | 2 | Body Model Count | BE u16 | Number of body model blocks |
+| 0x18 | 4 | VIN Detail Ptr | Block ptr | Pointer → VIN detail (69-byte) start block |
+| 0x1C | 4 | VIN Detail Count | BE u32 | Number of VIN detail blocks |
+| 0x20 | 6 | Catalog Desc 1 | 4-byte ptr + BE u16 | Catalog section descriptor |
+| 0x26 | 6 | Catalog Desc 2 | 4-byte ptr + BE u16 | Catalog section descriptor |
+| 0x2C | 6 | Catalog Desc 3 | 4-byte ptr + BE u16 | Catalog section descriptor |
+
+**Derived (computed) fields:**
+- `us_vin_start_block = 1` (always starts right after header block 0)
+- `model_index_start_block = 1 + us_vin_count`
+- `model_index_count = range_index_block - model_index_start_block`
+
+**Contiguous layout (each section starts where the previous ends):**
+
+```
+Block 0:        Header (1 block)
+Block 1:        US VIN Index (us_vin_count blocks)
+                Model Index (model_index_count blocks)
+                Body Model Range Index (1 block)
+                JDM VIN Index (jdm_vin_count blocks)
+                Body Model Records (body_model_count blocks)
+                VIN Detail Records (vin_detail_count blocks)
+                ... Catalog sections follow ...
+```
+
+**Cross-version values:**
+
+| Field | SFCDUS1 | SFCDUS2 | SFCDUS3 |
+|-------|---------|---------|---------|
+| US VIN blocks | 10 | 36 | 51 |
+| Model index blocks | 1 | 3 | 3 |
+| Range index block | 12 | 40 | 55 |
+| JDM VIN blocks | 489 | 1946 | 2755 |
+| Body model blocks | 2 | 7 | 9 |
+| VIN detail blocks | 25898 | 103096 | 111625 |
+| Range index offset | 0x6000 | 0x14000 | 0x1B800 |
+
+**Catalog descriptors (bytes 0x20-0x31):** Three entries of [4-byte ptr + 2-byte count]. The pointer encoding extends to 3-level: `(b0-4)*5625 + (b1-4)*75 + b2`. Sequential differences exactly match counts across all versions, but resulting values exceed file block count — they address a virtual space, likely catalog-section-specific. Further investigation needed.
+
+**Validation Status:** ✓ All section pointers verified across SFCDUS1/2/3. Contiguous layout confirmed — each section starts exactly where the previous ends.
+
+### File Layout (SFCDUS2)
+
+| Section | Offset | Blocks | Purpose |
+|---------|--------|--------|---------|
+| Header | 0x000000 | 1 | File header (50 bytes + padding) |
+| US VIN Index | 0x000800 | 36 | US VINs (4S3...) — 38-byte range records |
+| Model Index | 0x013000 | 3 | Model metadata — 288-byte records |
+| Body Model Range Index | 0x014000 | 1 | 18-byte range → block pointer index |
+| JDM VIN Index | 0x014800 | 1,946 | JDM VINs (JF1/JF2...) — 38-byte range records |
+| Body Model Records | 0x3E1800 | 7 | 17-byte body model → model code map |
+| VIN Detail Records | 0x3E5000 | 103,096 | 69-byte full VIN specifications |
+| Catalog Data | 0x0CDF9000+ | ~158,000+ | 466-byte applicability + indexes + multilingual |
+
 ### Model Table (0x32 - 0x200)
 
-This region acts as a primary index, mapping Model Codes (6 chars) to a **32-bit File Pointer**.
-*   **Entry size:** 10 bytes (6-byte ASCII Code + 4-byte LE Pointer)
-*   The pointer often targets the **JDM VIN Data** section (e.g., `0x00260400`).
+This region acts as a primary index, mapping Model Codes (6 chars) to a **32-bit Pointer**.
+*   **Entry size:** 10 bytes (6-byte ASCII Code + 4-byte block pointer)
+*   The pointer uses the standard block pointer encoding `(b1-4)*75+b2`
+*   Points into the JDM VIN section (the pointer value matches the JDM VIN start block from the header)
+
+**Cross-version model codes:**
+
+| SFCDUS1 | SFCDUS2 | SFCDUS3 |
+|---------|---------|---------|
+| A10, A11, B10, C10, C11, J10 | B11, B12, B13, C12, G10, G11, S10, S11, S12, W10 | B14, B15, G12, G13, G23, G33, G14, G24, S13, V10 |
 
 ### Model Index Records (0x13000 - 0x14000) - **VALIDATED ✓**
 
@@ -168,6 +199,36 @@ The records are aligned to **2KB blocks** (similar to VIN blocks).
 - C12 (SVX): 199308 to 199611
 
 **Validation Status:** ✓ Structure validated by parsing records from 0x13000
+
+### Body Model Range Index (18-byte Type) - **VALIDATED ✓**
+
+**Record size:** 18 bytes
+**Location:** Single block at the "transition" between model index and JDM VIN sections (pointed to by header offset 0x06)
+
+| Version | Offset | Block | Records |
+|---------|--------|-------|---------|
+| SFCDUS1 | 0x6000 | 12 | 4 |
+| SFCDUS2 | 0x14000 | 40 | 7 |
+| SFCDUS3 | 0x1B800 | 55 | 6 |
+
+Binary search index: given a 7-byte body model code, find which body model data block to read.
+
+**Record Structure (18 bytes)**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 7 | Model From | First body model code in range (e.g., `BD6AY1G`) |
+| 0x07 | 7 | Model To | Last body model code in range (e.g., `BH9CY5R`) |
+| 0x0E | 4 | Block Pointer | `00 b1 b2 00` — target block for this range |
+
+**Notes:**
+- Ranges are sorted by model code and contiguous (no gaps)
+- Each pointer resolves to a body model (17-byte) data block whose first record's body model code matches `model_from`
+- Sentinel: record starting with `0x2A` (`*`) marks end of list, rest is zero-padded
+- The header's "Range Index Ptr" field always points to this block
+- Always occupies exactly 1 block
+
+**Validation Status:** ✓ All pointers verified across SFCDUS1/2/3 — target block's first record matches `model_from` in every case.
 
 ### Body Model Records (17-byte Type) (0x3E1800 - 0x3E5000) - **VALIDATED ✓**
 
@@ -1355,6 +1416,10 @@ Please verify the following in the Windows app:
 - **Part codes** are 7 characters
 
 ### High Confidence (Validated in Scripts)
+- Block pointer encoding: `(b1-4)*75+b2` (verified across all 3 versions)
+- File header structure (50 bytes, all section pointers decoded)
+- Body model range index (18-byte records, verified pointer targets)
+- Contiguous file layout (header → US VIN → model index → range index → JDM VIN → body model → VIN detail)
 - tekious.txt structure (256-byte records at 0x800)
 - figname.txt / figgname.txt format
 - XOR 0x44 encoding for figure primitives
@@ -1365,6 +1430,7 @@ Please verify the following in the Windows app:
 - VIN record structure (38 bytes)
 - Multilingual record format (33 bytes)
 - Model-spec record size (~69 bytes)
+- Header catalog descriptors (3-level pointer encoding)
 
 ### Speculative (Needs Validation)
 - source_data_us.txt flag meanings

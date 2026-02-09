@@ -48,6 +48,10 @@ from sffastus_parser import (
     SpecMappingRecord22, parse_itca_data, ItcaPartsCatalog, PartRangeIndex34, PartIndex21, ItcaRecord,
     ModelYearRecord44,
     CategoryIndexRecord20,
+    BodyModelRangeRecord18,
+    SffastusHeader,
+    decode_block_pointer,
+    encode_block_pointer,
     VersionIndexRecord20,
     BodyModelRecord17,
 )
@@ -2569,6 +2573,292 @@ class TestFigurePartsLookup(unittest.TestCase):
         self.assertIn('98201FE120', part_ids)      # 98201 - side airbag right
         self.assertIn('98201FE130', part_ids)      # 98201A - side airbag left
         self.assertIn('902450024', part_ids)       # N450024 - cap-nut
+
+
+class TestSffastusHeader(unittest.TestCase):
+    """Tests for the 50-byte sffastus file header parser."""
+
+    EXPECTED = {
+        SFCDUS1_PATH: dict(
+            us_vin_count=10, body_model_range_index_block=12,
+            body_model_range_index_count=1, jdm_vin_start_block=13,
+            jdm_vin_count=489, body_model_start_block=502,
+            body_model_count=4, vin_detail_start_block=506,
+            vin_detail_count=25898,
+            model_index_start_block=11, model_index_count=1,
+        ),
+        SFCDUS2_PATH: dict(
+            us_vin_count=37, body_model_range_index_block=40,
+            body_model_range_index_count=1, jdm_vin_start_block=41,
+            jdm_vin_count=1946, body_model_start_block=1987,
+            body_model_count=7, vin_detail_start_block=1994,
+            vin_detail_count=103096,
+            model_index_start_block=38, model_index_count=2,
+        ),
+        SFCDUS3_PATH: dict(
+            us_vin_count=52, body_model_range_index_block=55,
+            body_model_range_index_count=1, jdm_vin_start_block=56,
+            jdm_vin_count=2755, body_model_start_block=2811,
+            body_model_count=6, vin_detail_start_block=2817,
+            vin_detail_count=146007,
+            model_index_start_block=53, model_index_count=2,
+        ),
+    }
+
+    def _parse_header(self, path):
+        with open(path, 'rb') as f:
+            return SffastusHeader.parse(f.read(50))
+
+    def test_magic(self):
+        """All versions have the same 4-byte magic."""
+        for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
+            if not os.path.exists(path):
+                continue
+            hdr = self._parse_header(path)
+            self.assertEqual(hdr.magic, b'\x00\x04\x01\x00', f"{path}")
+
+    def test_section_counts_and_pointers(self):
+        """All decoded section counts and block pointers match expected values."""
+        for path, exp in self.EXPECTED.items():
+            if not os.path.exists(path):
+                continue
+            hdr = self._parse_header(path)
+            for field_name, expected_val in exp.items():
+                actual = getattr(hdr, field_name)
+                self.assertEqual(actual, expected_val,
+                                 f"{path} {field_name}: {actual} != {expected_val}")
+
+    def test_sections_contiguous(self):
+        """Sections are laid out contiguously: each starts where the previous ends."""
+        for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
+            if not os.path.exists(path):
+                continue
+            hdr = self._parse_header(path)
+            # US VIN → model index → range index → JDM VIN → body model → VIN detail
+            self.assertEqual(hdr.model_index_start_block,
+                             hdr.us_vin_start_block + hdr.us_vin_count, f"{path} model_index")
+            self.assertEqual(hdr.body_model_range_index_block,
+                             hdr.model_index_start_block + hdr.model_index_count, f"{path} range_idx")
+            self.assertEqual(hdr.jdm_vin_start_block,
+                             hdr.body_model_range_index_block + hdr.body_model_range_index_count, f"{path} jdm")
+            self.assertEqual(hdr.body_model_start_block,
+                             hdr.jdm_vin_start_block + hdr.jdm_vin_count, f"{path} body_model")
+            self.assertEqual(hdr.vin_detail_start_block,
+                             hdr.body_model_start_block + hdr.body_model_count, f"{path} vin_detail")
+
+    def test_range_index_always_one_block(self):
+        """Body model range index is always exactly 1 block."""
+        for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
+            if not os.path.exists(path):
+                continue
+            hdr = self._parse_header(path)
+            self.assertEqual(hdr.body_model_range_index_count, 1, f"{path}")
+
+    def test_catalog_descriptors_count(self):
+        """Header always has exactly 3 catalog descriptors."""
+        for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
+            if not os.path.exists(path):
+                continue
+            hdr = self._parse_header(path)
+            self.assertEqual(len(hdr.catalog_descriptors), 3, f"{path}")
+
+
+class TestBlockPointerEncoding(unittest.TestCase):
+    """Tests for the 4-byte block pointer encoding: block = (b1 - 4) * 75 + b2"""
+
+    def test_decode_known_pointers(self):
+        """Verify decode against manually confirmed values."""
+        # SFCDUS2 body model index block (block 40)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x28, 0x00])), 40)
+        # SFCDUS2 JDM VIN start (block 41)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x29, 0x00])), 41)
+        # SFCDUS2 body model start (block 1987)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x1E, 0x25, 0x00])), 1987)
+        # SFCDUS2 VIN detail start (block 1994)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x1E, 0x2C, 0x00])), 1994)
+
+    def test_decode_sfcdus1_pointers(self):
+        """Verify pointer decoding for SFCDUS1."""
+        # Body model index (block 12)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x0C, 0x00])), 12)
+        # JDM VIN start (block 13)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x0D, 0x00])), 13)
+        # Body model start (block 502)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x0A, 0x34, 0x00])), 502)
+        # VIN detail start (block 506)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x0A, 0x38, 0x00])), 506)
+
+    def test_decode_sfcdus3_pointers(self):
+        """Verify pointer decoding for SFCDUS3."""
+        # Body model index (block 55)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x37, 0x00])), 55)
+        # JDM VIN start (block 56)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x04, 0x38, 0x00])), 56)
+        # Body model start (block 2811)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x29, 0x24, 0x00])), 2811)
+        # VIN detail start (block 2817)
+        self.assertEqual(decode_block_pointer(bytes([0x00, 0x29, 0x2A, 0x00])), 2817)
+
+    def test_encode_roundtrip(self):
+        """encode(decode(ptr)) == ptr for all known pointers."""
+        known_ptrs = [
+            bytes([0x00, 0x04, 0x28, 0x00]),  # block 40
+            bytes([0x00, 0x1E, 0x25, 0x00]),  # block 1987
+            bytes([0x00, 0x0A, 0x34, 0x00]),  # block 502
+            bytes([0x00, 0x29, 0x24, 0x00]),  # block 2811
+        ]
+        for ptr in known_ptrs:
+            block = decode_block_pointer(ptr)
+            self.assertEqual(encode_block_pointer(block), ptr,
+                             f"Roundtrip failed for block {block}")
+
+    def test_encode_known_blocks(self):
+        """Verify encoding produces correct pointer bytes."""
+        self.assertEqual(encode_block_pointer(40), bytes([0x00, 0x04, 0x28, 0x00]))
+        self.assertEqual(encode_block_pointer(1987), bytes([0x00, 0x1E, 0x25, 0x00]))
+        self.assertEqual(encode_block_pointer(502), bytes([0x00, 0x0A, 0x34, 0x00]))
+        self.assertEqual(encode_block_pointer(2811), bytes([0x00, 0x29, 0x24, 0x00]))
+
+    def test_encode_decode_range(self):
+        """Roundtrip for a range of block numbers."""
+        for block in range(0, 5000, 7):
+            ptr = encode_block_pointer(block)
+            self.assertEqual(ptr[0], 0x00)
+            self.assertEqual(ptr[3], 0x00)
+            self.assertEqual(decode_block_pointer(ptr), block)
+
+
+class TestBodyModelRangeIndex(unittest.TestCase):
+    """Tests for 18-byte body model range index parsing and pointer verification."""
+
+    # Expected index locations and body model counts per version
+    VERSIONS = [
+        (SFCDUS1_PATH, 0x6000, 4),
+        (SFCDUS2_PATH, 0x14000, 7),
+        (SFCDUS3_PATH, 0x1B800, 6),
+    ]
+
+    def _read_index(self, path, offset):
+        """Read and parse the body model range index block."""
+        with open(path, 'rb') as f:
+            f.seek(offset)
+            data = f.read(2048)
+        return parser.parse_body_model_range_records_18(data, offset)
+
+    def test_record_counts(self):
+        """Each version has the expected number of body model range records."""
+        for path, offset, expected_count in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            records = self._read_index(path, offset)
+            self.assertEqual(len(records), expected_count,
+                             f"{path} @ 0x{offset:X}: expected {expected_count} records, got {len(records)}")
+
+    def test_block_detection(self):
+        """is_body_model_range_block_18 correctly identifies the index block."""
+        for path, offset, _ in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            with open(path, 'rb') as f:
+                f.seek(offset)
+                data = f.read(2048)
+            self.assertTrue(parser.is_body_model_range_block_18(data),
+                            f"{path} @ 0x{offset:X}: detection failed")
+
+    def test_block_detection_rejects_body_model_17(self):
+        """Body model data blocks (17-byte records) should NOT be detected as range index."""
+        if not os.path.exists(SFCDUS2_PATH):
+            return
+        with open(SFCDUS2_PATH, 'rb') as f:
+            f.seek(0x3E1800)  # actual body model data
+            data = f.read(2048)
+        self.assertFalse(parser.is_body_model_range_block_18(data))
+
+    def test_pointer_resolves_to_correct_block(self):
+        """Each pointer resolves to a body model block whose first record matches model_from."""
+        for path, offset, _ in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            records = self._read_index(path, offset)
+            with open(path, 'rb') as f:
+                for rec in records:
+                    target_offset = rec.block_number * 2048
+                    f.seek(target_offset)
+                    body_data = f.read(7)
+                    actual_model = body_data.decode('cp437', errors='replace')
+                    self.assertEqual(rec.model_from, actual_model,
+                                     f"{path}: pointer for [{rec.model_from}] → block {rec.block_number} "
+                                     f"@ 0x{target_offset:08X} has [{actual_model}]")
+
+    def test_pointers_sequential(self):
+        """Block numbers increment by 1 across consecutive records."""
+        for path, offset, _ in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            records = self._read_index(path, offset)
+            for i in range(1, len(records)):
+                self.assertEqual(records[i].block_number, records[i-1].block_number + 1,
+                                 f"{path}: non-sequential blocks at record {i}")
+
+    def test_ranges_sorted_and_contiguous(self):
+        """model_from values are sorted and model_to < next model_from."""
+        for path, offset, _ in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            records = self._read_index(path, offset)
+            for i in range(len(records)):
+                self.assertLess(records[i].model_from, records[i].model_to,
+                                f"{path}: record {i} model_from >= model_to")
+                if i > 0:
+                    self.assertGreater(records[i].model_from, records[i-1].model_to,
+                                       f"{path}: record {i} overlaps with {i-1}")
+
+    def test_header_pointers_match_body_model_start(self):
+        """The header pointer at offset 0x12 matches the first body model range entry."""
+        for path, offset, _ in self.VERSIONS:
+            if not os.path.exists(path):
+                continue
+            with open(path, 'rb') as f:
+                f.seek(0x12)
+                hdr_ptr = f.read(4)
+            records = self._read_index(path, offset)
+            self.assertEqual(hdr_ptr, records[0].block_pointer,
+                             f"{path}: header ptr {hdr_ptr.hex(' ')} != first record ptr "
+                             f"{records[0].block_pointer.hex(' ')}")
+
+    def test_header_pointer_formula_all_sections(self):
+        """Verify (b1-4)*75+b2 for all 4 section pointers in header across all versions."""
+        expected_sections = {
+            SFCDUS1_PATH: {
+                0x06: 12,   # body model index block
+                0x0C: 13,   # JDM VIN start
+                0x12: 502,  # body model start
+                0x18: 506,  # VIN detail start
+            },
+            SFCDUS2_PATH: {
+                0x06: 40,
+                0x0C: 41,
+                0x12: 1987,
+                0x18: 1994,
+            },
+            SFCDUS3_PATH: {
+                0x06: 55,
+                0x0C: 56,
+                0x12: 2811,
+                0x18: 2817,
+            },
+        }
+        for path, sections in expected_sections.items():
+            if not os.path.exists(path):
+                continue
+            with open(path, 'rb') as f:
+                for hdr_offset, expected_block in sections.items():
+                    f.seek(hdr_offset)
+                    ptr = f.read(4)
+                    actual_block = decode_block_pointer(ptr)
+                    self.assertEqual(actual_block, expected_block,
+                                     f"{path} @ hdr 0x{hdr_offset:02X}: "
+                                     f"decoded block {actual_block} != expected {expected_block}")
 
 
 if __name__ == '__main__':

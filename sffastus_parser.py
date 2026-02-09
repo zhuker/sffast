@@ -392,6 +392,76 @@ def extract_record_at_offset(f, offset, record_size=256):
 
 
 @dataclass
+class SffastusHeader:
+    """Parsed header (first 50 bytes) of an sffastus file.
+
+    The header describes the VIN-data section layout:
+        0x00 (4):  Magic (always 00 04 01 00)
+        0x04 (2):  US VIN block count (BE u16)
+        0x06 (4):  Pointer → body model range index block
+        0x0A (2):  Body model range index block count (BE u16, always 1)
+        0x0C (4):  Pointer → JDM VIN start block
+        0x10 (2):  JDM VIN block count (BE u16)
+        0x12 (4):  Pointer → body model start block
+        0x16 (2):  Body model block count (BE u16)
+        0x18 (4):  Pointer → VIN detail start block
+        0x1C (4):  VIN detail block count (BE u32)
+        0x20 (18): Three catalog section descriptors (4-byte ptr + 2-byte count each)
+
+    Block pointers use the (b1-4)*75+b2 encoding.
+    """
+    magic: bytes
+    us_vin_count: int
+    body_model_range_index_block: int
+    body_model_range_index_count: int
+    jdm_vin_start_block: int
+    jdm_vin_count: int
+    body_model_start_block: int
+    body_model_count: int
+    vin_detail_start_block: int
+    vin_detail_count: int
+    catalog_descriptors: list  # 3 tuples of (raw_ptr_bytes, count)
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse(data: bytes):
+        """Parse the first 50 bytes of an sffastus file."""
+        return SffastusHeader(
+            magic=data[0:4],
+            us_vin_count=struct.unpack('>H', data[4:6])[0],
+            body_model_range_index_block=decode_block_pointer(data[6:10]),
+            body_model_range_index_count=struct.unpack('>H', data[10:12])[0],
+            jdm_vin_start_block=decode_block_pointer(data[12:16]),
+            jdm_vin_count=struct.unpack('>H', data[16:18])[0],
+            body_model_start_block=decode_block_pointer(data[18:22]),
+            body_model_count=struct.unpack('>H', data[22:24])[0],
+            vin_detail_start_block=decode_block_pointer(data[24:28]),
+            vin_detail_count=struct.unpack('>I', data[28:32])[0],
+            catalog_descriptors=[
+                (data[32:36], struct.unpack('>H', data[36:38])[0]),
+                (data[38:42], struct.unpack('>H', data[42:44])[0]),
+                (data[44:48], struct.unpack('>H', data[48:50])[0]),
+            ],
+            raw_data=data[:50],
+        )
+
+    @property
+    def us_vin_start_block(self) -> int:
+        """US VIN data always starts at block 1 (right after header block 0)."""
+        return 1
+
+    @property
+    def model_index_start_block(self) -> int:
+        """Model index starts right after US VIN blocks."""
+        return 1 + self.us_vin_count
+
+    @property
+    def model_index_count(self) -> int:
+        """Number of model index blocks (between US VIN end and range index)."""
+        return self.body_model_range_index_block - self.model_index_start_block
+
+
+@dataclass
 class VINRecord:
     """Represents a VIN range record from sffastus (38 bytes)
 
@@ -472,6 +542,43 @@ class BodyModelRecord17:
             constant=(data[7] << 8) | data[8],
             model_code=data[9:15].decode(CHARSET, errors='replace').strip(),
             config_index=(data[15] << 8) | data[16],
+            raw_data=data,
+        )
+
+
+@dataclass
+class BodyModelRangeRecord18:
+    """Represents an 18-byte body model range index record from sffastus.
+
+    Located at the "transition block" between model index and JDM VIN section.
+    Maps sorted body model code ranges to body model data blocks.
+    Used for binary search: given a body model code, find which block to read.
+
+    Structure:
+        0x00 (7): model_from — first body model code in range (e.g., "BD6AY1G")
+        0x07 (7): model_to   — last body model code in range (e.g., "BH9CY5R")
+        0x0E (4): pointer    — 4-byte block pointer (00 b1 b2 00)
+
+    Pointer encoding: block_number = (b1 - 4) * 75 + b2
+
+    Sentinel: record starting with 0x2A ('*') marks end of list.
+    """
+    offset: int
+    model_from: str
+    model_to: str
+    block_pointer: bytes
+    block_number: int
+    raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_18(data: bytes, offset: int = 0):
+        ptr = data[14:18]
+        return BodyModelRangeRecord18(
+            offset=offset,
+            model_from=data[0:7].decode(CHARSET, errors='replace'),
+            model_to=data[7:14].decode(CHARSET, errors='replace'),
+            block_pointer=ptr,
+            block_number=decode_block_pointer(ptr),
             raw_data=data,
         )
 
@@ -912,6 +1019,62 @@ class SffastusBlockParser:
             return True
         except Exception:
             return False
+
+    def is_body_model_range_block_18(self, data: bytes) -> bool:
+        """Detect 18-byte body model range index blocks.
+
+        Records: 7-byte model_from + 7-byte model_to + 4-byte block pointer.
+        Pointer format: 00 b1 b2 00 (all records share the same b1).
+        Terminated by asterisk sentinel.
+        """
+        if len(data) < 36:
+            return False
+        try:
+            # Check first record
+            mf1 = data[0:7].decode(CHARSET)
+            if not (mf1[0].isalpha() and mf1[0].isupper() and mf1.isalnum()):
+                return False
+            mt1 = data[7:14].decode(CHARSET)
+            if not (mt1[0].isalpha() and mt1[0].isupper() and mt1.isalnum()):
+                return False
+            # Pointer: byte 0 and 3 must be 0x00
+            if data[14] != 0x00 or data[17] != 0x00:
+                return False
+            # Check second record
+            rec2 = data[18:36]
+            if rec2[0] == 0x2A:  # sentinel — valid single-entry block
+                return True
+            mf2 = rec2[0:7].decode(CHARSET)
+            if not (mf2[0].isalpha() and mf2[0].isupper() and mf2.isalnum()):
+                return False
+            if rec2[14] != 0x00 or rec2[17] != 0x00:
+                return False
+            # Both pointers must share the same b1 (same section)
+            if data[15] != rec2[15]:
+                return False
+            # b2 must increment by 1
+            if rec2[16] != data[16] + 1:
+                return False
+            return True
+        except Exception:
+            return False
+
+    def parse_body_model_range_records_18(self, data: bytes, base_offset: int = 0):
+        """Parse 18-byte body model range index records from a single 2KB block.
+
+        Returns list of BodyModelRangeRecord18.
+        """
+        RECORD_SIZE = 18
+        records = []
+        for i in range(2048 // RECORD_SIZE):
+            start = i * RECORD_SIZE
+            rec = data[start:start + RECORD_SIZE]
+            if len(rec) < RECORD_SIZE:
+                break
+            if rec[0] == 0x2A or rec[0] == 0x00:
+                break
+            records.append(BodyModelRangeRecord18.parse_18(rec, base_offset + start))
+        return records
 
     def is_model_year_block_44(self, data: bytes) -> bool:
         if len(data) < 44:
@@ -4148,6 +4311,28 @@ def is_valid_model_code(data: bytes) -> bool:
         return text in VALID_MODEL_CODES
     except:
         return False
+
+
+def decode_block_pointer(ptr: bytes) -> int:
+    """Decode a 4-byte block pointer to an absolute block number.
+
+    Pointer format: 00 [b1] [b2] 00
+    Block number = (b1 - 4) * 75 + b2
+    File offset  = block_number * 2048
+
+    Verified across SFCDUS1/2/3 for all section-level pointers.
+    """
+    return (ptr[1] - 4) * 75 + ptr[2]
+
+
+def encode_block_pointer(block: int) -> bytes:
+    """Encode an absolute block number into a 4-byte pointer.
+
+    Inverse of decode_block_pointer.
+    """
+    b1 = block // 75 + 4
+    b2 = block % 75
+    return bytes([0x00, b1, b2, 0x00])
 
 
 def print_block_type_map(ranges):
