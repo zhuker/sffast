@@ -2280,6 +2280,246 @@ class TestSpecMappingRecords22(unittest.TestCase):
         self.assertEqual(block_type, 'spec_mapping_22')
 
 
+class TestFigurePartsLookup(unittest.TestCase):
+    """Test VIN -> figure -> parts resolution pipeline"""
+
+    # G11 block offsets from extended_block_map.txt (SFCDUS2)
+    G11_MODEL_SPEC_START = 0x15C90800
+    G11_MODEL_SPEC_BLOCKS = 2
+    G11_CATALOG_START = 0x15D4E800
+    G11_CATALOG_BLOCKS = 9970
+    G11_PART_GROUP_START = 0x1729A800
+    G11_PART_GROUP_BLOCKS = 877
+
+    BLOCK = 2048
+
+    @staticmethod
+    def _parse_blocks(f, start, num_blocks, record_size, parse_fn):
+        """Parse fixed-size records block-by-block, skipping inter-block padding."""
+        records = []
+        recs_per_block = TestFigurePartsLookup.BLOCK // record_size
+        for blk_idx in range(num_blocks):
+            block_offset = start + blk_idx * TestFigurePartsLookup.BLOCK
+            f.seek(block_offset)
+            block_data = f.read(TestFigurePartsLookup.BLOCK)
+            for rec_idx in range(recs_per_block):
+                off = rec_idx * record_size
+                data = block_data[off:off + record_size]
+                if len(data) < record_size or not is_valid_model_code(data[0:6]):
+                    continue
+                records.append(parse_fn(data, block_offset + off))
+        return records
+
+    @staticmethod
+    def _extract_figure_ref(unknown: bytes):
+        """Extract figure group+number and page from catalog_applicability tail.
+
+        Returns (fig_ref, page) e.g. ('B081', '04') or ('B081', '').
+        """
+        if len(unknown) < 62:
+            return ('', '')
+        fig_group = chr(unknown[54]) if 0x41 <= unknown[54] <= 0x5A else ''
+        fig_num = unknown[55:58].decode('cp437', errors='replace').strip()
+        page = unknown[60:62].decode('cp437', errors='replace').strip()
+        return (fig_group + fig_num, page)
+
+    def test_figure_081_04_parts(self):
+        """Resolve all parts for figure 081-04 for MYSTI VIN (G11 STI).
+
+        Pipeline:
+          1. model_spec_103   -> find spec matching body_model GDFDYEH
+          2. part_group_185   -> callout codes for figure 081, page 04
+          3. catalog_applicability_466 -> resolve each callout to a part number
+             filtering by figure ref B081, page 04, spec_logic, date, destination
+        """
+        import fnmatch
+
+        # --- Step 1: Get model spec for MYSTI (GDF-YEH, EJ257, 6MT, STI, Sedan) ---
+        with open(SFCDUS2_PATH, 'rb') as f:
+            specs = []
+            for blk in range(self.G11_MODEL_SPEC_BLOCKS):
+                off = self.G11_MODEL_SPEC_START + blk * self.BLOCK
+                specs.extend(parser.parse_model_spec_records_103(f, start_offset=off))
+
+        # Find the matching spec for our STI
+        my_spec = [s for s in specs if s.trim_level == 'STI'
+                   and s.engine == '257' and s.transmission == '6MT']
+        self.assertTrue(len(my_spec) >= 1, "Should find STI/257/6MT spec")
+        spec = my_spec[0]
+        self.assertEqual(spec.body_config, 'S')
+        self.assertEqual(spec.drivetrain, '4W')
+
+        # Build property set for spec_logic matching
+        props = {spec.engine, spec.transmission, spec.body_config,
+                 spec.trim_level, spec.drivetrain,
+                 'EJ257', 'EJ25', 'MT', '4WD', 'U4', 'TG', '51E',
+                 '205', '251', 'G11', 'SEDAN', 'Sedan'}
+
+        MY_DATE = '20040625'
+        MY_DEST = 'U4'
+
+        def matches_atom(atom):
+            atom = atom.strip()
+            if not atom:
+                return True
+            if '#' in atom:
+                pat = atom.replace('#', '?')
+                return any(fnmatch.fnmatch(p, pat) for p in props)
+            return atom in props
+
+        def matches_term(term):
+            term = term.strip()
+            if not term:
+                return True
+            negate = term.startswith('*')
+            if negate:
+                term = term[1:]
+            parts, depth, cur = [], 0, ''
+            for ch in term:
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                elif ch == '.' and depth == 0:
+                    parts.append(cur)
+                    cur = ''
+                    continue
+                cur += ch
+            if cur:
+                parts.append(cur)
+            result = True
+            for p in parts:
+                p = p.strip()
+                if p.startswith('(') and p.endswith(')'):
+                    result = result and any(matches_atom(o.strip()) for o in p[1:-1].split('+'))
+                else:
+                    result = result and matches_atom(p)
+            return (not result) if negate else result
+
+        def matches_spec_logic(sl):
+            if not sl:
+                return True
+            terms, depth, cur = [], 0, ''
+            for ch in sl:
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                elif ch == '+' and depth == 0:
+                    terms.append(cur)
+                    cur = ''
+                    continue
+                cur += ch
+            if cur:
+                terms.append(cur)
+            return any(matches_term(t) for t in terms)
+
+        def date_ok(rec):
+            d = rec.date.strip()
+            if not d or len(d) < 16:
+                return True
+            s, e = d[:8], d[8:16]
+            return (not s.isdigit() or not e.isdigit()) or (s <= MY_DATE <= e)
+
+        def dest_ok(rec):
+            dc = rec.destination_codes.strip()
+            if not dc:
+                return True
+            codes = [dc[i:i+2] for i in range(0, len(dc), 2) if dc[i:i+2].strip()]
+            return not codes or MY_DEST in codes
+
+        # --- Step 2: Get page 04 callouts from part_group_185 ---
+        with open(SFCDUS2_PATH, 'rb') as f:
+            pg_records = self._parse_blocks(
+                f, self.G11_PART_GROUP_START, self.G11_PART_GROUP_BLOCKS,
+                185, PartGroupRecord185.parse_185)
+
+        page04 = [r for r in pg_records
+                   if r.model_code == 'G11' and r.figure == '081' and r.figure_page == '04']
+        self.assertEqual(len(page04), 20)
+
+        callouts = [r.part_code for r in page04]
+
+        # --- Step 3: Parse B081 catalog records ---
+        b081_catalog = []
+        with open(SFCDUS2_PATH, 'rb') as f:
+            all_cat = self._parse_blocks(
+                f, self.G11_CATALOG_START, self.G11_CATALOG_BLOCKS,
+                466, CatalogApplicabilityRecord466.parse_466)
+
+        for rec in all_cat:
+            fig_ref, page = self._extract_figure_ref(rec.unknown)
+            if fig_ref == 'B081':
+                b081_catalog.append((rec, page))
+
+        self.assertEqual(len(b081_catalog), 117)
+
+        # --- Step 4: Resolve each callout to a part number ---
+        resolved = []
+        for callout_code in callouts:
+            gc5 = callout_code[:5]
+            suffix = callout_code[5:] if len(callout_code) > 5 else ''
+
+            candidates = []
+            for rec, page in b081_catalog:
+                if rec.group_category != gc5:
+                    continue
+                if page and page != '04':
+                    continue
+                if not matches_spec_logic(rec.spec_logic):
+                    continue
+                if not date_ok(rec):
+                    continue
+                if not dest_ok(rec):
+                    continue
+                candidates.append(rec)
+
+            # Numeric suffix disambiguation (e.g. H505301 vs H505311)
+            if suffix and suffix.isdigit() and len(set(r.part_id for r in candidates)) > 1:
+                filtered = [r for r in candidates if r.part_id.endswith(suffix)]
+                if filtered:
+                    candidates = filtered
+
+            # Deduplicate
+            seen = set()
+            for r in candidates:
+                if r.part_id not in seen:
+                    seen.add(r.part_id)
+                    resolved.append((callout_code, r.part_id))
+
+        # --- Assertions ---
+        part_ids = [pid for _, pid in resolved]
+
+        # All 20 callouts should resolve
+        self.assertEqual(len(resolved), 20)
+
+        # Verify specific part numbers confirmed from the app
+        # Generic parts: user confirmed exact part numbers
+        self.assertIn('047406200', part_ids)   # 0474S -> 047406200
+        self.assertIn('023806000', part_ids)   # 0238S -> 023806000
+        self.assertIn('09535A270', part_ids)   # 0953S -> 09535A270
+
+        # Named parts
+        self.assertIn('14878AA010', part_ids)  # 14878 -> 14878AA010
+        self.assertIn('14879AA010', part_ids)  # 14879 -> 14879AA010
+        self.assertIn('16102AA360', part_ids)  # 16102 -> 16102AA360
+        self.assertIn('14874AA361', part_ids)  # 14874 -> 14874AA361
+        self.assertIn('803605010', part_ids)   # D60501 -> 803605010
+        self.assertIn('807505301', part_ids)   # H505301
+        self.assertIn('807505311', part_ids)   # H505311
+        self.assertIn('807503820', part_ids)   # H50382
+        self.assertIn('16385AA030', part_ids)  # 16385 -> 16385AA030
+        self.assertIn('99071AB481', part_ids)  # 1AB481
+        self.assertIn('22328KA040', part_ids)  # 22328B -> 22328KA040
+
+        # Verify the app's 17 unique callout codes are all present
+        app_callouts = {'D60501', '14879', '14878', '0474S', '14874', '0474S',
+                        '16102', '0238S', 'H505311', 'H505301', '16385',
+                        'H50382', '0953S', '1AB481', '22328B'}
+        our_callouts = {code for code, _ in resolved}
+        self.assertTrue(app_callouts.issubset(our_callouts))
+
+
 if __name__ == '__main__':
     # Run tests
     unittest.main(verbosity=2)
