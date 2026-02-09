@@ -2293,6 +2293,10 @@ class TestFigurePartsLookup(unittest.TestCase):
 
     BLOCK = 2048
 
+    # MYSTI vehicle specs (from VINModelRecord + ModelSpec)
+    MY_DATE = '20040625'
+    MY_DEST = 'U4'
+
     @staticmethod
     def _parse_blocks(f, start, num_blocks, record_size, parse_fn):
         """Parse fixed-size records block-by-block, skipping inter-block padding."""
@@ -2323,48 +2327,71 @@ class TestFigurePartsLookup(unittest.TestCase):
         page = unknown[60:62].decode('cp437', errors='replace').strip()
         return (fig_group + fig_num, page)
 
-    def test_figure_081_04_parts(self):
-        """Resolve all parts for figure 081-04 for MYSTI VIN (G11 STI).
+    @staticmethod
+    def _strip_variant_prefix(spec_logic):
+        """Strip variant letter prefix (A-H) from spec_logic if present.
 
-        Pipeline:
-          1. model_spec_103   -> find spec matching body_model GDFDYEH
-          2. part_group_185   -> callout codes for figure 081, page 04
-          3. catalog_applicability_466 -> resolve each callout to a part number
-             filtering by figure ref B081, page 04, spec_logic, date, destination
+        Variant prefixes appear before the actual spec expression when a callout
+        has multiple variants (e.g. '98281  A' / '98281  B'). The spec_logic
+        then looks like 'AS.(WRX+STI)' where 'A' is the variant selector.
+
+        Returns (variant_letter, actual_spec_logic) or ('', spec_logic).
         """
+        if not spec_logic or len(spec_logic) < 2:
+            return ('', spec_logic)
+        first = spec_logic[0]
+        if first in 'ABCDEFGH' and (spec_logic[1] in '*(' or spec_logic[1].isdigit()
+                                      or spec_logic[1:3] in ('S.', 'S ', 'W.', 'W ', 'S+', 'W+')):
+            return (first, spec_logic[1:])
+        return ('', spec_logic)
+
+    @staticmethod
+    def _parse_callout(part_code):
+        """Parse part_code into (gc5, variant_letter, suffix).
+
+        Space-separated trailing letter = variant (matches spec_logic prefix):
+            '98281  A' -> ('98281', 'A', '')
+        Attached suffix = part of code:
+            '98201A'  -> ('98201', '', 'A')
+            'N450024' -> ('N4500', '', '24')
+            '98271'   -> ('98271', '', '')
+        """
+        if '  ' in part_code or (len(part_code) > 5 and part_code[5] == ' '):
+            parts = part_code.split()
+            if len(parts) == 2 and len(parts[1]) == 1 and parts[1].isalpha():
+                return (parts[0][:5], parts[1], '')
+        gc5 = part_code[:5]
+        suffix = part_code[5:] if len(part_code) > 5 else ''
+        return (gc5, '', suffix)
+
+    def _build_spec_matcher(self):
+        """Build spec_logic matching functions for MYSTI VIN."""
         import fnmatch
 
-        # --- Step 1: Get model spec for MYSTI (GDF-YEH, EJ257, 6MT, STI, Sedan) ---
         with open(SFCDUS2_PATH, 'rb') as f:
             specs = []
             for blk in range(self.G11_MODEL_SPEC_BLOCKS):
                 off = self.G11_MODEL_SPEC_START + blk * self.BLOCK
                 specs.extend(parser.parse_model_spec_records_103(f, start_offset=off))
 
-        # Find the matching spec for our STI
         my_spec = [s for s in specs if s.trim_level == 'STI'
                    and s.engine == '257' and s.transmission == '6MT']
-        self.assertTrue(len(my_spec) >= 1, "Should find STI/257/6MT spec")
+        self.assertTrue(len(my_spec) >= 1)
         spec = my_spec[0]
         self.assertEqual(spec.body_config, 'S')
         self.assertEqual(spec.drivetrain, '4W')
 
-        # Build property set for spec_logic matching
         props = {spec.engine, spec.transmission, spec.body_config,
                  spec.trim_level, spec.drivetrain,
                  'EJ257', 'EJ25', 'MT', '4WD', 'U4', 'TG', '51E',
                  '205', '251', 'G11', 'SEDAN', 'Sedan'}
-
-        MY_DATE = '20040625'
-        MY_DEST = 'U4'
 
         def matches_atom(atom):
             atom = atom.strip()
             if not atom:
                 return True
             if '#' in atom:
-                pat = atom.replace('#', '?')
-                return any(fnmatch.fnmatch(p, pat) for p in props)
+                return any(fnmatch.fnmatch(p, atom.replace('#', '?')) for p in props)
             return atom in props
 
         def matches_term(term):
@@ -2414,110 +2441,180 @@ class TestFigurePartsLookup(unittest.TestCase):
                 terms.append(cur)
             return any(matches_term(t) for t in terms)
 
-        def date_ok(rec):
-            d = rec.date.strip()
-            if not d or len(d) < 16:
-                return True
-            s, e = d[:8], d[8:16]
-            return (not s.isdigit() or not e.isdigit()) or (s <= MY_DATE <= e)
+        return matches_spec_logic
 
-        def dest_ok(rec):
-            dc = rec.destination_codes.strip()
-            if not dc:
-                return True
-            codes = [dc[i:i+2] for i in range(0, len(dc), 2) if dc[i:i+2].strip()]
-            return not codes or MY_DEST in codes
+    def _date_ok(self, rec):
+        d = rec.date.strip()
+        if not d or len(d) < 16:
+            return True
+        s, e = d[:8], d[8:16]
+        return (not s.isdigit() or not e.isdigit()) or (s <= self.MY_DATE <= e)
 
-        # --- Step 2: Get page 04 callouts from part_group_185 ---
+    def _dest_ok(self, rec):
+        dc = rec.destination_codes.strip()
+        if not dc:
+            return True
+        codes = [dc[i:i+2] for i in range(0, len(dc), 2) if dc[i:i+2].strip()]
+        return not codes or self.MY_DEST in codes
+
+    def _resolve_figure_parts(self, figure, figure_page, fig_ref):
+        """Resolve all parts for a given figure+page.
+
+        Args:
+            figure: Figure number (e.g. '081', '343')
+            figure_page: Page number (e.g. '04', '02')
+            fig_ref: Figure reference key in catalog tail (e.g. 'B081', 'A343')
+
+        Returns:
+            list of (callout_code, part_id) tuples
+        """
+        matches_spec_logic = self._build_spec_matcher()
+
+        # Get callouts from part_group_185
         with open(SFCDUS2_PATH, 'rb') as f:
             pg_records = self._parse_blocks(
                 f, self.G11_PART_GROUP_START, self.G11_PART_GROUP_BLOCKS,
                 185, PartGroupRecord185.parse_185)
 
-        page04 = [r for r in pg_records
-                   if r.model_code == 'G11' and r.figure == '081' and r.figure_page == '04']
-        self.assertEqual(len(page04), 20)
+        page_callouts = [r for r in pg_records
+                         if r.model_code == 'G11' and r.figure == figure
+                         and r.figure_page == figure_page]
 
-        callouts = [r.part_code for r in page04]
-
-        # --- Step 3: Parse B081 catalog records ---
-        b081_catalog = []
+        # Parse catalog records for this figure
+        fig_catalog = []
         with open(SFCDUS2_PATH, 'rb') as f:
             all_cat = self._parse_blocks(
                 f, self.G11_CATALOG_START, self.G11_CATALOG_BLOCKS,
                 466, CatalogApplicabilityRecord466.parse_466)
 
         for rec in all_cat:
-            fig_ref, page = self._extract_figure_ref(rec.unknown)
-            if fig_ref == 'B081':
-                b081_catalog.append((rec, page))
+            fr, pg = self._extract_figure_ref(rec.unknown)
+            if fr == fig_ref:
+                fig_catalog.append((rec, pg))
 
-        self.assertEqual(len(b081_catalog), 117)
+        # Track gc5 occurrences for L/R ordering disambiguation
+        from collections import defaultdict
+        gc5_occurrence = defaultdict(int)
 
-        # --- Step 4: Resolve each callout to a part number ---
         resolved = []
-        for callout_code in callouts:
-            gc5 = callout_code[:5]
-            suffix = callout_code[5:] if len(callout_code) > 5 else ''
+        for pgr in page_callouts:
+            gc5, variant, suffix = self._parse_callout(pgr.part_code)
+            gc5_occurrence[gc5] += 1
+            occurrence = gc5_occurrence[gc5]
 
             candidates = []
-            for rec, page in b081_catalog:
+            for rec, pg in fig_catalog:
                 if rec.group_category != gc5:
                     continue
-                if page and page != '04':
+                if pg and pg != figure_page:
                     continue
-                if not matches_spec_logic(rec.spec_logic):
+
+                v_prefix, actual_spec = self._strip_variant_prefix(rec.spec_logic)
+                if variant:
+                    if v_prefix != variant:
+                        continue
+                else:
+                    if v_prefix:
+                        continue
+
+                if not matches_spec_logic(actual_spec):
                     continue
-                if not date_ok(rec):
+                if not self._date_ok(rec):
                     continue
-                if not dest_ok(rec):
+                if not self._dest_ok(rec):
                     continue
                 candidates.append(rec)
 
-            # Numeric suffix disambiguation (e.g. H505301 vs H505311)
-            if suffix and suffix.isdigit() and len(set(r.part_id for r in candidates)) > 1:
-                filtered = [r for r in candidates if r.part_id.endswith(suffix)]
-                if filtered:
-                    candidates = filtered
+            # Suffix disambiguation
+            if suffix and len(set(r.part_id for r in candidates)) > 1:
+                if suffix.isdigit():
+                    filtered = [r for r in candidates if r.part_id.endswith(suffix)]
+                    if filtered:
+                        candidates = filtered
+
+            # L/R ordering disambiguation: when multiple distinct part_ids remain
+            # and the same gc5 appears multiple times without variant prefix,
+            # use catalog record ordering to assign Nth occurrence -> Nth part_id
+            unique_pids = sorted(set(r.part_id for r in candidates))
+            if len(unique_pids) > 1 and not variant:
+                total = sum(1 for r in page_callouts
+                            if self._parse_callout(r.part_code)[0] == gc5
+                            and self._parse_callout(r.part_code)[1] == '')
+                if total == len(unique_pids):
+                    pid_offset = {}
+                    for r in candidates:
+                        if r.part_id not in pid_offset or r.offset < pid_offset[r.part_id]:
+                            pid_offset[r.part_id] = r.offset
+                    ordered = sorted(pid_offset, key=lambda p: pid_offset[p])
+                    if occurrence <= len(ordered):
+                        candidates = [r for r in candidates if r.part_id == ordered[occurrence - 1]]
 
             # Deduplicate
             seen = set()
             for r in candidates:
                 if r.part_id not in seen:
                     seen.add(r.part_id)
-                    resolved.append((callout_code, r.part_id))
+                    resolved.append((pgr.part_code.strip(), r.part_id))
 
-        # --- Assertions ---
+            if not candidates:
+                resolved.append((pgr.part_code.strip(), '???'))
+
+        return resolved, len(page_callouts), len(fig_catalog)
+
+    def test_figure_081_04_parts(self):
+        """Resolve all parts for figure 081-04 for MYSTI VIN (G11 STI)."""
+        resolved, num_callouts, num_catalog = self._resolve_figure_parts('081', '04', 'B081')
+
         part_ids = [pid for _, pid in resolved]
 
-        # All 20 callouts should resolve
+        self.assertEqual(num_callouts, 20)
+        self.assertEqual(num_catalog, 117)
         self.assertEqual(len(resolved), 20)
 
-        # Verify specific part numbers confirmed from the app
         # Generic parts: user confirmed exact part numbers
         self.assertIn('047406200', part_ids)   # 0474S -> 047406200
         self.assertIn('023806000', part_ids)   # 0238S -> 023806000
         self.assertIn('09535A270', part_ids)   # 0953S -> 09535A270
 
         # Named parts
-        self.assertIn('14878AA010', part_ids)  # 14878 -> 14878AA010
-        self.assertIn('14879AA010', part_ids)  # 14879 -> 14879AA010
-        self.assertIn('16102AA360', part_ids)  # 16102 -> 16102AA360
-        self.assertIn('14874AA361', part_ids)  # 14874 -> 14874AA361
-        self.assertIn('803605010', part_ids)   # D60501 -> 803605010
+        self.assertIn('14878AA010', part_ids)  # 14878
+        self.assertIn('14879AA010', part_ids)  # 14879
+        self.assertIn('16102AA360', part_ids)  # 16102
+        self.assertIn('14874AA361', part_ids)  # 14874
+        self.assertIn('803605010', part_ids)   # D60501
         self.assertIn('807505301', part_ids)   # H505301
         self.assertIn('807505311', part_ids)   # H505311
         self.assertIn('807503820', part_ids)   # H50382
-        self.assertIn('16385AA030', part_ids)  # 16385 -> 16385AA030
+        self.assertIn('16385AA030', part_ids)  # 16385
         self.assertIn('99071AB481', part_ids)  # 1AB481
-        self.assertIn('22328KA040', part_ids)  # 22328B -> 22328KA040
+        self.assertIn('22328KA040', part_ids)  # 22328B
 
-        # Verify the app's 17 unique callout codes are all present
-        app_callouts = {'D60501', '14879', '14878', '0474S', '14874', '0474S',
+        # All app callout codes present
+        app_callouts = {'D60501', '14879', '14878', '0474S', '14874',
                         '16102', '0238S', 'H505311', 'H505301', '16385',
                         'H50382', '0953S', '1AB481', '22328B'}
         our_callouts = {code for code, _ in resolved}
         self.assertTrue(app_callouts.issubset(our_callouts))
+
+    def test_figure_343_02_parts(self):
+        """Resolve all parts for figure 343-02 (AIR BAG) for MYSTI VIN (G11 STI)."""
+        resolved, num_callouts, num_catalog = self._resolve_figure_parts('343', '02', 'A343')
+
+        part_ids = [pid for _, pid in resolved]
+
+        self.assertEqual(num_callouts, 11)
+        self.assertEqual(num_catalog, 135)
+        self.assertEqual(len(resolved), 11)
+
+        # Verified against the app
+        self.assertIn('98271FE090OE', part_ids)   # 98271 - passenger airbag
+        self.assertIn('98281AE060', part_ids)      # 98281 A - label variant A
+        self.assertIn('98281FC010', part_ids)      # 98281 B - label variant B
+        self.assertIn('904586015', part_ids)       # Q586015 - tapping screw
+        self.assertIn('98211FE180', part_ids)      # 98211 - driver airbag
+        self.assertIn('98201FE120', part_ids)      # 98201 - side airbag right
+        self.assertIn('98201FE130', part_ids)      # 98201A - side airbag left
+        self.assertIn('902450024', part_ids)       # N450024 - cap-nut
 
 
 if __name__ == '__main__':

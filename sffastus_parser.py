@@ -3502,8 +3502,8 @@ class CatalogApplicabilityRecord466:
         0x00  (6):  Model Code (e.g., "B11   ")
         0x06  (5):  Group/Category (e.g., "0951S")
         0x0B  (2):  Padding (spaces)
-        0x0D  (10): Part ID (e.g., "42162AC190")
-        0x17  (5):  Padding (spaces)
+        0x0D  (12): Part ID (e.g., "98271FE090OE")
+        0x19  (3):  Padding (spaces)
         0x1C  (1):  Date Flag (A-H letter code)
         0x1D  (16): Date Range YYYYMMDDYYYYMMDD
         0x2D  (19): Destination Codes (e.g., "C0U4", "U5U6")
@@ -3546,7 +3546,7 @@ class CatalogApplicabilityRecord466:
             raw_data=data,
             model_code=clean(data[0:6]),
             group_category=clean(data[6:11]),
-            part_id=clean(data[13:23]),
+            part_id=clean(data[13:25]),
 
             # Validity Range
             date_flag=clean(data[28:29]),
