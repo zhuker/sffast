@@ -2315,19 +2315,6 @@ class TestFigurePartsLookup(unittest.TestCase):
         return records
 
     @staticmethod
-    def _extract_figure_ref(unknown: bytes):
-        """Extract figure group+number and page from catalog_applicability tail.
-
-        Returns (fig_ref, page) e.g. ('B081', '04') or ('B081', '').
-        """
-        if len(unknown) < 62:
-            return ('', '')
-        fig_group = chr(unknown[54]) if 0x41 <= unknown[54] <= 0x5A else ''
-        fig_num = unknown[55:58].decode('cp437', errors='replace').strip()
-        page = unknown[60:62].decode('cp437', errors='replace').strip()
-        return (fig_group + fig_num, page)
-
-    @staticmethod
     def _strip_variant_prefix(spec_logic):
         """Strip variant letter prefix (A-H) from spec_logic if present.
 
@@ -2486,19 +2473,18 @@ class TestFigurePartsLookup(unittest.TestCase):
                 466, CatalogApplicabilityRecord466.parse_466)
 
         for rec in all_cat:
-            fr, pg = self._extract_figure_ref(rec.unknown)
-            if fr == fig_ref:
-                fig_catalog.append((rec, pg))
+            if rec.figure_ref == fig_ref:
+                fig_catalog.append(rec)
 
         resolved = []
         for pgr in page_callouts:
             callout_code, variant = self._parse_callout(pgr.part_code)
 
             candidates = []
-            for rec, pg in fig_catalog:
+            for rec in fig_catalog:
                 if rec.group_category != callout_code:
                     continue
-                if pg and pg != figure_page:
+                if rec.figure_page and rec.figure_page != figure_page:
                     continue
 
                 v_prefix, actual_spec = self._strip_variant_prefix(rec.spec_logic)

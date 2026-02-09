@@ -3509,7 +3509,10 @@ class CatalogApplicabilityRecord466:
         0x40  (64): Spec Logic expression (e.g., "EJ22# +EJ25D")
         0x80  (32): Usage Notes (e.g., "USA")
         0xA0  (20): Internal Flags
-        0xB4  (286): Binary feature mask / unknown tail
+        0xB4  (286): Unknown tail, partially decoded:
+                     tail[54]:    Figure group letter (A-Z)
+                     tail[55:58]: Figure number (e.g., "081")
+                     tail[60:62]: Figure page (e.g., "04")
     """
     offset: int
 
@@ -3525,6 +3528,8 @@ class CatalogApplicabilityRecord466:
     usage_notes: str
 
     internal_flags: str
+    figure_ref: str
+    figure_page: str
     unknown: bytes
     raw_data: bytes = field(repr=False)
 
@@ -3562,6 +3567,11 @@ class CatalogApplicabilityRecord466:
 
             # Internal pointers (Text based integers)
             internal_flags=clean(data[160:180]),
+
+            # Figure reference from tail (data[180:])
+            figure_ref=(chr(data[234]) + clean(data[235:238])
+                        if len(data) > 241 and 0x41 <= data[234] <= 0x5A else ''),
+            figure_page=clean(data[240:242]) if len(data) > 241 else '',
 
             # The rest is the binary feature mask
             unknown=data[180:],
