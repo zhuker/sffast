@@ -322,17 +322,16 @@ Defines part applicability per model: which parts apply to which engine/body/tri
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
 | 0x00 | 6 | Model Code | e.g. `B11   `, `G11   ` |
-| 0x06 | 5 | Group/Category | Part group code (e.g. `0951S`, `10004`) |
-| 0x0B | 2 | Padding | Spaces |
-| 0x0D | 10 | Part ID | Part number (e.g. `42162AC190`, `10004AA011`) |
-| 0x17 | 5 | Padding | Spaces |
+| 0x06 | 7 | Group/Category | Callout code (e.g. `H505301`, `98201A`, `14878`) |
+| 0x0D | 12 | Part ID | Part number (e.g. `98271FE090OE`, `42162AC190`) |
+| 0x19 | 3 | Padding | Spaces |
 | 0x1C | 1 | Date Flag | Letter code A-H indicating validity period type |
 | 0x1D | 16 | Date Range | `YYYYMMDDYYYYMMDD` (start + end, e.g. `1997100119990531`) |
 | 0x2D | 19 | Destination Codes | Market/destination codes (e.g. `C0U4`, `U5U6`, spaces if universal) |
 | 0x40 | 64 | Spec Logic | Boolean expression for applicability (e.g. `EJ22# +EJ25D`, `S +W`) |
 | 0x80 | 32 | Usage Notes | Constraint text (e.g. `USA`) |
 | 0xA0 | 20 | Internal Flags | Text-based integer fields |
-| 0xB4 | 286 | Unknown Tail | Binary feature mask, `0x2A` (`*`) end marker, `0x40` (`@`) padding |
+| 0xB4 | 286 | Tail | Partially decoded (see below) |
 
 **Destination Codes (offset 0x2D, 19 bytes):**
 
@@ -348,28 +347,52 @@ Present in ~23% of records. Codes appear in pairs and can be concatenated:
 
 Records with empty destination codes (spaces) apply universally to all markets.
 
+**Group/Category (offset 0x06, 7 bytes):**
+
+This is the full callout code that matches part_code entries in Part Group Records (185-byte). Originally decoded as 5 bytes + 2 bytes "padding", but the 2-byte suffix is part of the code:
+- `H505301` = group `H5053` + suffix `01`
+- `98201A` = group `98201` + suffix `A`
+- `14878` = group `14878` + empty suffix (spaces stripped)
+
+**Part ID (offset 0x0D, 12 bytes):**
+
+Full part number including optional 2-character suffix. ~14% of records use the suffix (e.g. `OE`, `NV`, `TG`, `ML`). Originally decoded as 10 bytes, truncating these suffixes.
+
 **Spec Logic Expression Syntax:**
 - `+` separates alternatives (OR): `EJ22# +EJ25D` = EJ22x or EJ25D
 - `.` combines requirements (AND): `WOBK.25GT.255` = Wagon Outback AND 25GT AND EJ255
+- `*` negation (NOT): `*AT` = not automatic transmission
+- `#` single-character wildcard: `EJ22#` matches EJ22E, EJ22G, etc.
 - Parentheses for grouping: `S.(I#+25GT+25GTLTD) +WOBK`
-- Single letters for body types: `S` = Sedan, `W` = Wagon, `P` = ?
-- Engine codes: `EJ22#` (# = wildcard), `EJ25D`, `253`, `255`, `30D`
+- Single letters for body types: `S` = Sedan, `W` = Wagon
+- Engine codes: `EJ22#`, `EJ25D`, `253`, `255`, `257`, `30D`
 - Trim codes: `25GT`, `25GLI`, `STI`, `BASE`
+- **Variant prefix:** ~7.4% of records have a letter A-H at position 0 as a variant selector, not part of the spec expression. E.g. `AS.(WRX+STI)` = variant `A` + spec `S.(WRX+STI)`. Matches space-separated variant suffix in Part Group part_code (e.g. `98281  A`).
+
+**Tail (offset 0xB4, 286 bytes) — partially decoded:**
+
+| Tail Offset | Width | Field | Description |
+|-------------|-------|-------|-------------|
+| 0x36 (54) | 1 | Figure Group Letter | A-Z letter (e.g. `B` for body) |
+| 0x37 (55) | 3 | Figure Number | 3-digit figure (e.g. `081`) |
+| 0x3A (58) | 2 | Spacer | Always spaces |
+| 0x3C (60) | 2 | Figure Page | Page within figure (e.g. `04`) |
+
+Remaining tail bytes are mostly zeros with `0x2A` (`*`) end marker at ~offset 234, followed by `0x40` (`@`) fill.
 
 **Example Records:**
 ```
-Model B11, Part 42162AC190: Date E 1997.10.01-1999.05.31, Spec "EJ22# +EJ25D"
-Model B13, Part 010006107: Date A 2003.11.01-2005.05.31, Spec "A25GLI.255 +WOBK.25GT.255"
-Model C12, Part 10024AA000: Date C 1993.08.01-1994.06.30, Dest "U0U1", Spec "2C"
+Model B11, Group 42162, Part 42162AC190: Date E 1997.10.01-1999.05.31, Spec "EJ22# +EJ25D"
+Model B13, Group 01000, Part 010006107: Date A 2003.11.01-2005.05.31, Spec "A25GLI.255 +WOBK.25GT.255"
+Model G11, Group H505301, Part 807505301: Spec "205 +257", Fig B081 Page 04
 ```
 
 **Notes:**
 - 4 records per 2KB block (466×4 = 1864 bytes, 184 bytes padding)
 - Blocks terminated by invalid model code in padding region
-- Tail contains `0x2A` (`*`) end marker at offset ~414, followed by `0x40` (`@`) fill
-- The 286-byte tail likely contains a binary feature/spec bitmask (mostly zeros)
+- Each range is terminated by one `******...` (asterisk) sentinel record and one null record
 
-**Validation Status:** ✓ 389,192 records validated across 97,303 blocks (10 model ranges). All model codes valid, all dates 16-digit numeric, all group_category and part_id non-empty.
+**Validation Status:** ✓ 389,192 records validated across 97,303 blocks (10 model ranges). All model codes valid, all dates 16-digit numeric, all group_category and part_id non-empty. Figure parts lookup verified against Windows app for figures 081-04 and 343-02 (G11 STI).
 
 ### Code Index Records (33-byte Type) (0x0DE42800+) - **VALIDATED ✓**
 
