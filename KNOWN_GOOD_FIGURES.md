@@ -124,24 +124,104 @@ ImageMagick `magick input.tif output.png`
 1280 x 640 PNG (matches app display)
 ```
 
+## Figure Data Pointer Encoding (ptr3)
+
+The 4-byte ptr3 field at record bytes [69:73] encodes a file offset to the
+raw G4 image data. The encoding was reverse-engineered by using the known
+fig001 offset (0x17471000) as a calibration point, then verifying the formula
+across all 23 G11 records.
+
+### Format
+
+```
+ptr3 = [marker] [byte1] [byte2] [byte3]
+         0x2A     0x1A+   0x00+   0x00+
+```
+
+### Decoding formula
+
+```
+position = (byte1 - ref_byte1) * 19200 + byte2 * 256 + byte3
+file_offset = base + position * 8
+```
+
+For G11: `ref_byte1 = 0x1A`, `base = 0x1745D000`
+
+### Structure
+
+| Component | Value | Role |
+|-----------|-------|------|
+| Byte 0 | `0x2A` | Constant marker (same for all G11 records) |
+| Byte 1 | `0x1A`, `0x1B`, `0x1C` | Section counter; increments when byte2:byte3 range is exhausted |
+| Bytes 2-3 | `0x0000`-`0xFFFF` | Position within section (big-endian) |
+| Unit | 8 bytes | Each position unit = 8 bytes of file data |
+| Section size | 19200 units = 153,600 bytes | `75 * 256 * 8` — same factor 75 as section-level block pointers |
+
+### Verification
+
+- Tested against all 23 G11 records with **zero errors**
+- Sequential consistency: each figure's data starts at `ceil(prev_s2 / 8) * 8`
+  bytes after the previous, with 0-8 bytes of alignment padding
+- Data at every computed offset starts with valid G4 bitstream bytes
+- The s2 field is confirmed as the **exact byte count** of raw G4 data
+
+### Example
+
+```
+fig001: ptr3 = 2A 1A 28 00
+  position = (0x1A - 0x1A) * 19200 + 0x28 * 256 + 0x00 = 10240
+  offset   = 0x1745D000 + 10240 * 8 = 0x17471000  ✓
+
+fig002/05: ptr3 = 2A 1B 02 E9
+  position = (0x1B - 0x1A) * 19200 + 0x02 * 256 + 0xE9 = 19945
+  offset   = 0x1745D000 + 19945 * 8 = 0x17483F48  ✓
+```
+
+## All G11 Figures (23 pages)
+
+All 23 G11 figure pages were successfully extracted using the ptr3 decoding
+formula. See `known_good_g11_23.py`.
+
+| Fig | Page | Offset | Size | Label |
+|-----|------|--------|------|-------|
+| 001 | 01 | 0x17471000 | 4,520 | *(index/overview)* |
+| 002 | 01 | 0x174721B0 | 15,831 | SHORT BLOCK ENGINE ASSEMBLY |
+| 002 | 02 | 0x17475F88 | 17,692 | ENGINE GASKET & SEAL KIT '02MY-'03MY |
+| 002 | 03 | 0x1747A4A8 | 19,215 | ENGINE GASKET & SEAL KIT '02MY-'03MY |
+| 002 | 04 | 0x1747EFB8 | 20,364 | ENGINE GASKET & SEAL KIT '04MY-'05MY |
+| 002 | 05 | 0x17483F48 | 15,762 | ENGINE GASKET & SEAL KIT '04MY-'04MY |
+| 002 | 06 | 0x17487CE0 | 20,048 | ENGINE GASKET & SEAL KIT '04MY-'06MY |
+| 002 | 07 | 0x1748CB38 | 3,934 | ENGINE GASKET SET '04MY-'04MY |
+| 002 | 08 | 0x1748DA98 | 12,914 | ENGINE GASKET & SEAL KIT '05MY-'05MY |
+| 002 | 09 | 0x17490D10 | 14,065 | ENGINE GASKET & SEAL KIT '06MY- |
+| 002 | 10 | 0x17494408 | 19,347 | ENGINE GASKET & SEAL KIT '06MY- |
+| 002 | 11 | 0x17498FA0 | 19,209 | ENGINE GASKET & SEAL KIT '07MY- |
+| 004 | 01 | 0x1749DAB0 | 12,514 | SYSTEM |
+| 004 | 02 | 0x174A0B98 | 13,648 | BODY |
+| 004 | 40 | 0x174A40F0 | 7,761 | I&S BULLETIN COVER-OIL SEPR |
+| 005 | 01 | 0x174A5F48 | 9,271 | *(no label)* |
+| 006 | 01 | 0x174A8380 | 14,982 | '02MY-'05MY |
+| 006 | 02 | 0x174ABE08 | 8,065 | SYSTEM '02MY-'05MY |
+| 006 | 03 | 0x174ADD90 | 11,115 | BODY |
+| 006 | 04 | 0x174B0900 | 13,521 | SYSTEM '02MY-'06MY |
+| 006 | 05 | 0x174B3DD8 | 12,115 | BODY |
+| 006 | 06 | 0x174B6D30 | 10,387 | SYSTEM '06MY- |
+| 006 | 07 | 0x174B95C8 | 13,012 | SYSTEM 257('07MY- ) |
+
 ## Output
 
 | File | Script | Description |
 |------|--------|-------------|
 | `known_good/g11_index_table.png` | `known_good_figures.py` | G11 illustration index table (1280x640) |
 | `known_good/g11_fig001.png` | `known_good_fig001.py` | G11 fig001 illustration (1280x640, matches app) |
+| `g11_figures/fig*.png` (23 files) | `known_good_g11_23.py` | All 23 G11 figure pages (1280x640 each) |
 
 ## Open Questions
 
-- **Image height**: Both index table and fig001 are 640 pixels tall (verified
-  against app). All figures likely use 1280x640. Height is not stored in the
-  89-byte records — it appears to be a fixed constant.
+- **Image height**: All 23 G11 figures are 640 pixels tall (confirmed by
+  successful decode of every page). Height is not stored in the 89-byte
+  records — it is a fixed constant of 640.
 
-- **s2 field**: The 2-byte value at record bytes [85:87] is 4520 for fig001,
-  which matches the byte count of raw G4 data. But for fig002/01, s2=15831
-  exceeds the gap to the next ptr3 (14336 bytes), suggesting either s2 is not
-  a simple byte count or the data is stored as a continuous stream.
-
-- **Continuous stream**: Evidence suggests figure pages may be stored as one
-  continuous G4 bitstream. Individual ptr3 pointers may land mid-stream rather
-  than at standalone image boundaries.
+- **Ptr3 byte 0**: Always `0x2A` for G11. May differ for other model groups.
+  The base offset and ref_byte1 are currently G11-specific constants — need
+  to investigate other models to determine if the formula generalizes.
