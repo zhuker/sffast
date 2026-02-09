@@ -21,6 +21,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wand.image import Image as WandImage
+
 TESTDATA = Path(__file__).parent / "testdata"
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 640
@@ -104,6 +106,28 @@ class TestFig001Decode(unittest.TestCase):
             self.assertEqual(dims, "1280x640")
         finally:
             Path(tiff_path).unlink()
+
+
+    def test_decode_to_pbm_wand(self):
+        """Decode G4 to PBM via Wand (Python ImageMagick binding) and verify hash."""
+        tiff_data = make_g4_tiff(self.raw_data, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+        with WandImage(blob=tiff_data, format='tiff') as img:
+            self.assertEqual(img.width, IMAGE_WIDTH)
+            self.assertEqual(img.height, IMAGE_HEIGHT)
+            pbm = img.make_blob('pbm')
+
+        pbm_hash = hashlib.sha256(pbm).hexdigest()
+        self.assertEqual(pbm_hash, EXPECTED_PBM_SHA256,
+                         f"PBM hash mismatch: got {pbm_hash}")
+
+    def test_wand_image_type(self):
+        """Wand should report bilevel image type."""
+        tiff_data = make_g4_tiff(self.raw_data, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+        with WandImage(blob=tiff_data, format='tiff') as img:
+            self.assertEqual(img.depth, 1)
+            self.assertEqual(img.type, 'bilevel')
 
 
 if __name__ == "__main__":
