@@ -3635,14 +3635,14 @@ class ModelIndexRecord288:
             model_name=clean(data[188:203]),  # 0xBC
             start_date=clean(data[203:209]),  # 0xCB
             end_date=clean(data[209:215]),  # 0xD1
-            features=clean(data[215:229]),  # 0xD7
-            category1=clean(data[229:237]),  # 0xE5
-            category2=clean(data[237:245]),  # 0xED
-            category3=clean(data[245:253]),  # 0xF5
-            category4=clean(data[253:261]),  # 0xFD
-            category5=clean(data[261:269]),  # 0x105
-            category6=clean(data[269:277]),  # 0x10D
-            trailer=data[277:288],  # 11 bytes padding
+            features=clean(data[215:215+8]),  # 0xD7
+            category1=clean(data[215+8:215+8+8]),  # 0xE5
+            category2=clean(data[215+8+8:215+8+8+8]),  # 0xED
+            category3=clean(data[215+8+8+8:215+8+8+8+8]),  # 0xF5
+            category4=clean(data[215+8+8+8+8:215+8+8+8+8+8]),  # 0xFD
+            category5=clean(data[215+8+8+8+8+8:215+8+8+8+8+8+8]),  # 0x105
+            category6=clean(data[215+8+8+8+8+8+8:215+8+8+8+8+8+8+8]),  # 0x10D
+            trailer=data[215+8+8+8+8+8+8+8:],  # 11 bytes padding
         )
 
 

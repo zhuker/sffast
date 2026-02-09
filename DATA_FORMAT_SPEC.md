@@ -152,14 +152,14 @@ The records are aligned to **2KB blocks** (similar to VIN blocks).
 | 0xBC | 15 | Model Name | e.g., `LEGACY         `, `TRIBECA        ` |
 | 0xCB | 6 | Start Date | `YYYYMM` (ASCII, e.g., "199310") |
 | 0xD1 | 6 | End Date | `YYYYMM` (ASCII, e.g., "199905") |
-| 0xD7 | 14 | Features | Flags (`12345...`) |
-| 0xE5 | 8 | Category 1 | `ENGINE  ` |
-| 0xED | 8 | Category 2 | `TRAIN   ` |
-| 0xF5 | 8 | Category 3 | `MISSIO  ` (MISSION truncated) |
-| 0xFD | 8 | Category 4 | `GRADE   ` |
-| 0x105 | 8 | Category 5 | (varies) |
-| 0x10D | 8 | Category 6 | (varies) |
-| 0x115 | 11 | Trailer | Padding/Reserved |
+| 0xD7 | 8 | Features | Flags |
+| 0xDF | 8 | Category 1 | `BODY    ` |
+| 0xE7 | 8 | Category 2 | `ENGINE  ` |
+| 0xEF | 8 | Category 3 | `TRAIN   ` |
+| 0xF7 | 8 | Category 4 | `MISSION ` |
+| 0xFF | 8 | Category 5 | `GRADE   ` |
+| 0x107 | 8 | Category 6 | `SUS     ` |
+| 0x10F | 17 | Trailer | Padding/Reserved |
 
 **Example Records:**
 - B11 (LEGACY): 199310 to 199905

@@ -990,9 +990,10 @@ class TestModelIndexRecords288(unittest.TestCase):
 
         # Print for inspection
         for i, r in enumerate(records):
+            print(r)
             print(f"Record {i}: {r.model_code} - {r.model_name} ({r.start_date} to {r.end_date})")
             print(f"  Series: {r.series_code}")
-            print(f"  Categories: {r.category1}, {r.category2}, {r.category3}")
+            print(f"  Categories: {r.category1}, {r.category2}, {r.category3}, {r.category4}, {r.category5}, {r.category6}")
 
 
 class TestPartDetailRecords466(unittest.TestCase):
