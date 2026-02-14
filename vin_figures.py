@@ -23,7 +23,9 @@ from sffastus_parser import (
     SffastusHeader,
     CatalogApplicabilityRecord466,
     EngineSpecRecord230,
+    FIGGroupCategoryRecord184,
     FIGIllustrationPage89,
+    FIGIllustrationRecord183,
     ModelSpecRecord103,
     VINModelRecord,
     decode_block_pointer,
@@ -408,6 +410,61 @@ def main():
         for r in model_fig89:
             fig89_lookup[(r.fig_index, r.page_index)] = r
 
+        # Step 6.1: Load FIG group category records (184) for this model
+        print("\nLoading figure group categories...")
+        fig184_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
+        all_fig184 = []
+        for rs, re_, rc, rt in fig184_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != vin_rec.model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_fig_group_category_records_184(f, bo)
+                all_fig184.extend(recs)
+
+        model_fig184 = [r for r in all_fig184 if r.model_code == vin_rec.model_code]
+
+        # Build lookup: group_code (e.g., "0A") -> FIGGroupCategoryRecord184
+        fig184_lookup = {}
+        for r in model_fig184:
+            fig184_lookup[r.fig_group_code] = r
+        print(f"  Group categories: {len(fig184_lookup)}")
+
+        # Step 6.2: Load FIG illustration records (183) for this model
+        print("Loading figure illustration descriptions...")
+        fig183_ranges = [r for r in ranges if r[3] == FIGIllustrationRecord183.ID]
+        all_fig183 = []
+        for rs, re_, rc, rt in fig183_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != vin_rec.model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_fig_illustration_records_183(f, bo)
+                all_fig183.extend(recs)
+
+        model_fig183 = [r for r in all_fig183 if r.model_code == vin_rec.model_code]
+
+        # Build lookup: fig_code (e.g., "004") -> FIGIllustrationRecord183
+        # Each figure appears twice (by-system 0A-9B and by-binder A1-D3);
+        # prefer the "by system" record that has a matching 184 category
+        fig183_by_fig = defaultdict(list)
+        for r in model_fig183:
+            fig183_by_fig[r.fig_group_code2].append(r)
+
+        fig183_lookup = {}
+        for fig_code, records in fig183_by_fig.items():
+            best = records[0]
+            for r in records:
+                if r.fig_group_code in fig184_lookup:
+                    best = r
+                    break
+            fig183_lookup[fig_code] = best
+        print(f"  Figure descriptions: {len(fig183_lookup)}")
+
         # Step 6.5: Load part group descriptions (PartGroupRecord185)
         print("\nLoading part group descriptions...")
         pg_ranges = [r for r in ranges if r[3] == 'part_group_185']
@@ -528,8 +585,25 @@ def main():
         total_without_image = 0
         total_parts = 0
 
+        # Group figures by category (184 → 183 hierarchy)
+        category_figures = defaultdict(list)  # group_code -> [(fig, page), ...]
+        uncategorized = []
+
         for fig, page in sorted(by_fig_page.keys()):
-            fig_name = figname_lookup.get(fig, "")
+            fig183 = fig183_lookup.get(fig)
+            if fig183:
+                category_figures[fig183.fig_group_code].append((fig, page))
+            else:
+                uncategorized.append((fig, page))
+
+        # Sort categories by group code
+        sorted_cats = sorted(category_figures.keys())
+
+        def print_figure(fig, page):
+            nonlocal total_with_image, total_without_image, total_parts
+            fig183 = fig183_lookup.get(fig)
+            fig_desc = fig183.desc_en if fig183 else figname_lookup.get(fig, "")
+
             has_image = (fig, page) in fig89_lookup
             if has_image and fig89_lookup[(fig, page)].image_size > 0:
                 total_with_image += 1
@@ -540,7 +614,7 @@ def main():
             raw_label = fig89_lookup[(fig, page)].label if has_image else ""
             label = " ".join(raw_label.split()) if raw_label else ""
             label_str = f"  ({label})" if label else ""
-            print(f"FIG {fig}-{page} {fig_name}{label_str}{img_flag}")
+            print(f"  FIG {fig}-{page} {fig_desc}{label_str}{img_flag}")
 
             # Merge page-specific parts + figure-wide parts
             combined = (parts_by_fig_page.get((fig, page), [])
@@ -549,8 +623,21 @@ def main():
 
             for p in unique_parts:
                 desc = lookup_desc(fig, p.group_category, p.part_id)
-                print(f"  {p.group_category:8s} {p.part_id:14s} {desc}")
+                print(f"    {p.group_category:8s} {p.part_id:14s} {desc}")
             total_parts += len(unique_parts)
+
+        for cat_code in sorted_cats:
+            cat184 = fig184_lookup.get(cat_code)
+            cat_desc = cat184.desc_en if cat184 else cat_code
+            print(f"--- {cat_code}: {cat_desc} ---")
+            for fig, page in category_figures[cat_code]:
+                print_figure(fig, page)
+            print()
+
+        if uncategorized:
+            print("--- Uncategorized ---")
+            for fig, page in uncategorized:
+                print_figure(fig, page)
             print()
 
         print(f"Total: {len(by_fig_page)} figure pages, "
