@@ -442,6 +442,9 @@ Full part number including optional 2-character suffix. ~14% of records use the 
 - Engine codes: `EJ22#`, `EJ25D`, `253`, `255`, `257`, `30D`
 - Trim codes: `25GT`, `25GLI`, `STI`, `BASE`
 - **Variant prefix:** ~7.4% of records have a letter A-H at position 0 as a variant selector, not part of the spec expression. E.g. `AS.(WRX+STI)` = variant `A` + spec `S.(WRX+STI)`. Matches space-separated variant suffix in Part Group part_code (e.g. `98281  A`).
+  - The variant letter is **independent of the date_flag** — a record can have `date_flag='D'` with `spec_logic='AS +W'` (variant `A`, date period `D`).
+  - The app displays variant letters as `*A`, `*B`, `*C` next to the callout code (e.g. `94071P *A`, `94071P *B`, `94071P *C`).
+  - Multiple variants of the same callout code typically represent different part options (e.g. color variants: `*A` = DARK GRAY, `*B` = OFF BLACK, `*C` = generic).
 
 **Usage Notes / OP (offset 0x80, 32 bytes):**
 
@@ -825,12 +828,13 @@ Page-level note displayed in the Windows application alongside the figure name. 
  
  **Validation:** Variant names match the technical specifications and grading levels for the respective Subaru model years.
  
- ### Part Group Records (185-byte Type) (0x0DFD3000+) - **NEW**
+ ### Part Group Records (185-byte Type) (0x0DFD3000+)
 
 **Record size:** 185 bytes
 **Encoding:** CP437
 
-Contains descriptive names for part groups (e.g., "ENGINE ASSEMBLY", "GASKET AND SEAL KIT"). These records provide the text for the group-level navigation in the catalog.
+Contains descriptive names and **callout coordinates** for part groups. These are the main part callouts shown on figure illustrations (assemblies, panels, clips, etc.). Each record maps a callout code to its X,Y position on the figure image.
+
 Located in blocks around `0x0DFD3000`.
 
 **Structure:**
@@ -838,20 +842,61 @@ Located in blocks around `0x0DFD3000`.
 Offset  Size  Field               Description
 ------  ----  -----               -----------
 0x00    6     Model Code          "B11", "G11", etc.
-0x06    3     Figure              FIG index (e.g., "001")
-0x09    4     Figure Page         Section/Page within figure (e.g., "01  ")
-0x0D    8     Part Code           Base part code (e.g., "0110100 ")
-0x15    40    Description (EN)    Multilingual English label
+0x06    3     Figure              FIG index (e.g., "940")
+0x09    4     Figure Page         Page within figure (e.g., "01  ")
+0x0D    8     Part Code           Callout code (e.g., "94088A", "W130076")
+0x15    40    Description (EN)    English label
 0x3D    40    Description (DE)    German label
 0x65    40    Description (FR)    French label
 0x8D    40    Description (ES)    Spanish label
-0xB5    4     Trailer/Metadata    Binary metadata
+0xB5    2     X Coordinate        BE uint16 - callout position on figure
+0xB7    2     Y Coordinate        BE uint16 - callout position on figure
 ```
+
+**Coordinate Space:**
+- X range: 0-2560, Y range: 0-1280
+- Divide by 2 to get pixel coordinates on 1280x640 figure images
+- Coordinates point to the center of the callout label text on the figure
 
 **Notes:**
 - Each multilingual field (EN, DE, FR, ES) is exactly 40 bytes.
 - The first 12 bytes of the EN field often contain a part base code or reference (e.g., "  0110100   ").
 - In other languages, the first 12 bytes are typically spaces, though they may overflow from long descriptions.
+
+**Position Indicators in Descriptions:**
+
+Descriptions use a comma-separated suffix to indicate position/side. The app extracts RIGHT/LEFT and displays them as `<RH>`/`<LH>` next to the callout number. Other suffixes (FRONT, REAR, UPPER, LOWER, etc.) are NOT displayed in the app. Common suffixes (G11, 4328 descriptions with commas):
+
+| Suffix | Count | App Display |
+|--------|-------|-------------|
+| `RIGHT` | 327 | `<RH>` |
+| `LEFT` | 305 | `<LH>` |
+| `FRONT` | 85 | (none) |
+| `REAR` | 67 | (none) |
+| `REVERSE` | 37 | (none) |
+| `INNER` | 30 | (none) |
+| `UPPER` | 24 | (none) |
+| `LOWER` | 24 | (none) |
+| `FRONT RIGHT` | 19 | `<RH>` |
+| `FRONT LEFT` | 19 | `<LH>` |
+| `REAR RIGHT` | 15 | `<RH>` |
+| `SIDE` | 15 | (none) |
+| `REAR LEFT` | 13 | `<LH>` |
+| `OUTER` | 11 | (none) |
+| `CENTER` | 8 | (none) |
+
+For compound suffixes like `FRONT RIGHT`, the app extracts only the RIGHT/LEFT component and shows `<RH>`/`<LH>`.
+
+Examples:
+- `TRIM PANEL-FRONT DOOR,RIGHT` → callout shows `<RH>`, description `TRIM PANEL-FRONT DOOR`
+- `TRIM PANEL-FRONT DOOR,LEFT` → callout shows `<LH>`, description `TRIM PANEL-FRONT DOOR`
+- Callout pairs: base code (e.g. `94213`) = RH, `A`-suffixed code (e.g. `94213A`) = LH
+
+App-tested examples:
+- fig 941-04 callout 94213 = `<RH>`, 94213A = `<LH>` (description suffix RIGHT/LEFT)
+- fig 262-03 callout 26292 = `<RH>`, 26292A = `<LH>` (description suffix RIGHT/LEFT)
+- fig 022-01 callout 13570 — description has `,FRONT` suffix, no indicator shown in app
+- fig 070-02 callout 46052 — description has `,UPPER` suffix, no indicator shown in app
 
 **Validation:** Index numbers and labels match the high-level category navigation in the FAST 2 application.
 
@@ -911,21 +956,31 @@ Offset  Size  Field
 
 **Validation:** Cross-reference paint codes with known Subaru color catalogs.
 
-### Figure Index Records (22-byte Type) (0x0E75D800+) - **VALIDATED ✓**
+### Figure Cross-Reference Records (22-byte Type) (0x0E75D800+) - **VALIDATED ✓**
 
 **Record size:** 22 bytes
 **Encoding:** CP437
 
-Maps model-specific figures and item codes to numeric metadata.
+Stores inter-figure cross-reference arrows with X,Y coordinates. Each record represents a "see also figure Z" link drawn on a figure page at a specific position. Located in blocks around `0x0E75D800` (B11), `0x17BA3800` (G11), etc.
 
 **Structure:**
 
-| Offset | Width | Field                    | Description |
-|--------|-------|--------------------------|-------------|
-| 0x00 | 6 | Model Code               | e.g. `B11   `, `W10   ` |
-| 0x06 | 5 | Not Verified Figure      | FIG index (numeric, e.g. `003  `, `010  `) |
-| 0x0B | 7 | Not Verified Item Index | Identification sub-code (numeric, e.g. `01004  `) |
-| 0x12 | 4 | Metadata                 | Binary metadata (possibly record pointers) |
+| Offset | Width | Field        | Description |
+|--------|-------|--------------|-------------|
+| 0x00 | 6 | Model Code   | e.g. `B11   `, `G11   ` |
+| 0x06 | 3 | Figure       | Source figure code (e.g. `003`) |
+| 0x09 | 2 | Padding      | Spaces |
+| 0x0B | 2 | Page         | Page within figure (e.g. `01`) |
+| 0x0D | 3 | Ref Figure   | Target figure code (e.g. `004`, `010`) |
+| 0x10 | 2 | Padding      | Spaces |
+| 0x12 | 2 | X Coordinate | BE uint16, position on source figure |
+| 0x14 | 2 | Y Coordinate | BE uint16, position on source figure |
+
+**Notes:**
+- Coordinates use ~2x pixel coordinate space (X: 0-2400, Y: 0-1280 for 1280×640 figures)
+- Pointed to by `ptr_xref` in FIGIllustrationPage89 (offset 0x41, 4 bytes)
+- `xref_count` in FIGIllustrationPage89 (offset 0x53) stores the number of unique cross-references per page
+- All `ref_figure` values are valid figure codes from `figname.txt`
 
 ### Spec Mapping Records (22-byte Type) (0x17BA7000+) - **VALIDATED ✓**
 
@@ -1089,8 +1144,7 @@ Offset  Size  Field
 **Record size:** 199 bytes
 **Encoding:** CP437
 
-Mapping of model codes and figures to full part numbers and multilingual names.
-Located in blocks around `0x0E147000`.
+Maps figure callout codes to part numbers with multilingual names and X,Y coordinates indicating where the callout appears on the figure illustration. Located in blocks around `0x0E147000` (B11), `0x17451000` (G11), etc.
 
 **Structure:**
 
@@ -1100,7 +1154,8 @@ Located in blocks around `0x0E147000`.
 | 0x06 | 5 | Figure | FIG index (e.g. `004  `) |
 | 0x0B | 2 | Figure Page | Section/Page within figure (e.g. `01`) |
 | 0x0D | 15 | Part Number | Full 15-char part number |
-| 0x1C | 4 | Unknown | Binary metadata |
+| 0x1C | 2 | X Coordinate | BE uint16, callout position on figure |
+| 0x1E | 2 | Y Coordinate | BE uint16, callout position on figure |
 | 0x20 | 7 | Part Code | 7-character part code |
 | 0x27 | 40 | Name EN | English part name |
 | 0x4F | 40 | Name DE | German part name |
@@ -1112,6 +1167,8 @@ Located in blocks around `0x0E147000`.
 - `Part Code` matches the 7-character length used in official documentation.
 - All names are space-padded to 40 bytes.
 - Record is a superset of information, linking figure/page to actual global part numbers.
+- X,Y coordinates use a coordinate space of approximately 2x the 1280×640 pixel figure dimensions (X range 0-2400, Y range 0-1280).
+- Pointed to by `ptr_extra` in FIGIllustrationPage89 (offset 0x3D, 4 bytes) for standard parts (bolts, clips, screws).
 
 ### Multilingual Part Records (182-byte Type) (0x0E73B000+) - **VALIDATED ✓**
 

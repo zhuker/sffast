@@ -67,11 +67,11 @@ def tokenize_spec(expr: str) -> list:
 
 
 def match_code(pattern: str, codes: set) -> bool:
-    """Check if a pattern matches any code in the set. '#' is single-char wildcard."""
+    """Check if a pattern matches any code in the set. '#' is zero-or-one-char wildcard."""
     if pattern == 'ALL':
         return True
     if '#' in pattern:
-        regex = '^' + re.escape(pattern).replace(r'\#', '.') + '$'
+        regex = '^' + re.escape(pattern).replace(r'\#', '.?') + '$'
         return any(re.match(regex, code) for code in codes)
     return pattern in codes
 
@@ -509,13 +509,18 @@ def main():
 
         # Filter parts by spec logic and date range
         applicable_parts = []
+        part_variant = {}  # id(rec) -> variant letter (A-H) or ''
         for rec in model_parts:
             sl = rec.spec_logic
             matched = eval_spec_logic(sl, codes)
+            variant = ''
             # ~7.4% of records have a variant prefix (A-H) prepended to the spec
             # e.g. "AS +W.WRX" = variant A + spec "S +W.WRX"
+            # App displays these as "*A", "*B", "*C" next to the callout code
             if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
-                matched = eval_spec_logic(sl[1:], codes)
+                if eval_spec_logic(sl[1:], codes):
+                    matched = True
+                    variant = sl[0]
             if not matched:
                 continue
             # Date field is YYYYMMDDYYYYMMDD (16 chars)
@@ -523,6 +528,7 @@ def main():
             end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
             if not date_in_range(vehicle_date, start_date, end_date):
                 continue
+            part_variant[id(rec)] = variant
             applicable_parts.append(rec)
 
         print(f"  Applicable parts: {len(applicable_parts)}")
@@ -635,7 +641,9 @@ def main():
                 if p.part_spec:
                     extra.append(p.part_spec)
                 extra_str = f"  [{', '.join(extra)}]" if extra else ""
-                print(f"    {p.group_category:8s} {p.part_id:14s} {desc}{extra_str}")
+                v = part_variant.get(id(p), '')
+                vstr = f"*{v}" if v else "  "
+                print(f"    {p.group_category:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
             total_parts += len(unique_parts)
 
         for cat_code in sorted_cats:

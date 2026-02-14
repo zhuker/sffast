@@ -3314,31 +3314,38 @@ class InventoryRecord199:
     ID = 'inventory_199'
     """Represents a 199-byte inventory/part name record from sffastus
 
-    Located at 0x0E147000+
+    Located at 0x0E147000+ (B11), 0x17451000+ (G11), etc.
     Encoding: CP437
+
+    Maps figure callout codes to part numbers with multilingual names and
+    X,Y coordinates indicating where the callout appears on the figure image.
 
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
-        0x06 (7):  Part Code (e.g., "004  02")
-        0x0D (10): Extra Code/ID (e.g., "037018200")
-        0x17 (40): English Name
-        0x3F (40): German Name
-        0x67 (40): French Name
-        0x8F (40): Spanish Name
-        0xB7 (16): Trailer/Metadata
+        0x06 (5):  Figure (e.g., "004  ")
+        0x0B (2):  Figure Page (e.g., "02")
+        0x0D (15): Part Number (e.g., "037018200      ")
+        0x1C (2):  X Coordinate (BE uint16, ~2x pixel coords on 1280x640 figure)
+        0x1E (2):  Y Coordinate (BE uint16, ~2x pixel coords on 1280x640 figure)
+        0x20 (7):  Part Code (e.g., "0370S  ")
+        0x27 (40): English Name
+        0x4F (40): German Name
+        0x77 (40): French Name
+        0x9F (40): Spanish Name
+        0xC7 (0):  End (6+5+2+15+2+2+7+40*4 = 199)
     """
     offset: int
     model_code: str
     figure: str
     figure_page: str
     part_number: str
-    unknown: bytes
+    x: int
+    y: int
     part_code: str
     name_en: str
     name_de: str
     name_fr: str
     name_es: str
-    trailer: bytes
     raw_data: bytes = field(repr=False)
 
     @staticmethod
@@ -3347,21 +3354,20 @@ class InventoryRecord199:
         def clean(b: bytes) -> str:
             return b.decode(CHARSET, errors='replace').strip()
 
-        fix_offset=16
         return InventoryRecord199(
             offset=offset,
             raw_data=data,
             model_code=clean(data[0:6]),
-            figure=clean(data[6:6+5]),
-            figure_page=clean(data[6+5:13]),
-            part_number=clean(data[13:23+5]),
-            unknown=data[23+5:23+5+4],
-            part_code=clean(data[23+5+4:23+fix_offset]),
-            name_en=clean(data[23+fix_offset:63+fix_offset]),
-            name_de=clean(data[63+fix_offset:103+fix_offset]),
-            name_fr=clean(data[103+fix_offset:143+fix_offset]),
-            name_es=clean(data[143+fix_offset:183+fix_offset]),
-            trailer=data[183+fix_offset:199],
+            figure=clean(data[6:11]),
+            figure_page=clean(data[11:13]),
+            part_number=clean(data[13:28]),
+            x=struct.unpack('>H', data[28:30])[0],
+            y=struct.unpack('>H', data[30:32])[0],
+            part_code=clean(data[32:39]),
+            name_en=clean(data[39:79]),
+            name_de=clean(data[79:119]),
+            name_fr=clean(data[119:159]),
+            name_es=clean(data[159:199]),
         )
 
 
@@ -3422,16 +3428,19 @@ class PartGroupRecord185:
     Located at 0x0DFD3000+
     Encoding: CP437
 
-    Contains descriptive names for part groups.
+    Contains descriptive names for part groups with callout coordinates.
 
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
-        0x06 (3):  Group Index (e.g., "001")
-        0x09 (40): Description (EN) - 12B code + 28B English label
-        0x31 (40): Description (DE)
-        0x59 (40): Description (FR)
-        0x81 (40): Description (ES)
-        0xA9 (16): Trailer/Metadata
+        0x06 (3):  Figure (e.g., "940")
+        0x09 (4):  Figure Page (e.g., "01  ")
+        0x0D (8):  Part Code / Callout (e.g., "94088A", "W130076")
+        0x15 (40): Description (EN)
+        0x3D (40): Description (DE)
+        0x65 (40): Description (FR)
+        0x8D (40): Description (ES)
+        0xB5 (2):  X Coordinate (BE uint16, divide by 2 for pixel on 1280x640)
+        0xB7 (2):  Y Coordinate (BE uint16, divide by 2 for pixel on 1280x640)
     """
     offset: int
     model_code: str
@@ -3442,7 +3451,8 @@ class PartGroupRecord185:
     desc_de: str
     desc_fr: str
     desc_es: str
-    trailer: bytes
+    x: int
+    y: int
     raw_data: bytes = field(repr=False)
 
     @staticmethod
@@ -3457,12 +3467,13 @@ class PartGroupRecord185:
             model_code=clean(data[0:6]),
             figure=clean(data[6:9]),
             figure_page=clean(data[9:13]),
-            part_code=clean(data[13:9+12]),
-            desc_en=clean(data[9+12:49+12]),
-            desc_de=clean(data[49+12:89+12]),
-            desc_fr=clean(data[89+12:129+12]),
-            desc_es=clean(data[129+12:169+12]),
-            trailer=data[169+12:185],
+            part_code=clean(data[13:21]),
+            desc_en=clean(data[21:61]),
+            desc_de=clean(data[61:101]),
+            desc_fr=clean(data[101:141]),
+            desc_es=clean(data[141:181]),
+            x=struct.unpack('>H', data[181:183])[0],
+            y=struct.unpack('>H', data[183:185])[0],
         )
 
 
@@ -3610,22 +3621,33 @@ class ModelYearRecord44:
 
 @dataclass
 class FigureIndexRecord22:
-    """Represents a 22-byte figure index record from sffastus
+    """Represents a 22-byte figure cross-reference record from sffastus
 
-    Located at 0x0E75D800+
-    Encoding: CHARSET
+    Located at 0x0E75D800+ (B11), 0x17BA3800+ (G11), etc.
+    Encoding: CP437
+
+    Stores inter-figure cross-reference arrows: "on figure X page Y,
+    at position (x,y), see also figure Z." The coordinates use a
+    coordinate space of approximately 2x the pixel dimensions of the
+    1280x640 figure images.
 
     Structure:
-        0x00 (6): Model Code (e.g., "B11   ")
-        0x06 (5): Figure (e.g., "003  ")
-        0x0B (7): Item Index (e.g., "01004  ")
-        0x12 (4): Metadata/Flags
+        0x00 (6): Model Code (e.g., "B11   ", "G11   ")
+        0x06 (3): Figure (e.g., "003")
+        0x09 (2): Padding (spaces)
+        0x0B (2): Page (e.g., "01")
+        0x0D (3): Ref Figure (target figure code, e.g., "004")
+        0x10 (2): Padding (spaces)
+        0x12 (2): X Coordinate (BE uint16)
+        0x14 (2): Y Coordinate (BE uint16)
     """
     offset: int
     model_code: str
     figure: str
-    item_index: str
-    metadata: bytes
+    page: str
+    ref_figure: str
+    x: int
+    y: int
     raw_data: bytes = field(repr=False)
 
     @staticmethod
@@ -3637,9 +3659,11 @@ class FigureIndexRecord22:
             offset=offset,
             raw_data=data,
             model_code=clean(data[0:6]),
-            figure=clean(data[6:11]),
-            item_index=clean(data[11:18]),
-            metadata=data[18:22],
+            figure=clean(data[6:9]),
+            page=clean(data[11:13]),
+            ref_figure=clean(data[13:16]),
+            x=struct.unpack('>H', data[18:20])[0],
+            y=struct.unpack('>H', data[20:22])[0],
         )
 
 
