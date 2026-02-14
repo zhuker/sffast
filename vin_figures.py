@@ -408,8 +408,33 @@ def main():
         for r in model_fig89:
             fig89_lookup[(r.fig_index, r.page_index)] = r
 
-        # Step 6.5: Load catalog applicability records (parts) for this model
-        print("\nLoading parts catalog records...")
+        # Step 6.5: Load part group descriptions (PartGroupRecord185)
+        print("\nLoading part group descriptions...")
+        pg_ranges = [r for r in ranges if r[3] == 'part_group_185']
+        all_pg_records = []
+        for rs, re_, rc, rt in pg_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != vin_rec.model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_part_group_records_185(f, bo)
+                all_pg_records.extend(recs)
+
+        # Build description lookup: (figure, part_code) -> desc_en
+        # part_code may have variant suffix like "11021  A", strip it for matching
+        part_desc_lookup = {}
+        for r in all_pg_records:
+            if r.model_code == vin_rec.model_code:
+                code = r.part_code.split()[0]  # strip variant suffix
+                key = (r.figure, code)
+                if key not in part_desc_lookup:
+                    part_desc_lookup[key] = r.desc_en
+        print(f"  Part descriptions loaded: {len(part_desc_lookup)}")
+
+        # Step 6.6: Load catalog applicability records (parts) for this model
+        print("Loading parts catalog records...")
         cat_ranges = [r for r in ranges if r[3] == 'catalog_applicability_466']
         all_cat_records = []
         for rs, re_, rc, rt in cat_ranges:
@@ -439,13 +464,6 @@ def main():
 
         print(f"  Applicable parts: {len(applicable_parts)}")
 
-        # Group parts by figure code (from figure_ref, strip leading group letter)
-        parts_by_figure = defaultdict(list)
-        for rec in applicable_parts:
-            if rec.figure_ref and len(rec.figure_ref) >= 4:
-                fig_code = rec.figure_ref[1:]  # e.g., "A081" -> "081"
-                parts_by_figure[fig_code].append(rec)
-
         # Step 7: Print results
         print()
         print("=" * 80)
@@ -457,78 +475,85 @@ def main():
         print("=" * 80)
         print()
 
-        # Group by figure
-        by_figure = defaultdict(list)
+        # Build figure name lookup
+        figname_lookup = {}
+        for fn_rec in parse_figname_txt(FIGNAME_PATH):
+            figname_lookup[fn_rec.figure_code] = fn_rec.description
+
+        # Group applicable figure pages by (figure, page)
+        by_fig_page = defaultdict(list)
         for rec in applicable:
-            by_figure[rec.figure].append(rec)
+            by_fig_page[(rec.figure, rec.figure_page)].append(rec)
+
+        # Group parts by (figure, page) — parts with empty page are figure-wide
+        parts_by_fig_page = defaultdict(list)
+        parts_by_fig_all = defaultdict(list)  # parts with no page (apply to all pages)
+        for rec in applicable_parts:
+            if rec.figure_ref and len(rec.figure_ref) >= 4:
+                fig_code = rec.figure_ref[1:]  # "A081" -> "081"
+                if rec.figure_page.strip():
+                    parts_by_fig_page[(fig_code, rec.figure_page)].append(rec)
+                else:
+                    parts_by_fig_all[fig_code].append(rec)
+
+        def lookup_desc(fig, group_category, part_id):
+            # Primary: PartGroupRecord185 keyed by (figure, callout code)
+            code = group_category.split()[0]
+            desc = part_desc_lookup.get((fig, code), '')
+            if desc:
+                return desc
+            # Fallback: ITCA parts catalog by part number
+            if parts_catalog and part_id:
+                recs = parts_catalog.lookup(part_id)
+                if not recs:
+                    base = part_id[:10].strip()
+                    if base:
+                        recs = parts_catalog.lookup(base)
+                if recs:
+                    return recs[0].description
+            return ''
+
+        def dedup_parts(parts_list):
+            seen = set()
+            unique = []
+            for p in parts_list:
+                key = (p.group_category, p.part_id)
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(p)
+            unique.sort(key=lambda r: r.group_category)
+            return unique
 
         total_with_image = 0
         total_without_image = 0
+        total_parts = 0
 
-        for fig in sorted(by_figure.keys()):
-            pages = by_figure[fig]
-            pages.sort(key=lambda r: r.figure_page)
+        for fig, page in sorted(by_fig_page.keys()):
+            fig_name = figname_lookup.get(fig, "")
+            has_image = (fig, page) in fig89_lookup
+            if has_image and fig89_lookup[(fig, page)].image_size > 0:
+                total_with_image += 1
+            else:
+                total_without_image += 1
 
-            fig_name = ""
-            for fn_rec in parse_figname_txt(FIGNAME_PATH):
-                if fn_rec.figure_code == fig:
-                    fig_name = fn_rec.description
-                    break
+            img_flag = "" if has_image else "  (no img)"
+            print(f"FIG {fig}-{page} {fig_name}{img_flag}")
 
-            page_strs = []
-            for p in pages:
-                key = (p.figure, p.figure_page)
-                has_image = key in fig89_lookup
-                if has_image:
-                    fig89 = fig89_lookup[key]
-                    if fig89.image_size > 0:
-                        page_strs.append(p.figure_page)
-                        total_with_image += 1
-                    else:
-                        page_strs.append(f"{p.figure_page}(no data)")
-                        total_without_image += 1
-                else:
-                    page_strs.append(f"{p.figure_page}(no img)")
-                    total_without_image += 1
+            # Merge page-specific parts + figure-wide parts
+            combined = (parts_by_fig_page.get((fig, page), [])
+                        + parts_by_fig_all.get(fig, []))
+            unique_parts = dedup_parts(combined)
 
-            print(f"  Fig {fig}  {fig_name}")
-            print(f"         pages: {', '.join(page_strs)}")
+            for p in unique_parts:
+                desc = lookup_desc(fig, p.group_category, p.part_id)
+                print(f"  {p.group_category:8s} {p.part_id:14s} {desc}")
+            total_parts += len(unique_parts)
+            print()
 
-            # List parts for this figure
-            fig_parts = parts_by_figure.get(fig, [])
-            if fig_parts:
-                # Deduplicate by (group_category, part_id, figure_page)
-                seen = set()
-                unique_parts = []
-                for p in fig_parts:
-                    key = (p.group_category, p.part_id, p.figure_page)
-                    if key not in seen:
-                        seen.add(key)
-                        unique_parts.append(p)
-                unique_parts.sort(key=lambda r: (r.figure_page, r.group_category))
-
-                print(f"         parts ({len(unique_parts)}):")
-                for p in unique_parts:
-                    # Look up description from ITCA
-                    desc = ''
-                    if parts_catalog:
-                        recs = parts_catalog.lookup(p.part_id)
-                        if not recs:
-                            # Try base part number (strip 2-char suffix)
-                            base = p.part_id[:10].strip()
-                            if base:
-                                recs = parts_catalog.lookup(base)
-                        if recs:
-                            desc = recs[0].description
-                    pg = f"p{p.figure_page}" if p.figure_page else ""
-                    print(f"           {p.group_category:8s} {p.part_id:14s} {pg:4s} {desc}")
-
-        print()
-        print(f"Total: {len(by_figure)} figures, "
-              f"{total_with_image} pages with images, "
-              f"{total_without_image} pages without images")
-        print(f"       {len(applicable_parts)} applicable parts across "
-              f"{len(parts_by_figure)} figures")
+        print(f"Total: {len(by_fig_page)} figure pages, "
+              f"{total_with_image} with images, "
+              f"{total_without_image} without")
+        print(f"       {total_parts} applicable parts")
 
         if bulletins:
             print(f"\nI&S Bulletins (page 40+): {len(bulletins)} entries across "
