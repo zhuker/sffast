@@ -537,7 +537,10 @@ def main():
                 total_without_image += 1
 
             img_flag = "" if has_image else "  (no img)"
-            print(f"FIG {fig}-{page} {fig_name}{img_flag}")
+            raw_label = fig89_lookup[(fig, page)].label if has_image else ""
+            label = " ".join(raw_label.split()) if raw_label else ""
+            label_str = f"  ({label})" if label else ""
+            print(f"FIG {fig}-{page} {fig_name}{label_str}{img_flag}")
 
             # Merge page-specific parts + figure-wide parts
             combined = (parts_by_fig_page.get((fig, page), [])
