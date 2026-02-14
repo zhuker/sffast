@@ -17,10 +17,12 @@ Usage: .venv/bin/python extract_g11_from_parser.py
 import struct
 import sys
 from pathlib import Path
+from typing import List
 
 from wand.image import Image as WandImage
 
 from sffastus_parser import (
+    FIGIllustrationPage89,
     SffastusBlockParser,
     parse_figname_txt,
     parse_itca_data,
@@ -49,23 +51,6 @@ def create_parser():
     parts_catalog = ItcaPartsCatalog(itca_records)
 
     return SffastusBlockParser(figure_codes=figure_codes, parts_catalog=parts_catalog)
-
-
-def decode_fig_ptr(ptr3_bytes):
-    """Decode 4-byte figure data pointer to file offset.
-
-    Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
-      offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
-
-    The marker byte is the highest-order address component:
-      marker: mega-section (60 * 75 * 2048 = 9,216,000 bytes each)
-      byte1:  section (75 * 2048 = 153,600 bytes each)
-      byte2:  block (2048 bytes each)
-      byte3:  position within block (8 bytes each)
-    """
-    marker, byte1, byte2, byte3 = ptr3_bytes[0], ptr3_bytes[1], ptr3_bytes[2], ptr3_bytes[3]
-    block_number = (byte1 - 4 + marker * 60) * 75 + byte2
-    return block_number * 2048 + byte3 * 8
 
 
 def make_g4_tiff(raw_data, width, height):
@@ -121,7 +106,7 @@ def main():
         print(f"  Total FIG89 records: {len(all_records)}")
 
         # Group by model
-        models = {}
+        models: dict[str, List[FIGIllustrationPage89]] = {}
         for rec in all_records:
             models.setdefault(rec.model_code, []).append(rec)
 
@@ -140,7 +125,7 @@ def main():
         fail = 0
 
         for rec in g11_records:
-            fig_offset = decode_fig_ptr(rec.ptr3)
+            fig_offset = rec.get_figure_offset()
             size = rec.image_size
 
             if size == 0 or fig_offset == 0:

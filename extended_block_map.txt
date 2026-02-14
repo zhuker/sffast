@@ -1,0 +1,538 @@
+   #        Start          End   Blocks Type
+----------------------------------------------------------------------
+   0 0x00000000  0x00000800         1  header
+   1 0x00000800  0x00013000        37  vin_range
+      -> VINRecord(offset=2048, vin_start='4S3BD3350T1200011', vin_end='4S3BD4350V7205795', section=1024, index=41)
+  38 0x00013000  0x00014000         2  model_index_288
+      -> ModelIndexRecord288(offset=77824, model_code='B11', block_index_array=b'\x17\x19\x0f\x00\x17\x19\x11\x00\x17\x19\x12\x00\x17\x19\x17\x00\x17\x19$\x00\x17\x19\'\x00\x17\x1e\x08\x00\x19\x14\x1b\x00\x19\x14#\x00\x19\x15\x16\x00\x19\x1e"\x00\x19\x1e$\x00\x19\x1e8\x00\x19\x1f\x05\x00\x19\x1fI\x00\x19)C\x00\x19+#\x00\x19+-\x00\x19,:\x00\x1a\x14\x1a\x00\x00\x00\x00\x00\x1a\x14"\x00\x1a\x14#\x00\x1a\x149\x00\x1a\x16\'\x00\x1a\x16(\x00\x1a\x17!\x00\x1a\x17"\x00\x1a\x17$\x00\x1a\x17%\x00\x00\x02\x00\x01\x00\x05\x00\r\x00\x03\x01X M\x00\x08\x00>\x02\xaf\x00\x02\x00\x14\x00\x18\x00D\x02\xe8\x00vJ\xbd\x00X\nl\x00\x08\x00\x00\x00\x01\x00\x16\x00\x84\x00\x01\x00D\x00\x01\x00\x02\x00\x01\x00\x03', series_code='B', model_name='LEGACY', start_date='199310', end_date='199905', features='123456', category1='BODY', category2='ENGINE', category3='TRAIN', category4='MISSION', category5='GRADE', category6='SUS', trailer=b'                1')
+      -> ModelIndexRecord288(offset=78112, model_code='B12', block_index_array=b'\x1a\x17(\x00\x1a\x17+\x00\x1a\x17,\x00\x1a\x171\x00\x1a\x17>\x00\x1a\x17A\x00\x1a\x1d\x03\x00\x1d\x03+\x00\x1d\x036\x00\x1d\x04-\x00\x1d\x0e&\x00\x1d\x0e(\x00\x1d\x0e9\x00\x1d\x0f\x07\x00\x1d\x10\x03\x00\x1d\x19D\x00\x1d\x1a3\x00\x1d\x1a8\x00\x1d\x1b\x0b\x00\x1e\x06?\x00\x00\x00\x00\x00\x1e\x06F\x00\x1e\x06G\x00\x1e\x07\x0f\x00\x1e\x088\x00\x1e\x089\x00\x1e\t9\x00\x1e\t:\x00\x1e\t?\x00\x1e\t@\x00\x00\x03\x00\x01\x00\x05\x00\r\x00\x03\x01\x84-F\x00\x0b\x00B\x02\xe7\x00\x02\x00\x11\x00\x19\x00G\x02\xe4\x00:$6\x00\x1e\x0b\xa1\x00\x07\x00\x00\x00\x01\x00\x13\x00t\x00\x01\x00K\x00\x01\x00\x05\x00\x01\x00\x01', series_code='B', model_name='LEGACY', start_date='199902', end_date='200604', features='123456', category1='BODY', category2='ENGINE', category3='TRAIN', category4='MISSION', category5='GRADE', category6='SUS', trailer=b'                1')
+  40 0x00014000  0x00014800         1  text
+  41 0x00014800  0x003E1800      1946  vin_range
+      -> VINRecord(offset=83968, vin_start='4S3BD3350T1200011', vin_end='4S3BD3350V9216620', section=7680, index=45)
+1987 0x003E1800  0x003E5000         7  body_model
+      -> BodyModelRecord17(offset=4069376, body_model='BD6AY1G', constant=1, model_code='B11', config_index=1)
+1994 0x003E5000  0x0CD41000    103096  vin_model
+      -> VINModelRecord(offset=4083712, vin='JF2SHAEC0CH440463', flag=1, model_code='S12', body_model='SHMDY6S', color_code='G1U', trim_code='H20', option_code='NT', binary_flags=b'\x00\x10', date1='20120116', date2='20120112', date3='20120112', destination_code='U5')
+105090 0x0CD41000  0x0CD42000         2  multilingual_part_167
+      -> MultilingualPartRecord167(offset=215224320, model_code='B11', spec_code='101S', description='SEDAN', trailer=b'\xef\xfd\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+105092 0x0CD42000  0x0CD42800         1  category_index_20
+      -> CategoryIndexRecord20(offset=215228416, model_code='B11', label='AC', payload=b' 06AC T6', pointer=b'\x19\x14\x1b\x00')
+105093 0x0CD42800  0x0CD45000         5  part_range_24
+      -> PartRangeRecord24(offset=215230464, model_code='B11', part_start='0951S', part_end='10982', metadata=b"\x17\x19'\x00")
+105098 0x0CD45000  0x0CD4B800        13  multilingual_part_180
+      -> MultilingualPartRecord180(offset=215240704, model_code='B11', part_code='13028', name_en='BELT-TIMING', name_de='ZAHNRIEMEN', name_fr='COURROIE DE DISTRIBUTION', name_es='CORREA DISTRIBUCIóN', trailer=b'T\x000\x17\x19-\x00')
+105111 0x0CD4B800  0x0CD4D000         3  model_spec_103
+      -> ModelSpecRecord103(offset=215267328, model_code='B11', production_period='001199403199505', applied_model='BD6-Y1G', body_config='S', engine='EJ22E', drivetrain='2WD', transmission='MT', trim_level='BASE', spec_option='N/S', _padding='')
+105114 0x0CD4D000  0x0CDF9000       344  multilingual_part_192
+      -> MultilingualPartRecord192(offset=215273472, model_code='B11', part_code='0951S', figure_code='421', index='11', name_en='FUEL HOSE', name_de='KRAFTSTOFFSCHLAUCH', name_fr='FLEXIBLE DE CARBURANT', name_es='MANGUERA COMBUSTIBLE', trailer=b'\x17\x1e\x08\x00\x00\x01\x00\x00\x00\x00\x00\x01')
+105458 0x0CDF9000  0x0DE1F800      8269  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=215977984, model_code='B11', group_category='0951S', part_id='42162AC190', date_flag='E', date='1997100119990531', destination_codes='', spec_logic='EJ22# +EJ25D', usage_notes='', internal_flags='', unknown=b'                          0200000000                 4A421  11                                                \x00\x01\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+113727 0x0DE1F800  0x0DE23800         8  color_record_91
+      -> ColorRecord91(offset=232912896, model_code='B11', paint_code='AC 0', color_name_en='6LIGHT SILVER M', color_name_de='HELLSILBER M', color_name_fr='ARGENT CLAIR M', color_name_es='PLATA CLARO M')
+113735 0x0DE23800  0x0DE42800        62  glossary_record_28
+      -> GlossaryRecord28(offset=232929280, model_code='B11', category=49, term='&              \x19\x15', metadata=b'\x16\x00\x00W')
+113797 0x0DE42800  0x0DF9A000       687  code_index_record_33
+      -> CodeIndexRecord33(offset=233056256, model_code='B11', category=49, size_variant='&              ', code='22195D', metadata=b'\x17\x19E\x00')
+114484 0x0DF9A000  0x0DF9B000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=234463232, model_code='B11', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x00\xd2\x03\x0c\x19\x1e$\x00\x00\x11\x19+-\x00*\x90')
+114486 0x0DF9B000  0x0DFA5000        20  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=234467328, model_code='B11', fig_group_code='0A', fig_group_code2='011', desc_en='FLYWHEEL', desc_de='SCHWUNGRAD', desc_fr='VOLANT MOTEUR', desc_es='VOLANTE', trailer=b'\x05\xf0\x00u\x19\x1e8\x00\x00\x02')
+114506 0x0DFA5000  0x0DFB1000        24  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=234508288, model_code='B11', fig_index='001', page_index='01', label='', trailer=b'\x19\x1f\x05\x00\x19\x1fI\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19,:\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xa7\x00\x00')
+114530 0x0DFB1000  0x0DFD3000        68  engine_spec_230
+      -> EngineSpecRecord230(offset=234557440, model_code='B11', figure='001', figure_page='01', applicable_model='EJ22# +EJ25D', start_date='199310', end_date='', trailer=b'\xef\xfd\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xbf\xbf\x7f\x00\x00\x00\x00\x00\x00\x00\x00\x01\xec\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+114598 0x0DFD3000  0x0E147000       744  part_group_185
+      -> PartGroupRecord185(offset=234696704, model_code='B11', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00Z')
+115342 0x0E147000  0x0E182000       118  inventory_199
+      -> InventoryRecord199(offset=236220416, model_code='B11', figure='004', figure_page='02', part_number='037018200', unknown=b'\x03\xa6\x01\xf0', part_code='0370S', name_en='GASKET-ALUMINIUM', name_de='DICHTUNG - ALUMINIUM', name_fr='JOINT - ALUMINIUM', name_es='JUNTA ESTANQUEIDAD ALUMINIO', trailer=b'')
+115460 0x0E182000  0x0E6E9000      2766  binary
+118226 0x0E6E9000  0x0E6ED000         8  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=242126848, model_code='B11', variant_code='S', description='SEDAN')
+118234 0x0E6ED000  0x0E6ED800         1  version_index_20
+      -> VersionIndexRecord20(offset=242143232, model_code='B11', label='A1', payload=b'\x1a\x14#\x00\x00\x14\x1a\x14', pointer=b'9\x00f;')
+118235 0x0E6ED800  0x0E6F8800        22  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=242145280, model_code='B11', fig_group_code='A1', fig_group_code2='003', desc_en='SHORT BLOCK ENGINE', desc_de='TEILE MOTOREN', desc_fr='BLOC EMBIELLE', desc_es='ENSAMBLE DE MOTOR', trailer=b'\x04\x08\x000\x19\x1e8\x00\x00\x01')
+118257 0x0E6F8800  0x0E73A800       132  binary
+118389 0x0E73A800  0x0E73B000         1  model_year_44
+      -> ModelYearRecord44(offset=242460672, model_code='B11   ', version='A', date_from='19931001', date_to='19950630', label="'95MY")
+118390 0x0E73B000  0x0E75D000        68  multilingual_part_182
+      -> MultilingualPartRecord182(offset=242462720, model_code='B11', part_code='11051', figure='006', name_en='CYLINDER HEAD', name_de='ZYLINDERKOPF', name_fr='CULASSE', name_es='CULATA DE CILINDROS', trailer=b'\x19\x1e$\x00')
+118458 0x0E75D000  0x0E75D800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=242601984, model_code='B11', category=65, size_variant='D \x00(B11   AM \x00\x01', code='B11   A', metadata=b'S \x00\x02')
+118459 0x0E75D800  0x0E75E800         2  figure_index_22
+      -> FigureIndexRecord22(offset=242604032, model_code='B11', figure='003', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+118461 0x0E75E800  0x0E760800         4  spec_mapping_22
+      -> SpecMappingRecord22(offset=242608128, model_code='B11', option_code='AAICN', description='OC***RH\x1a\x17%\x00')
+118465 0x0E760800  0x0E762000         3  multilingual_part_167
+      -> MultilingualPartRecord167(offset=242616320, model_code='B12', spec_code='101S', description='SEDAN', trailer=b'?\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+118468 0x0E762000  0x0E762800         1  category_index_20
+      -> CategoryIndexRecord20(offset=242622464, model_code='B12', label='AC', payload=b' 13AC K4', pointer=b'\x1d\x03+\x00')
+118469 0x0E762800  0x0E765000         5  part_range_24
+      -> PartRangeRecord24(offset=242624512, model_code='B12', part_start='0100S', part_end='0218S', metadata=b'\x1a\x17A\x00')
+118474 0x0E765000  0x0E76B800        13  multilingual_part_180
+      -> MultilingualPartRecord180(offset=242634752, model_code='B12', part_code='0953S', name_en='AIR HOSE', name_de='LUFTSCHLAUCH', name_fr="FLEXIBLE D'AIR", name_es='MANGUERA AIRE', trailer=b'T\x000\x1a\x17D\x00')
+118487 0x0E76B800  0x0E76D000         3  model_spec_103
+      -> ModelSpecRecord103(offset=242661376, model_code='B12', production_period='003199902200402', applied_model='BE9-Y3J', body_config='S', engine='EJ25#', drivetrain='F4W', transmission='MT', trim_level='L', spec_option='N/S', _padding='')
+118490 0x0E76D000  0x0E82F000       388  multilingual_part_192
+      -> MultilingualPartRecord192(offset=242667520, model_code='B12', part_code='0100S', figure_code='730', index='01', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b'\x1a\x1d\x03\x00\x00\x0e\x1e\x089\x00\x00\x02')
+118878 0x0E82F000  0x0FED2000     11590  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=243462144, model_code='B12', group_category='0100S', part_id='010006120', date_flag='A', date='1999020120000630', destination_codes='', spec_logic='S +W', usage_notes='', internal_flags='', unknown=b'                          0100000100 010006126      17A730  01                                                ?\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+130468 0x0FED2000  0x0FED7000        10  color_record_91
+      -> ColorRecord91(offset=267198464, model_code='B12', paint_code='AC 1', color_name_en='3BUMPER GRAY', color_name_de='PUFFERGRAU', color_name_fr='GRIS BUMPER', color_name_es='GRIS BUMPER')
+130478 0x0FED7000  0x0FED7800         1  empty
+130479 0x0FED7800  0x0FEF8800        66  glossary_record_28
+      -> GlossaryRecord28(offset=267220992, model_code='B12', category=49, term='&              \x1d\x04', metadata=b'-\x00\x00\\')
+130545 0x0FEF8800  0x1006C000       743  code_index_record_33
+      -> CodeIndexRecord33(offset=267356160, model_code='B12', category=49, size_variant='&              ', code='25229', metadata=b'\x1a\x18-\x00')
+131288 0x1006C000  0x1006D000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=268877824, model_code='B12', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x02%\x00\xc4\x1d\x0e(\x00\x00\x12\x1d\x1a8\x00\x15T')
+131290 0x1006D000  0x10075800        17  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=268881920, model_code='B12', fig_group_code='0A', fig_group_code2='033', desc_en='OIL COOLER (ENGINE)', desc_de='OEL KÜHLER (MOTOR)', desc_fr="RADIATEUR D'HUILE", desc_es='ENFRIADOR DE ACEITE', trailer=b'\x05\x1e\x00\x9d\x1d\x0e;\x00\x00\x02')
+131307 0x10075800  0x10082000        25  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=268916736, model_code='B12', fig_index='001', page_index='01', label='', trailer=b'\x1d\x0f\x07\x00\x1d\x10\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x1b\x0b\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xd9\x00\x00')
+131332 0x10082000  0x100A5800        71  engine_spec_230
+      -> EngineSpecRecord230(offset=268967936, model_code='B12', figure='001', figure_page='01', applicable_model='EJ25# +EJ255 +EZ30D', start_date='199902', end_date='', trailer=b'?\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xff\xfe\x00\x00\x00\x07\xe0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+131403 0x100A5800  0x10217800       740  part_group_185
+      -> PartGroupRecord185(offset=269113344, model_code='B12', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02K\x00Z')
+132143 0x10217800  0x10234800        58  inventory_199
+      -> InventoryRecord199(offset=270628864, model_code='B12', figure='004', figure_page='03', part_number='010406200', unknown=b'\x07;\x01\x0b', part_code='0104S', name_en='FLANGE BOLT', name_de='FLANSCHSCHRAUBE', name_fr='VIS üECOLLERETTE', name_es='PERNO DE BRIDA', trailer=b'')
+132201 0x10234800  0x10816800      3012  binary
+135213 0x10816800  0x1081A000         7  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=276916224, model_code='B12', variant_code='S', description='SEDAN')
+135220 0x1081A000  0x1081A800         1  version_index_20
+      -> VersionIndexRecord20(offset=276930560, model_code='B12', label='A1', payload=b'\x1e\x06G\x00\x00\x14\x1e\x07', pointer=b'\x0f\x00h\xd9')
+135221 0x1081A800  0x10824000        19  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=276932608, model_code='B12', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002\x1d\x0e9\x00\x00\x01')
+135240 0x10824000  0x1085E000       116  binary
+135356 0x1085E000  0x1085E800         1  model_year_44
+      -> ModelYearRecord44(offset=277209088, model_code='B12   ', version='A', date_from='19990201', date_to='20000630', label="'00MY")
+135357 0x1085E800  0x10884000        75  multilingual_part_182
+      -> MultilingualPartRecord182(offset=277211136, model_code='B12', part_code='0100S', figure='730', name_en='AIR CONDITIONER SYSTEM', name_de='KLIMAANLAGENSYSTEM', name_fr="SYSTEME D'AIR CONDITIONNE", name_es='SISTEMA DE AIRE ACONDICIONADO', trailer=b'\x1d\x0e3\x00')
+135432 0x10884000  0x10884800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=277364736, model_code='B12', category=49, size_variant='1 \x00\x11B12   61 \x00\x14', code='B12   6', metadata=b'4 \x00\x10')
+135433 0x10884800  0x10887000         5  figure_index_22
+      -> FigureIndexRecord22(offset=277366784, model_code='B12', figure='003', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+135438 0x10887000  0x10888000         2  spec_mapping_22
+      -> SpecMappingRecord22(offset=277377024, model_code='B12', option_code='A****', description='GGKAWAX\x1e\t@\x00')
+135440 0x10888000  0x10889000         2  multilingual_part_167
+      -> MultilingualPartRecord167(offset=277381120, model_code='B13', spec_code='101S', description='SEDAN', trailer=b'\xff\x1f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+135442 0x10889000  0x10889800         1  empty
+135443 0x10889800  0x1088A000         1  category_index_20
+      -> CategoryIndexRecord20(offset=277387264, model_code='B13', label='AC', payload=b' 1FAC 9K', pointer=b'! \x12\x00')
+135444 0x1088A000  0x1088C800         5  part_range_24
+      -> PartRangeRecord24(offset=277389312, model_code='B13', part_start='0100S', part_end='0156S', metadata=b'\x1e\n\x10\x00')
+135449 0x1088C800  0x10893800        14  multilingual_part_180
+      -> MultilingualPartRecord180(offset=277399552, model_code='B13', part_code='0510S', name_en='COTTER PIN', name_de='SPLINT', name_fr='GOUPILLE FENDUE', name_es='CLAVIJA HENDIDA', trailer=b'T\x000\x1e\n\x13\x00')
+135463 0x10893800  0x10895000         3  model_spec_103
+      -> ModelSpecRecord103(offset=277428224, model_code='B13', production_period='001200311', applied_model='BL9-YHJ', body_config='S', engine='253', drivetrain='4W', transmission='5MT', trim_level='25I', spec_option='', _padding='')
+135466 0x10895000  0x1095C000       398  multilingual_part_192
+      -> MultilingualPartRecord192(offset=277434368, model_code='B13', part_code='0100S', figure_code='440', index='', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b'\x1e\x0f\'\x00\x00r")-\x00\x00\r')
+135864 0x1095C000  0x1262D000     14754  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=278249472, model_code='B13', group_category='0100S', part_id='010006107', date_flag='A', date='2003110120050531', destination_codes='', spec_logic='A25GLI.255 +WOBK.25GT.255', usage_notes='', internal_flags='', unknown=b'                          0200000200                 4A440                                                    \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+150618 0x1262D000  0x12630000         6  color_record_91
+      -> ColorRecord91(offset=308465664, model_code='B13', paint_code='AC 1', color_name_en='FATLANTIC BLUE PEARL', color_name_de='ATLANTIC BLUE PEARL', color_name_fr='BLEU ARCTIQUE PERLE', color_name_es='AZUL PERLA ATLANTIC')
+150624 0x12630000  0x12652000        68  glossary_record_28
+      -> GlossaryRecord28(offset=308477952, model_code='B13', category=49, term='&              !!', metadata=b'\x11\x00\x00i')
+150692 0x12652000  0x127D2000       768  code_index_record_33
+      -> CodeIndexRecord33(offset=308617216, model_code='B13', category=49, size_variant='&              ', code='13330', metadata=b'\x1e\n$\x00')
+151460 0x127D2000  0x127D3000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=310190080, model_code='B13', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b"\x02%\x00\xc4!+%\x00\x00\x11!8'\x00\x14\xa3")
+151462 0x127D3000  0x127DB800        17  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=310194176, model_code='B13', fig_group_code='0A', fig_group_code2='033', desc_en='OIL COOLER (ENGINE)', desc_de='OEL KÜHLER (MOTOR)', desc_fr="RADIATEUR D'HUILE", desc_es='ENFRIADOR DE ACEITE', trailer=b'\x05\x1e\x00\xd6!+8\x00\x00\x03')
+151479 0x127DB800  0x127E9000        27  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=310228992, model_code='B13', fig_index='001', page_index='01', label='', trailer=b'!,\x06\x00!-\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00!8E\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xab\x00\x00')
+151506 0x127E9000  0x1280F000        76  engine_spec_230
+      -> EngineSpecRecord230(offset=310284288, model_code='B13', figure='001', figure_page='01', applicable_model='25# +30D', start_date='200311', end_date='', trailer=b'\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xff\xfe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xfe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+151582 0x1280F000  0x129B8800       851  part_group_185
+      -> PartGroupRecord185(offset=310439936, model_code='B13', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00Z')
+152433 0x129B8800  0x129B9000         1  inventory_199
+      -> InventoryRecord199(offset=312182784, model_code='B13', figure='931', figure_page='02', part_number='047306160', unknown=b'\x07\xb5\x01Y', part_code='0473S', name_en='TAPPING SCREW-PAN HEAD', name_de='SCHNEIDSCHRAUBE - PFANNENKOPF', name_fr='VIS TARAUDEUSE  -  TüEE TRONCONIQUE', name_es='TORNILLO AUTOENROSQUE CABEZA CóNICA', trailer=b'')
+152434 0x129B9000  0x1300F800      3245  binary
+155679 0x1300F800  0x13011800         4  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=318830592, model_code='B13', variant_code='S', description='SEDAN')
+155683 0x13011800  0x13012000         1  version_index_20
+      -> VersionIndexRecord20(offset=318838784, model_code='B13', label='A1', payload=b'"\';\x00\x00\x14"(', pointer=b'\x03\x00iP')
+155684 0x13012000  0x1301B800        19  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=318840832, model_code='B13', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002!+6\x00\x00\x01')
+155703 0x1301B800  0x13055800       116  binary
+155819 0x13055800  0x13056000         1  model_year_44
+      -> ModelYearRecord44(offset=319117312, model_code='B13   ', version='A', date_from='20031101', date_to='20050531', label="'05MY")
+155820 0x13056000  0x13082000        88  multilingual_part_182
+      -> MultilingualPartRecord182(offset=319119360, model_code='B13', part_code='0100S', figure='260', name_en='PARKING BRAKE SYSTEM', name_de='PARKBREMSSYSTEM', name_fr='SYSTEME DE FREIN DE STATIONNEMENT', name_es='SISTEMA DE FRENO DE ESTACIONAMIENTO', trailer=b'!++\x00')
+155908 0x13082000  0x13082800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=319299584, model_code='B13', category=51, size_variant='K \x00\x06B13   3W \x00\x03', code='B13   6', metadata=b'1 \x00\x07')
+155909 0x13082800  0x13086000         7  figure_index_22
+      -> FigureIndexRecord22(offset=319301632, model_code='B13', figure='002', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+155916 0x13086000  0x13087000         2  spec_mapping_22
+      -> SpecMappingRecord22(offset=319315968, model_code='B13', option_code='AVDC*', description='OEVDC*X"*C\x00')
+155918 0x13087000  0x13087800         1  multilingual_part_167
+      -> MultilingualPartRecord167(offset=319320064, model_code='C12', spec_code='1012C', description='2 DOOR COUPE', trailer=b'\xe0`\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+155919 0x13087800  0x13088000         1  category_index_20
+      -> CategoryIndexRecord20(offset=319322112, model_code='C12', label='CC', payload=b' 06DT 1 ', pointer=b'#\x1f8\x00')
+155920 0x13088000  0x13089800         3  part_range_24
+      -> PartRangeRecord24(offset=319324160, model_code='C12', part_start='10010', part_end='11036', metadata=b'"+\x08\x00')
+155923 0x13089800  0x1308D800         8  multilingual_part_180
+      -> MultilingualPartRecord180(offset=319330304, model_code='C12', part_code='13028', name_en='BELT-TIMING', name_de='ZAHNRIEMEN', name_fr='COURROIE DE DISTRIBUTION', name_es='CORREA DISTRIBUCIóN', trailer=b'T\x000"+\x0c\x00')
+155931 0x1308D800  0x1308E000         1  empty
+155932 0x1308E000  0x1308E800         1  model_spec_103
+      -> ModelSpecRecord103(offset=319348736, model_code='C12', production_period='001199312199509', applied_model='CXV-Y5E', body_config='2C', engine='EG33D', drivetrain='2WD', transmission='AT', trim_level='L&LS', spec_option='', _padding='')
+155933 0x1308E800  0x13109000       245  multilingual_part_192
+      -> MultilingualPartRecord192(offset=319350784, model_code='C12', part_code='10010', figure_code='004', index='01', name_en='HANGER-ENGINE', name_de='HÄNGER - MOTOR', name_fr='SUPPORT - MOTEUR', name_es='COLGADOR MOTOR', trailer=b'".\x1d\x00\x00\x04\x00\x00\x00\x00\x00\x01')
+156178 0x13109000  0x13109800         1  empty
+156179 0x13109800  0x137AE800      3402  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=319854592, model_code='C12', group_category='10010', part_id='10010AA001', date_flag='C', date='1993080119940630', destination_codes='', spec_logic='EG33D', usage_notes='', internal_flags='', unknown=b'                          0100003509                 0A004  01                                                \xe0 \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+159581 0x137AE800  0x137B0000         3  color_record_91
+      -> ColorRecord91(offset=326821888, model_code='C12', paint_code='CC 0', color_name_en='6LIGHT SILVER M', color_name_de='HELLSILBER M', color_name_fr='ARGENT CLAIR M', color_name_es='PLATA CLARO M')
+159584 0x137B0000  0x137CA800        53  glossary_record_28
+      -> GlossaryRecord28(offset=326828032, model_code='C12', category=49, term='&              #', metadata=b'%\x00\x00D')
+159637 0x137CA800  0x138C1800       494  code_index_record_33
+      -> CodeIndexRecord33(offset=326936576, model_code='C12', category=49, size_variant='&              ', code='25229', metadata=b'"+(\x00')
+160131 0x138C1800  0x138C2800         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=327948288, model_code='C12', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b"\x00\xb5\x03(#'\x08\x00\x00\x11#-\x00\x00/\xc6")
+160133 0x138C2800  0x138CB000        17  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=327952384, model_code='C12', fig_group_code='0A', fig_group_code2='003', desc_en='SHORT BLOCK ENGINE', desc_de='TEILE MOTOREN', desc_fr='BLOC EMBIELLE', desc_es='ENSAMBLE DE MOTOR', trailer=b"\x03\xd0\x00\x8e#'\x19\x00\x00\x01")
+160150 0x138CB000  0x138D0800        11  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=327987200, model_code='C12', fig_index='001', page_index='01', label='', trailer=b"#'$\x00#'D\x00\x00\x00\x00\x00\x00\x00\x00\x00#.\x01\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00T\x1c\x00\x00")
+160161 0x138D0800  0x138E0800        32  engine_spec_230
+      -> EngineSpecRecord230(offset=328009728, model_code='C12', figure='001', figure_page='01', applicable_model='EG33D', start_date='199308', end_date='', trailer=b'\xe0`\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+160193 0x138E0800  0x13980800       320  part_group_185
+      -> PartGroupRecord185(offset=328075264, model_code='C12', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x01\xf1\x00\x99')
+160513 0x13980800  0x1399B000        53  inventory_199
+      -> InventoryRecord199(offset=328730624, model_code='C12', figure='004', figure_page='01', part_number='01050818A', unknown=b'\x03\xfe\x001', part_code='0105S', name_en='FLANGE BOLT', name_de='FLANSCHSCHRAUBE', name_fr='VIS üECOLLERETTE', name_es='PERNO DE BRIDA', trailer=b'')
+160566 0x1399B000  0x13C41800      1357  binary
+161923 0x13C41800  0x13C44800         6  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=331618304, model_code='C12', variant_code='2C', description='2 DOOR COUPE')
+161929 0x13C44800  0x13C45000         1  version_index_20
+      -> VersionIndexRecord20(offset=331630592, model_code='C12', label='A1', payload=b'$\x03\x05\x00\x00\x14$\x03', pointer=b'\x18\x00e\xe8')
+161930 0x13C45000  0x13C4E800        19  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=331632640, model_code='C12', fig_group_code='A1', fig_group_code2='003', desc_en='SHORT BLOCK ENGINE', desc_de='TEILE MOTOREN', desc_fr='BLOC EMBIELLE', desc_es='ENSAMBLE DE MOTOR', trailer=b"\x04\x08\x000#'\x19\x00\x00\x01")
+161949 0x13C4E800  0x13C87800       114  binary
+162063 0x13C87800  0x13C88000         1  model_year_44
+      -> ModelYearRecord44(offset=331905024, model_code='C12   ', version='C', date_from='19930801', date_to='19940630', label="'94MY U0U1 '94LMY C0")
+162064 0x13C88000  0x13C98800        33  multilingual_part_182
+      -> MultilingualPartRecord182(offset=331907072, model_code='C12', part_code='11051', figure='006', name_en='CYLINDER HEAD', name_de='ZYLINDERKOPF', name_fr='CULASSE', name_es='CULATA DE CILINDROS', trailer=b"#'\x08\x00")
+162097 0x13C98800  0x13C99000         1  code_index_record_33
+      -> CodeIndexRecord33(offset=331974656, model_code='C12', category=66, size_variant='C \x00\x02C12   HN \x00\x03', code='C12   J', metadata=b'A \x00\x04')
+162098 0x13C99000  0x13C9A000         2  figure_index_22
+      -> FigureIndexRecord22(offset=331976704, model_code='C12', figure='003', item_index='01004', metadata=b'\x01\x1a\x00D')
+162100 0x13C9A000  0x13C9B000         2  spec_mapping_22
+      -> SpecMappingRecord22(offset=331980800, model_code='C12', option_code='CBRSD', description='OFSUNRX$\x05\x1a\x00')
+162102 0x13C9B000  0x13C9C800         3  multilingual_part_167
+      -> MultilingualPartRecord167(offset=331984896, model_code='G10', spec_code='101S', description='SEDAN', trailer=b'\xff\xff\xff\xfb\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+162105 0x13C9C800  0x13C9D000         1  category_index_20
+      -> CategoryIndexRecord20(offset=331991040, model_code='G10', label='AC', payload=b' 06BC 31', pointer=b'&!A\x00')
+162106 0x13C9D000  0x13C9F800         5  part_range_24
+      -> PartRangeRecord24(offset=331993088, model_code='G10', part_start='10004', part_end='10982', metadata=b'$\x056\x00')
+162111 0x13C9F800  0x13CA5800        12  multilingual_part_180
+      -> MultilingualPartRecord180(offset=332003328, model_code='G10', part_code='13028', name_en='BELT-TIMING', name_de='ZAHNRIEMEN', name_fr='COURROIE DE DISTRIBUTION', name_es='CORREA DISTRIBUCIóN', trailer=b'T\x000$\x05<\x00')
+162123 0x13CA5800  0x13CA8800         6  model_spec_103
+      -> ModelSpecRecord103(offset=332027904, model_code='G10', production_period='001199302199506', applied_model='GC5-Y1G', body_config='S', engine='EJ18E', drivetrain='2WD', transmission='MT', trim_level='BASE', spec_option='N/S', _padding='')
+162129 0x13CA8800  0x13D59800       354  multilingual_part_192
+      -> MultilingualPartRecord192(offset=332040192, model_code='G10', part_code='10004', figure_code='090', index='04', name_en='HANGER COMPLETE-ENGINE', name_de='AUFHÄNGUNG KOMPLETT - MOTOR', name_fr='SUPPORT COMP. - MOTEUR', name_es='PÉNDOLA COMPLETA MOTOR', trailer=b'$\n"\x00\x00\x06\x00\x00\x00\x00\x00\x01')
+162483 0x13D59800  0x13D5A000         1  empty
+162484 0x13D5A000  0x1525C000     10756  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=332767232, model_code='G10', group_category='10004', part_id='10004AA011', date_flag='G', date='1997120119990630', destination_codes='', spec_logic='EJ22# +EJ253', usage_notes='', internal_flags='', unknown=b'                          0100014000 10004AA012     20C090  04                                                \x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00<\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+173240 0x1525C000  0x15260800         9  color_record_91
+      -> ColorRecord91(offset=354795520, model_code='G10', paint_code='AC 0', color_name_en='6LIGHT SILVER M', color_name_de='HELLSILBER M', color_name_fr='ARGENT CLAIR M', color_name_es='PLATA CLARO M')
+173249 0x15260800  0x1527F800        62  glossary_record_28
+      -> GlossaryRecord28(offset=354813952, model_code='G10', category=49, term='&              &"', metadata=b'=\x00\x00Y')
+173311 0x1527F800  0x153D8800       690  code_index_record_33
+      -> CodeIndexRecord33(offset=354940928, model_code='G10', category=49, size_variant='&              ', code='25229', metadata=b'$\x06\x15\x00')
+174001 0x153D8800  0x153D9800         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=356354048, model_code='G10', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x00\xd2\x03\x0c&,\x03\x00\x00\x11&:%\x00-c')
+174003 0x153D9800  0x153E3800        20  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=356358144, model_code='G10', fig_group_code='0A', fig_group_code2='003', desc_en='SHORT BLOCK ENGINE', desc_de='TEILE MOTOREN', desc_fr='BLOC EMBIELLE', desc_es='ENSAMBLE DE MOTOR', trailer=b'\x05"\x00\x7f&,\x17\x00\x00\x01')
+174023 0x153E3800  0x153F1800        28  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=356399104, model_code='G10', fig_index='001', page_index='01', label='', trailer=b'&,3\x00&-7\x00\x00\x00\x00\x00\x00\x00\x00\x00&;0\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x14"\x00\x00')
+174051 0x153F1800  0x15419000        79  engine_spec_230
+      -> EngineSpecRecord230(offset=356456448, model_code='G10', figure='001', figure_page='01', applicable_model='EJ18E +EJ22# +EJ25#', start_date='199206', end_date='', trailer=b'\xff\xff\xff\xfb\xf0\x00\x00\x00\x00\x00\x00\x00\x0f\xff\xff\x7f\xe0\x0f\xc3\xf0\x00\x00\x00\x00\x00\xbf\xff\xf0\x03?\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+174130 0x15419000  0x155B0800       815  part_group_185
+      -> PartGroupRecord185(offset=356618240, model_code='G10', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x01\xaf\x03\xfd')
+174945 0x155B0800  0x155F2800       132  inventory_199
+      -> InventoryRecord199(offset=358287360, model_code='G10', figure='004', figure_page='01', part_number='01050818A', unknown=b'\x083\x02\xf3', part_code='0105S', name_en='FLANGE BOLT', name_de='FLANSCHSCHRAUBE', name_fr='VIS üECOLLERETTE', name_es='PERNO DE BRIDA', trailer=b'')
+175077 0x155F2800  0x15C0D000      3125  binary
+178202 0x15C0D000  0x15C10800         7  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=364957696, model_code='G10', variant_code='S', description='SEDAN')
+178209 0x15C10800  0x15C11000         1  version_index_20
+      -> VersionIndexRecord20(offset=364972032, model_code='G10', label='A1', payload=b"'(\n\x00\x00\x14'(", pointer=b'\x1f\x00f\x01')
+178210 0x15C11000  0x15C1B000        20  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=364974080, model_code='G10', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002&,\x17\x00\x00\x01')
+178230 0x15C1B000  0x15C1B800         1  empty
+178231 0x15C1B800  0x15C59800       124  binary
+178355 0x15C59800  0x15C5A000         1  model_year_44
+      -> ModelYearRecord44(offset=365271040, model_code='G10   ', version='A', date_from='19920601', date_to='19930831', label="'93MY")
+178356 0x15C5A000  0x15C83000        82  multilingual_part_182
+      -> MultilingualPartRecord182(offset=365273088, model_code='G10', part_code='11024', figure='004', name_en='CYLINDER BLOCK', name_de='MOTORBLOCK', name_fr='BLOC CYLINDRE', name_es='BLOQUE DE CILINDROS', trailer=b'&,\x03\x00')
+178438 0x15C83000  0x15C83800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=365441024, model_code='G10', category=53, size_variant='2 \x00.G10   AE \x00\x02', code='G10   A', metadata=b'L \x00\x03')
+178439 0x15C83800  0x15C84800         2  figure_index_22
+      -> FigureIndexRecord22(offset=365443072, model_code='G10', figure='003', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+178441 0x15C84800  0x15C86000         3  spec_mapping_22
+      -> SpecMappingRecord22(offset=365447168, model_code='G10', option_code='AAICN', description="2FAIRBX'+\x11\x00")
+178444 0x15C86000  0x15C87000         2  multilingual_part_167
+      -> MultilingualPartRecord167(offset=365453312, model_code='G11', spec_code='101S', description='SEDAN', trailer=b'\xff\xfe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+178446 0x15C87000  0x15C87800         1  category_index_20
+      -> CategoryIndexRecord20(offset=365457408, model_code='G11', label='AC', payload=b' 1EBC 4H', pointer=b'*\x01(\x00')
+178447 0x15C87800  0x15C8A000         5  part_range_24
+      -> PartRangeRecord24(offset=365459456, model_code='G11', part_start='0100S', part_end='0125S', metadata=b"'+*\x00")
+178452 0x15C8A000  0x15C90800        13  multilingual_part_180
+      -> MultilingualPartRecord180(offset=365469696, model_code='G11', part_code='0510S', name_en='COTTER PIN', name_de='SPLINT', name_fr='GOUPILLE FENDUE', name_es='CLAVIJA HENDIDA', trailer=b"T\x000'+.\x00")
+178465 0x15C90800  0x15C91800         2  model_spec_103
+      -> ModelSpecRecord103(offset=365496320, model_code='G11', production_period='001200103200402', applied_model='GDE-Y6J', body_config='S', engine='251', drivetrain='4W', transmission='5MT', trim_level='RS', spec_option='N/S', _padding='')
+178467 0x15C91800  0x15D4E000       377  multilingual_part_192
+      -> MultilingualPartRecord192(offset=365500416, model_code='G11', part_code='0100S', figure_code='440', index='', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b"'0-\x00\x00P+\x0e,\x00\x00\r")
+178844 0x15D4E000  0x15D4E800         1  empty
+178845 0x15D4E800  0x170C7800      9970  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=366274560, model_code='G11', group_category='0100S', part_id='010006120', date_flag='A', date='2000090120020531', destination_codes='', spec_logic='AS +W', usage_notes='', internal_flags='', unknown=b'                          0200000100 010006126      14A440                                                    \xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xc0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+188815 0x170C7800  0x170CA800         6  color_record_91
+      -> ColorRecord91(offset=386693120, model_code='G11', paint_code='AC 1', color_name_en='EPURE WHITE', color_name_de='REINWEISS', color_name_fr='BLANC PUR', color_name_es='BLANCO PURO')
+188821 0x170CA800  0x170EC000        67  glossary_record_28
+      -> GlossaryRecord28(offset=386705408, model_code='G11', category=49, term='&              *\x02', metadata=b'&\x00\x00`')
+188888 0x170EC000  0x17255000       722  code_index_record_33
+      -> CodeIndexRecord33(offset=386842624, model_code='G11', category=49, size_variant='&              ', code='13330', metadata=b"'+;\x00")
+189610 0x17255000  0x17256000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=388321280, model_code='G11', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x02%\x00\xc4*\x0c\x0c\x00\x00\x11*\x1a\n\x00\x14M')
+189612 0x17256000  0x1725E800        17  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=388325376, model_code='G11', fig_group_code='0A', fig_group_code2='035', desc_en='WATER PUMP', desc_de='WASSERPUMPE', desc_fr='POMPE A EAU', desc_es='BOMBA DE AGUA', trailer=b'\x05\x1e\x00\x9d*\x0c\x1f\x00\x00\x03')
+189629 0x1725E800  0x1726E000        31  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=388360192, model_code='G11', fig_index='001', page_index='01', label='', trailer=b'*\x0c<\x00*\rJ\x00\x00\x00\x00\x00\x00\x00\x00\x00*\x1a(\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xa8\x00\x00')
+189660 0x1726E000  0x1729A000        88  engine_spec_230
+      -> EngineSpecRecord230(offset=388423680, model_code='G11', figure='001', figure_page='01', applicable_model='20# +25#', start_date='200009', end_date='', trailer=b'\xff\xfe\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\xf3\xfc\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+189748 0x1729A000  0x1729A800         1  empty
+189749 0x1729A800  0x17451000       877  part_group_185
+      -> PartGroupRecord185(offset=388605952, model_code='G11', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00Z')
+190626 0x17451000  0x1745F800        29  inventory_199
+      -> InventoryRecord199(offset=390402048, model_code='G11', figure='050', figure_page='05', part_number='010406120', unknown=b'\x02\x07\x00N', part_code='0104S', name_en='FLANGE BOLT', name_de='FLANSCHSCHRAUBE', name_fr='VIS üECOLLERETTE', name_es='PERNO DE BRIDA', trailer=b'')
+190655 0x1745F800  0x17B36800      3502  binary
+194157 0x17B36800  0x17B38800         4  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=397633536, model_code='G11', variant_code='S', description='SEDAN')
+194161 0x17B38800  0x17B39000         1  version_index_20
+      -> VersionIndexRecord20(offset=397641728, model_code='G11', label='A1', payload=b'+\x0c>\x00\x00\x14+\r', pointer=b'\x06\x00j\xbe')
+194162 0x17B39000  0x17B42000        18  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=397643776, model_code='G11', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002*\x0c\x1d\x00\x00\x01')
+194180 0x17B42000  0x17B42800         1  empty
+194181 0x17B42800  0x17B7A800       112  binary
+194293 0x17B7A800  0x17B7B000         1  model_year_44
+      -> ModelYearRecord44(offset=397912064, model_code='G11   ', version='A', date_from='20000901', date_to='20020531', label="'02MY")
+194294 0x17B7B000  0x17BA3000        80  multilingual_part_182
+      -> MultilingualPartRecord182(offset=397914112, model_code='G11', part_code='0100S', figure='070', name_en='AIR CLEANER & ELEMENT', name_de='LUFTFILTER UND LUFTFILTERELEMENT', name_fr='FILTRE A AIR ET CARTOUCHE FILTRANTE', name_es='FILTRO Y ELEMENTO DE AIRE', trailer=b'*\x0c\r\x00')
+194374 0x17BA3000  0x17BA3800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=398077952, model_code='G11', category=51, size_variant='G \x00\x13G11   64 \x00\t', code='G11   6', metadata=b'5 \x00\n')
+194375 0x17BA3800  0x17BA6800         6  figure_index_22
+      -> FigureIndexRecord22(offset=398080000, model_code='G11', figure='002', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+194381 0x17BA6800  0x17BA7800         2  spec_mapping_22
+      -> SpecMappingRecord22(offset=398092288, model_code='G11', option_code='AAICN', description='OFSUNRX+\x0f9\x00')
+194383 0x17BA7800  0x17BA8000         1  multilingual_part_167
+      -> MultilingualPartRecord167(offset=398096384, model_code='S10', spec_code='101W', description='WAGON', trailer=b'\xff\xc3\xff\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+194384 0x17BA8000  0x17BA8800         1  empty
+194385 0x17BA8800  0x17BA9000         1  category_index_20
+      -> CategoryIndexRecord20(offset=398100480, model_code='S10', label='AC', payload=b' 06AT 4 ', pointer=b',\x16B\x00')
+194386 0x17BA9000  0x17BAB000         4  part_range_24
+      -> PartRangeRecord24(offset=398102528, model_code='S10', part_start='10004', part_end='10982', metadata=b'+\x10\x03\x00')
+194390 0x17BAB000  0x17BB0800        11  multilingual_part_180
+      -> MultilingualPartRecord180(offset=398110720, model_code='S10', part_code='13028', name_en='BELT-TIMING', name_de='ZAHNRIEMEN', name_fr='COURROIE DE DISTRIBUTION', name_es='CORREA DISTRIBUCIóN', trailer=b'T\x000+\x10\x08\x00')
+194401 0x17BB0800  0x17BB1800         2  model_spec_103
+      -> ModelSpecRecord103(offset=398133248, model_code='S10', production_period='001199705199806', applied_model='SF9-Y1F', body_config='W', engine='EJ25D', drivetrain='F4WD', transmission='MT', trim_level='BASE', spec_option='N/S', _padding='')
+194403 0x17BB1800  0x17C40000       285  multilingual_part_192
+      -> MultilingualPartRecord192(offset=398137344, model_code='S10', part_code='10004', figure_code='090', index='02', name_en='HANGER COMPLETE-ENGINE', name_de='AUFHÄNGUNG KOMPLETT - MOTOR', name_fr='SUPPORT COMP. - MOTEUR', name_es='PÉNDOLA COMPLETA MOTOR', trailer=b'+\x13?\x00\x00\x06\x00\x00\x00\x00\x00\x01')
+194688 0x17C40000  0x1857C000      4728  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=398721024, model_code='S10', group_category='10004', part_id='10004AA011', date_flag='B', date='1998030119990630', destination_codes='', spec_logic='EJ253', usage_notes='', internal_flags='', unknown=b'                          0100014000 10004AA012     20C090  02                                                \x00\x03\xe0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+199416 0x1857C000  0x1857F800         7  color_record_91
+      -> ColorRecord91(offset=408403968, model_code='S10', paint_code='AC 0', color_name_en='6LIGHT SILVER M', color_name_de='HELLSILBER M', color_name_fr='ARGENT CLAIR M', color_name_es='PLATA CLARO M')
+199423 0x1857F800  0x1859C000        57  glossary_record_28
+      -> GlossaryRecord28(offset=408418304, model_code='S10', category=49, term='&              ,\x17', metadata=b'7\x00\x00G')
+199480 0x1859C000  0x186B1800       555  code_index_record_33
+      -> CodeIndexRecord33(offset=408535040, model_code='S10', category=49, size_variant='&              ', code='25229', metadata=b"+\x10'\x00")
+200035 0x186B1800  0x186B2800         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=409671680, model_code='S10', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b"\x01(\x02\xf3,\x1f\x0c\x00\x00\x12,'\x1c\x001\xdb")
+200037 0x186B2800  0x186BC000        19  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=409675776, model_code='S10', fig_group_code='0A', fig_group_code2='003', desc_en='SHORT BLOCK ENGINE', desc_de='TEILE MOTOREN', desc_fr='BLOC EMBIELLE', desc_es='ENSAMBLE DE MOTOR', trailer=b'\x046\x00S,\x1f\x1f\x00\x00\x01')
+200056 0x186BC000  0x186C5000        18  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=409714688, model_code='S10', fig_index='001', page_index='01', label='', trailer=b',\x1f1\x00, \x18\x00\x00\x00\x00\x00\x00\x00\x00\x00,((\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xaa\x00\x00')
+200074 0x186C5000  0x186DE000        50  engine_spec_230
+      -> EngineSpecRecord230(offset=409751552, model_code='S10', figure='001', figure_page='01', applicable_model='EJ25#', start_date='199611', end_date='', trailer=b'\xff\xc3\xff\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+200124 0x186DE000  0x187C2000       456  part_group_185
+      -> PartGroupRecord185(offset=409853952, model_code='S10', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00Z')
+200580 0x187C2000  0x187E1800        63  inventory_199
+      -> InventoryRecord199(offset=410787840, model_code='S10', figure='004', figure_page='02', part_number='037018200', unknown=b'\x03\xa6\x01\xf0', part_code='0370S', name_en='GASKET-ALUMINIUM', name_de='DICHTUNG - ALUMINIUM', name_fr='JOINT - ALUMINIUM', name_es='JUNTA ESTANQUEIDAD ALUMINIO', trailer=b'')
+200643 0x187E1800  0x187E2000         1  empty
+200644 0x187E2000  0x18B93000      1890  binary
+202534 0x18B93000  0x18B96000         6  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=414789632, model_code='S10', variant_code='W', description='WAGON')
+202540 0x18B96000  0x18B96800         1  version_index_20
+      -> VersionIndexRecord20(offset=414801920, model_code='S10', label='A1', payload=b'-\x04)\x00\x00\x14-\x04', pointer=b'<\x00f\xac')
+202541 0x18B96800  0x18BA0000        19  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=414803968, model_code='S10', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002,\x1f\x1f\x00\x00\x01')
+202560 0x18BA0000  0x18BDA800       117  binary
+202677 0x18BDA800  0x18BDB000         1  model_year_44
+      -> ModelYearRecord44(offset=415082496, model_code='S10   ', version='A', date_from='19961101', date_to='19980630', label="'98MY")
+202678 0x18BDB000  0x18BF4800        51  multilingual_part_182
+      -> MultilingualPartRecord182(offset=415084544, model_code='S10', part_code='11051', figure='006', name_en='CYLINDER HEAD', name_de='ZYLINDERKOPF', name_fr='CULASSE', name_es='CULATA DE CILINDROS', trailer=b',\x1f\x0c\x00')
+202729 0x18BF4800  0x18BF5000         1  empty
+202730 0x18BF5000  0x18BF5800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=415191040, model_code='S10', category=54, size_variant='3 \x00\x17S10   71 \x00\x18', code='S10   7', metadata=b'2 \x00\x19')
+202731 0x18BF5800  0x18BF6800         2  figure_index_22
+      -> FigureIndexRecord22(offset=415193088, model_code='S10', figure='003', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+202733 0x18BF6800  0x18BF8000         3  spec_mapping_22
+      -> SpecMappingRecord22(offset=415197184, model_code='S10', option_code='A0***', description='AECRUIO-\x07\t\x00')
+202736 0x18BF8000  0x18BF9000         2  multilingual_part_167
+      -> MultilingualPartRecord167(offset=415203328, model_code='S11', spec_code='101W', description='WAGON', trailer=b'\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+202738 0x18BF9000  0x18BF9800         1  category_index_20
+      -> CategoryIndexRecord20(offset=415207424, model_code='S11', label='AC', payload=b' 1EAC N5', pointer=b'/\x188\x00')
+202739 0x18BF9800  0x18BFB800         4  part_range_24
+      -> PartRangeRecord24(offset=415209472, model_code='S11', part_start='0100S', part_end='0125S', metadata=b'-\x07 \x00')
+202743 0x18BFB800  0x18C01800        12  multilingual_part_180
+      -> MultilingualPartRecord180(offset=415217664, model_code='S11', part_code='0510S', name_en='COTTER PIN', name_de='SPLINT', name_fr='GOUPILLE FENDUE', name_es='CLAVIJA HENDIDA', trailer=b'T\x000-\x07$\x00')
+202755 0x18C01800  0x18C02800         2  model_spec_103
+      -> ModelSpecRecord103(offset=415242240, model_code='S11', production_period='001200111200403', applied_model='SG9-Y7J', body_config='W', engine='251', drivetrain='F4W', transmission='MT', trim_level='25X', spec_option='N/S', _padding='')
+202757 0x18C02800  0x18CA9800       334  multilingual_part_192
+      -> MultilingualPartRecord192(offset=415246336, model_code='S11', part_code='0100S', figure_code='591', index='01', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b'-\x0bB\x00\x00L0\x13"\x00\x00\x0c')
+203091 0x18CA9800  0x1A020000      9965  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=415930368, model_code='S11', group_category='0100S', part_id='010006120', date_flag='A', date='2001110120030331', destination_codes='', spec_logic='W', usage_notes='', internal_flags='', unknown=b'                          0600000100 010006126      15A591  01                                                \xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+213056 0x1A020000  0x1A025000        10  color_record_91
+      -> ColorRecord91(offset=436338688, model_code='S11', paint_code='AC 1', color_name_en='EPURE WHITE', color_name_de='REINWEISS', color_name_fr='BLANC PUR', color_name_es='BLANCO PURO')
+213066 0x1A025000  0x1A045000        64  glossary_record_28
+      -> GlossaryRecord28(offset=436359168, model_code='S11', category=49, term='&              /\x19', metadata=b'7\x00\x00^')
+213130 0x1A045000  0x1A187000       644  code_index_record_33
+      -> CodeIndexRecord33(offset=436490240, model_code='S11', category=49, size_variant='&              ', code='13330', metadata=b'-\x070\x00')
+213774 0x1A187000  0x1A188000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=437809152, model_code='S11', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x02%\x00\xc4/"\x1a\x00\x00\x11/,\x17\x00\x14O')
+213776 0x1A188000  0x1A190800        17  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=437813248, model_code='S11', fig_group_code='0A', fig_group_code2='035', desc_en='WATER PUMP', desc_de='WASSERPUMPE', desc_fr='POMPE A EAU', desc_es='BOMBA DE AGUA', trailer=b'\x05\x1e\x00\x9d/"-\x00\x00\x02')
+213793 0x1A190800  0x1A19B800        22  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=437848064, model_code='S11', fig_index='001', page_index='01', label='', trailer=b'/"A\x00/#4\x00\x00\x00\x00\x00\x00\x00\x00\x00/,4\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xae\x00\x00')
+213815 0x1A19B800  0x1A1BA800        62  engine_spec_230
+      -> EngineSpecRecord230(offset=437893120, model_code='S11', figure='001', figure_page='01', applicable_model='25#', start_date='200111', end_date='', trailer=b'\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+213877 0x1A1BA800  0x1A2F5000       629  part_group_185
+      -> PartGroupRecord185(offset=438020096, model_code='S11', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00Z')
+214506 0x1A2F5000  0x1A2FB000        12  inventory_199
+      -> InventoryRecord199(offset=439308288, model_code='S11', figure='004', figure_page='02', part_number='037010200', unknown=b'\x04\xa4\x01\xaf', part_code='0370S', name_en='GASKET-ALUMINIUM', name_de='DICHTUNG - ALUMINIUM', name_fr='JOINT - ALUMINIUM', name_es='JUNTA ESTANQUEIDAD ALUMINIO', trailer=b'')
+214518 0x1A2FB000  0x1A7E0000      2506  binary
+217024 0x1A7E0000  0x1A7E2000         4  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=444465152, model_code='S11', variant_code='W', description='WAGON')
+217028 0x1A7E2000  0x1A7E2800         1  version_index_20
+      -> VersionIndexRecord20(offset=444473344, model_code='S11', label='A1', payload=b'0\x116\x00\x00\x140\x11', pointer=b'H\x00j\xd3')
+217029 0x1A7E2800  0x1A7EB800        18  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=444475392, model_code='S11', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x002/"+\x00\x00\x01')
+217047 0x1A7EB800  0x1A823000       111  binary
+217158 0x1A823000  0x1A823800         1  model_year_44
+      -> ModelYearRecord44(offset=444739584, model_code='S11   ', version='A', date_from='20011101', date_to='20030331', label="'03MY")
+217159 0x1A823800  0x1A842800        62  multilingual_part_182
+      -> MultilingualPartRecord182(offset=444741632, model_code='S11', part_code='0100S', figure='070', name_en='AIR CLEANER & ELEMENT', name_de='LUFTFILTER UND LUFTFILTERELEMENT', name_fr='FILTRE A AIR ET CARTOUCHE FILTRANTE', name_es='FILTRO Y ELEMENTO DE AIRE', trailer=b'/"\x1b\x00')
+217221 0x1A842800  0x1A843000         1  code_index_record_33
+      -> CodeIndexRecord33(offset=444868608, model_code='S11', category=54, size_variant='1 \x00\x18S11   66 \x00\x1d', code='S11   6', metadata=b'9 \x00\x1e')
+217222 0x1A843000  0x1A845800         5  figure_index_22
+      -> FigureIndexRecord22(offset=444870656, model_code='S11', figure='002', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+217227 0x1A845800  0x1A847000         3  spec_mapping_22
+      -> SpecMappingRecord22(offset=444880896, model_code='S11', option_code='A****', description='WEAWHLX0\x14\x1c\x00')
+217230 0x1A847000  0x1A848000         2  multilingual_part_167
+      -> MultilingualPartRecord167(offset=444887040, model_code='S12', spec_code='101W', description='WAGON', trailer=b'\xff\xff\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+217232 0x1A848000  0x1A848800         1  category_index_20
+      -> CategoryIndexRecord20(offset=444891136, model_code='S12', label='AC', payload=b' 1FAC E4', pointer=b'29\x16\x00')
+217233 0x1A848800  0x1A84A800         4  part_range_24
+      -> PartRangeRecord24(offset=444893184, model_code='S12', part_start='0100S', part_end='0138S', metadata=b'0\x143\x00')
+217237 0x1A84A800  0x1A850800        12  multilingual_part_180
+      -> MultilingualPartRecord180(offset=444901376, model_code='S12', part_code='0510S', name_en='COTTER PIN', name_de='SPLINT', name_fr='GOUPILLE FENDUE', name_es='CLAVIJA HENDIDA', trailer=b'T\x0000\x146\x00')
+217249 0x1A850800  0x1A851800         2  model_spec_103
+      -> ModelSpecRecord103(offset=444925952, model_code='S12', production_period='001200711201008', applied_model='SH9-Y4J', body_config='W', engine='253', drivetrain='4W', transmission='MT', trim_level='X', spec_option='', _padding='')
+217251 0x1A851800  0x1A8E9000       303  multilingual_part_192
+      -> MultilingualPartRecord192(offset=444930048, model_code='S12', part_code='0100S', figure_code='343', index='02', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b'0\x186\x00\x00?3.D\x00\x00\n')
+217554 0x1A8E9000  0x1BF42000     11442  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=445550592, model_code='S12', group_category='0100S', part_id='010006120', date_flag='A', date='2007110120090331', destination_codes='', spec_logic='W', usage_notes='', internal_flags='', unknown=b'                          0200000100 010006126      13A343  02                                                \xff\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+228996 0x1BF42000  0x1BF42800         1  empty
+228997 0x1BF42800  0x1BF45000         5  color_record_91
+      -> ColorRecord91(offset=468985856, model_code='S12', paint_code='AC 1', color_name_en='FSAGE GREEN METALLIC', color_name_de='SAGE GREEN METALLIC', color_name_fr='VERT CENDRÉ MÉTALLI', color_name_es='QVERDE SALVIA METáLI')
+229002 0x1BF45000  0x1BF64000        62  glossary_record_28
+      -> GlossaryRecord28(offset=468996096, model_code='S12', category=49, term='&              2:', metadata=b'\x0e\x00\x00Y')
+229064 0x1BF64000  0x1C086800       581  code_index_record_33
+      -> CodeIndexRecord33(offset=469123072, model_code='S12', category=49, size_variant='&              ', code='13330', metadata=b'0\x14E\x00')
+229645 0x1C086800  0x1C087800         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=470312960, model_code='S12', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x02%\x00\xc43\x05H\x00\x00\x103\x0e\x0b\x00\x15\x94')
+229647 0x1C087800  0x1C08F800        16  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=470317056, model_code='S12', fig_group_code='0A', fig_group_code2='036', desc_en='WATER PIPE (1)', desc_de='KÜHLWASSERROHR (1)', desc_fr='DURITE (1)', desc_es='CANO DE AGUA (1)', trailer=b'\x05\x1e\x00\x9d3\x06\x10\x00\x00\x04')
+229663 0x1C08F800  0x1C09A000        21  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=470349824, model_code='S12', fig_index='001', page_index='01', label='ENGINE ASSEMBLY', trailer=b'3\x06"\x003\x07\x12\x00\x00\x00\x00\x00\x00\x00\x00\x003\x0e(\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x12 \x00\x00')
+229684 0x1C09A000  0x1C0B7800        59  engine_spec_230
+      -> EngineSpecRecord230(offset=470392832, model_code='S12', figure='001', figure_page='01', applicable_model='253 +25B +255', start_date='200711', end_date='', trailer=b'\xff\xff\xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+229743 0x1C0B7800  0x1C1B8000       513  part_group_185
+      -> PartGroupRecord185(offset=470513664, model_code='S12', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02\xbb\x00\x93')
+230256 0x1C1B8000  0x1C646000      2332  binary
+232588 0x1C646000  0x1C648800         5  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=476340224, model_code='S12', variant_code='W', description='WAGON')
+232593 0x1C648800  0x1C649000         1  version_index_20
+      -> VersionIndexRecord20(offset=476350464, model_code='S12', label='A1', payload=b'3-\x13\x00\x00\x143-', pointer=b'%\x00_U')
+232594 0x1C649000  0x1C652000        18  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=476352512, model_code='S12', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x0023\x06\r\x00\x00\x07')
+232612 0x1C652000  0x1C686800       105  binary
+232717 0x1C686800  0x1C687000         1  model_year_44
+      -> ModelYearRecord44(offset=476604416, model_code='S12   ', version='A', date_from='20071101', date_to='20090331', label="'09MY")
+232718 0x1C687000  0x1C6A7000        64  multilingual_part_182
+      -> MultilingualPartRecord182(offset=476606464, model_code='S12', part_code='0100S', figure='265', name_en='BRAKE PIPING', name_de='BREMSLEITUNGSSYSTEM', name_fr='CONDUITES DE FREIN', name_es='CANERIA DE FRENO', trailer=b'3\x06\x03\x00')
+232782 0x1C6A7000  0x1C6A7800         1  code_index_record_33
+      -> CodeIndexRecord33(offset=476737536, model_code='S12', category=50, size_variant='H \x00\x17S12   3H \x00\x18', code='S12   3', metadata=b'I \x00)')
+232783 0x1C6A7800  0x1C6AA000         5  figure_index_22
+      -> FigureIndexRecord22(offset=476739584, model_code='S12', figure='002', item_index='01004', metadata=b'\x06\xd7\x00\x9d')
+232788 0x1C6AA000  0x1C6AC000         4  spec_mapping_22
+      -> SpecMappingRecord22(offset=476749824, model_code='S12', option_code='A****', description='ACFFOGX3/@\x00')
+232792 0x1C6AC000  0x1C6AC800         1  multilingual_part_167
+      -> MultilingualPartRecord167(offset=476758016, model_code='W10', spec_code='101X', description='XUV(SUV)', trailer=b'\xfc\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+232793 0x1C6AC800  0x1C6AD000         1  category_index_20
+      -> CategoryIndexRecord20(offset=476760064, model_code='W10', label='AC', payload=b' 2JBC 9J', pointer=b'6%3\x00')
+232794 0x1C6AD000  0x1C6AF000         4  part_range_24
+      -> PartRangeRecord24(offset=476762112, model_code='W10', part_start='0100S', part_end='0232S', metadata=b'30\x0c\x00')
+232798 0x1C6AF000  0x1C6B5000        12  multilingual_part_180
+      -> MultilingualPartRecord180(offset=476770304, model_code='W10', part_code='0510S', name_en='COTTER PIN', name_de='SPLINT', name_fr='GOUPILLE FENDUE', name_es='CLAVIJA HENDIDA', trailer=b'T\x00030\x0e\x00')
+232810 0x1C6B5000  0x1C6B5800         1  empty
+232811 0x1C6B5800  0x1C6B6000         1  model_spec_103
+      -> ModelSpecRecord103(offset=476796928, model_code='W10', production_period='001200411200701', applied_model='WXE-Y2U', body_config='X', engine='30D', drivetrain='4W', transmission='5AT', trim_level='5M', spec_option='', _padding='')
+232812 0x1C6B6000  0x1C745800       287  multilingual_part_192
+      -> MultilingualPartRecord192(offset=476798976, model_code='W10', part_code='0100S', figure_code='440', index='02', name_en='FLANGE BOLT-PILOT', name_de='FLANSCHSCHRAUBE - PILOT', name_fr='BOULON üEBRIDE - PILOTE', name_es='PERNO DE BRIDA PILOTO', trailer=b'33J\x00\x00{7\x138\x00\x00\x0f')
+233099 0x1C745800  0x1DF8B000     12427  catalog_applicability_466
+      -> CatalogApplicabilityRecord466(offset=477386752, model_code='W10', group_category='0100S', part_id='010006107', date_flag='A', date='2004110120060331', destination_codes='', spec_logic='30D', usage_notes='', internal_flags='', unknown=b'                          0200000200                 4A440  02                                                \xf0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*@@@@@@@@@@@@@@@@@@@@@@@@@                         ')
+245526 0x1DF8B000  0x1DF8E000         6  color_record_91
+      -> ColorRecord91(offset=502837248, model_code='W10', paint_code='AC 2', color_name_en='JOBSIDIAN BLACK PEAR', color_name_de='LOBSIDIANSCHWARZ PER', color_name_fr='LNOIR OBSIDIENNE PER', color_name_es='LNEGRO OBSIDIANO PER')
+245532 0x1DF8E000  0x1DF8E800         1  empty
+245533 0x1DF8E800  0x1DFAE000        63  glossary_record_28
+      -> GlossaryRecord28(offset=502851584, model_code='W10', category=49, term='&              6&', metadata=b'.\x00\x00>')
+245596 0x1DFAE000  0x1E0CF000       578  code_index_record_33
+      -> CodeIndexRecord33(offset=502980608, model_code='W10', category=49, size_variant='&              ', code='26633', metadata=b'306\x00')
+246174 0x1E0CF000  0x1E0D0000         2  fig_group_category_184
+      -> FIGGroupCategoryRecord184(offset=504164352, model_code='W10', fig_group_code='0A', desc_en='ENGINE MAIN', desc_de='MOTOR-HAUPTBAUGRUPPE', desc_fr='MOTEUR, PRINCIPAL', desc_es='UNIDAT PRINCIPAL DEL MOTOR', trailer=b'\x02%\x00\xc46.\x1a\x00\x00\x1165\x1c\x00\x14\xe0')
+246176 0x1E0D0000  0x1E0D7800        15  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=504168448, model_code='W10', fig_group_code='0A', fig_group_code2='033', desc_en='OIL COOLER (ENGINE)', desc_de='OEL KÜHLER (MOTOR)', desc_fr="RADIATEUR D'HUILE", desc_es='ENFRIADOR DE ACEITE', trailer=b'\x05\x1e\x00\xd66.*\x00\x00\x02')
+246191 0x1E0D7800  0x1E0DF800        16  fig_illustration_page_89
+      -> FIGIllustrationPage89(offset=504199168, model_code='W10', fig_index='001', page_index='01', label='', trailer=b'6.9\x006/\x1b\x00\x00\x00\x00\x00\x00\x00\x00\x00658\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x11\xdd\x00\x00')
+246207 0x1E0DF800  0x1E0F6000        45  engine_spec_230
+      -> EngineSpecRecord230(offset=504231936, model_code='W10', figure='001', figure_page='01', applicable_model='30D +36D', start_date='200411', end_date='', trailer=b'\xfc\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+246252 0x1E0F6000  0x1E1D4800       445  part_group_185
+      -> PartGroupRecord185(offset=504324096, model_code='W10', figure='001', figure_page='01', part_code='10100', desc_en='ENGINE ASSEMBLY', desc_de='MOTORBAUGRUPPE', desc_fr='ENSEMBLE MOTEUR', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x02l\x00Z')
+246697 0x1E1D4800  0x1E1D5000         1  inventory_199
+      -> InventoryRecord199(offset=505235456, model_code='W10', figure='843', figure_page='01', part_number='045404254', unknown=b'\x05F\x04\xc6', part_code='0454S', name_en='TAPPING SCREW-PAN HEAD', name_de='SCHNEIDSCHRAUBE - PFANNENKOPF', name_fr='VIS TARAUDEUSE  -  TüEE TRONCONIQUE', name_es='TORNILLO AUTOENROSQUE CABEZA CóNICA', trailer=b'')
+246698 0x1E1D5000  0x1E577000      1860  binary
+248558 0x1E577000  0x1E579000         4  variant_glossary_81
+      -> VariantGlossaryRecord81(offset=509046784, model_code='W10', variant_code='X', description='XUV(SUV)')
+248562 0x1E579000  0x1E579800         1  version_index_20
+      -> VersionIndexRecord20(offset=509054976, model_code='W10', label='A1', payload=b'7\x12\r\x00\x00\x147\x12', pointer=b'\x1e\x00i\x90')
+248563 0x1E579800  0x1E581800        16  fig_illustration_183
+      -> FIGIllustrationRecord183(offset=509057024, model_code='W10', fig_group_code='A1', fig_group_code2='001', desc_en='ENGINE ASSEMBLY', desc_de='KOMPLETT MOTOREN', desc_fr='MOTEUR COMPLET', desc_es='CONJUNTO DEL MOTOR', trailer=b'\x00\n\x0026.)\x00\x00\x01')
+248579 0x1E581800  0x1E582000         1  empty
+248580 0x1E582000  0x1E5B4000       100  binary
+248680 0x1E5B4000  0x1E5B4800         1  model_year_44
+      -> ModelYearRecord44(offset=509296640, model_code='W10   ', version='A', date_from='20041101', date_to='20060331', label="'06MY")
+248681 0x1E5B4800  0x1E5D1800        58  multilingual_part_182
+      -> MultilingualPartRecord182(offset=509298688, model_code='W10', part_code='0100S', figure='260', name_en='PARKING BRAKE SYSTEM', name_de='PARKBREMSSYSTEM', name_fr='SYSTEME DE FREIN DE STATIONNEMENT', name_es='SISTEMA DE FRENO DE ESTACIONAMIENTO', trailer=b'6.\x1e\x00')
+248739 0x1E5D1800  0x1E5D2000         1  code_index_record_33
+      -> CodeIndexRecord33(offset=509417472, model_code='W10', category=54, size_variant='1 \x00\x1fW10   62 \x00 ', code='W10   6', metadata=b'3 \x00!')
+248740 0x1E5D2000  0x1E5D4000         4  figure_index_22
+      -> FigureIndexRecord22(offset=509419520, model_code='W10', figure='002', item_index='01004', metadata=b'\x07\x04\x00W')
+248744 0x1E5D4000  0x1E5D6800         5  spec_mapping_22
+      -> SpecMappingRecord22(offset=509427712, model_code='W10', option_code='AAUDH', description='ODSSPCA7\x14-\x00')
+248749 0x1E5D6800  0x1E5DE800        16  part_index_34
+      -> PartRangeIndex34(offset=509437952, part_number_from='000009513      ', part_number_to='002117201      ', metadata=b'7\x14A\x00')
+248765 0x1E5DE800  0x1E7AA800       920  part_index_21
+      -> PartIndex21(offset=509470720, part_number='000009513      ', metadata=b'7!\n\x00\x00\x01')
+249685 0x1E7AA800  0x1FE9D800     11750  itca_251
+      -> ItcaRecord(offset=511354880, part_number='000009513', itca_code='2', supersedes_to='000093579', quantity='01', part_code='Y26916', description='', description_de='', description_fr='', description_sp='', unknown=b'90000000 ')
+261435 0x1FE9D800  0x1FE9E000         1  empty
+----------------------------------------------------------------------
+                         Total    261436

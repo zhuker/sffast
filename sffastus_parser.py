@@ -3285,6 +3285,26 @@ class FIGIllustrationPage89:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
+    def decode_fig_ptr(ptr3_bytes):
+        """Decode 4-byte figure data pointer to file offset.
+
+        Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
+        offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
+
+        The marker byte is the highest-order address component:
+        marker: mega-section (60 * 75 * 2048 = 9,216,000 bytes each)
+        byte1:  section (75 * 2048 = 153,600 bytes each)
+        byte2:  block (2048 bytes each)
+        byte3:  position within block (8 bytes each)
+        """
+        marker, byte1, byte2, byte3 = ptr3_bytes[0], ptr3_bytes[1], ptr3_bytes[2], ptr3_bytes[3]
+        block_number = (byte1 - 4 + marker * 60) * 75 + byte2
+        return block_number * 2048 + byte3 * 8
+
+    def get_figure_offset(self):
+        return FIGIllustrationPage89.decode_fig_ptr(self.ptr3)
+
+    @staticmethod
     def parse_89(data: bytes, offset: int = 0):
         """Parse an 89-byte FIG illustration page record."""
         def clean(b: bytes) -> str:
