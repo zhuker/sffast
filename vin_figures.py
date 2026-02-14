@@ -623,7 +623,13 @@ def main():
 
             for p in unique_parts:
                 desc = lookup_desc(fig, p.group_category, p.part_id)
-                print(f"    {p.group_category:8s} {p.part_id:14s} {desc}")
+                extra = []
+                if p.usage_notes:
+                    extra.append(p.usage_notes)
+                if p.part_spec:
+                    extra.append(p.part_spec)
+                extra_str = f"  [{', '.join(extra)}]" if extra else ""
+                print(f"    {p.group_category:8s} {p.part_id:14s} {desc}{extra_str}")
             total_parts += len(unique_parts)
 
         for cat_code in sorted_cats:

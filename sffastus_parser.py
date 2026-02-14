@@ -3827,9 +3827,9 @@ class CatalogApplicabilityRecord466:
         0x1D  (16): Date Range YYYYMMDDYYYYMMDD
         0x2D  (19): Destination Codes (e.g., "C0U4", "U5U6")
         0x40  (64): Spec Logic expression (e.g., "EJ22# +EJ25D")
-        0x80  (32): Usage Notes (e.g., "USA")
-        0xA0  (20): Internal Flags
-        0xB4  (286): Unknown tail, partially decoded:
+        0x80  (32): Usage Notes / OP (e.g., "LH", "FOR A/C", "-E/#979080")
+        0xA0  (46): Part Spec / Part Color (e.g., "T=4.68", "CLARION", "PAINT FOR USAGE")
+        0xCE  (260): Unknown tail, partially decoded:
                      tail[54]:    Figure group letter (A-Z)
                      tail[55:58]: Figure number (e.g., "081")
                      tail[60:62]: Figure page (e.g., "04")
@@ -3847,7 +3847,7 @@ class CatalogApplicabilityRecord466:
     spec_logic: str
     usage_notes: str
 
-    internal_flags: str
+    part_spec: str
     figure_ref: str
     figure_page: str
     unknown: bytes
@@ -3885,8 +3885,8 @@ class CatalogApplicabilityRecord466:
             # Notes / Constraints (Fixed window at 0x80/128 decimal)
             usage_notes=clean(data[128:160]),
 
-            # Internal pointers (Text based integers)
-            internal_flags=clean(data[160:180]),
+            # Part Spec / Part Color (extends to byte 206 where numeric code starts)
+            part_spec=clean(data[160:206]),
 
             # Figure reference from tail (data[180:])
             figure_ref=(chr(data[234]) + clean(data[235:238])
