@@ -15,11 +15,13 @@ Usage: .venv/bin/python vin_figures.py [VIN]
 import re
 import struct
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 from sffastus_parser import (
     SffastusBlockParser,
     SffastusHeader,
+    CatalogApplicabilityRecord466,
     EngineSpecRecord230,
     FIGIllustrationPage89,
     ModelSpecRecord103,
@@ -406,6 +408,44 @@ def main():
         for r in model_fig89:
             fig89_lookup[(r.fig_index, r.page_index)] = r
 
+        # Step 6.5: Load catalog applicability records (parts) for this model
+        print("\nLoading parts catalog records...")
+        cat_ranges = [r for r in ranges if r[3] == 'catalog_applicability_466']
+        all_cat_records = []
+        for rs, re_, rc, rt in cat_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != vin_rec.model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_catalog_applicability_records_466(f, bo)
+                all_cat_records.extend(recs)
+
+        model_parts = [r for r in all_cat_records if r.model_code == vin_rec.model_code]
+        print(f"  Total parts records for model: {len(model_parts)}")
+
+        # Filter parts by spec logic and date range
+        applicable_parts = []
+        for rec in model_parts:
+            if not eval_spec_logic(rec.spec_logic, codes):
+                continue
+            # Date field is YYYYMMDDYYYYMMDD (16 chars)
+            start_date = rec.date[:6] if len(rec.date) >= 6 else ''
+            end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
+            if not date_in_range(vehicle_date, start_date, end_date):
+                continue
+            applicable_parts.append(rec)
+
+        print(f"  Applicable parts: {len(applicable_parts)}")
+
+        # Group parts by figure code (from figure_ref, strip leading group letter)
+        parts_by_figure = defaultdict(list)
+        for rec in applicable_parts:
+            if rec.figure_ref and len(rec.figure_ref) >= 4:
+                fig_code = rec.figure_ref[1:]  # e.g., "A081" -> "081"
+                parts_by_figure[fig_code].append(rec)
+
         # Step 7: Print results
         print()
         print("=" * 80)
@@ -418,7 +458,6 @@ def main():
         print()
 
         # Group by figure
-        from collections import defaultdict
         by_figure = defaultdict(list)
         for rec in applicable:
             by_figure[rec.figure].append(rec)
@@ -455,10 +494,41 @@ def main():
             print(f"  Fig {fig}  {fig_name}")
             print(f"         pages: {', '.join(page_strs)}")
 
+            # List parts for this figure
+            fig_parts = parts_by_figure.get(fig, [])
+            if fig_parts:
+                # Deduplicate by (group_category, part_id, figure_page)
+                seen = set()
+                unique_parts = []
+                for p in fig_parts:
+                    key = (p.group_category, p.part_id, p.figure_page)
+                    if key not in seen:
+                        seen.add(key)
+                        unique_parts.append(p)
+                unique_parts.sort(key=lambda r: (r.figure_page, r.group_category))
+
+                print(f"         parts ({len(unique_parts)}):")
+                for p in unique_parts:
+                    # Look up description from ITCA
+                    desc = ''
+                    if parts_catalog:
+                        recs = parts_catalog.lookup(p.part_id)
+                        if not recs:
+                            # Try base part number (strip 2-char suffix)
+                            base = p.part_id[:10].strip()
+                            if base:
+                                recs = parts_catalog.lookup(base)
+                        if recs:
+                            desc = recs[0].description
+                    pg = f"p{p.figure_page}" if p.figure_page else ""
+                    print(f"           {p.group_category:8s} {p.part_id:14s} {pg:4s} {desc}")
+
         print()
         print(f"Total: {len(by_figure)} figures, "
               f"{total_with_image} pages with images, "
               f"{total_without_image} pages without images")
+        print(f"       {len(applicable_parts)} applicable parts across "
+              f"{len(parts_by_figure)} figures")
 
         if bulletins:
             print(f"\nI&S Bulletins (page 40+): {len(bulletins)} entries across "
