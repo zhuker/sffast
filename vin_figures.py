@@ -510,7 +510,13 @@ def main():
         # Filter parts by spec logic and date range
         applicable_parts = []
         for rec in model_parts:
-            if not eval_spec_logic(rec.spec_logic, codes):
+            sl = rec.spec_logic
+            matched = eval_spec_logic(sl, codes)
+            # ~7.4% of records have a variant prefix (A-H) prepended to the spec
+            # e.g. "AS +W.WRX" = variant A + spec "S +W.WRX"
+            if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
+                matched = eval_spec_logic(sl[1:], codes)
+            if not matched:
                 continue
             # Date field is YYYYMMDDYYYYMMDD (16 chars)
             start_date = rec.date[:6] if len(rec.date) >= 6 else ''
