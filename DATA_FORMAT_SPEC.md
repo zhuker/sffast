@@ -576,8 +576,8 @@ Group codes `0A`–`9B` are "by system" categories (17 groups mapping to figure 
 
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
-| 0x00 | 2 | Constant | `0x0225` for G11 (model-specific) |
-| 0x02 | 2 | Record Index | BE u16, incrementing by ~61 per category (index into EngineSpecRecord230 list) |
+| 0x00 | 2 | Trailer ID | BE u16, varies per record |
+| 0x02 | 2 | Record Index | BE u16 (index into EngineSpecRecord230 list) |
 | 0x04 | 4 | ptr1 | Figure data pointer → FIGIllustrationRecord183 blocks for this category |
 | 0x08 | 2 | Figure Count | BE u16, number of unique figures in this category |
 | 0x0A | 4 | ptr2 | Figure data pointer → binary catalog data for this category |

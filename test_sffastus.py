@@ -1466,7 +1466,8 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
         with open(SFCDUS2_PATH, 'rb') as f:
             records = parser.parse_fig_group_category_records_184(f, start_offset=0x0DF9A000, max_records=15)
 
-        self.assertEqual(len(records), 15)
+        # 184*11=2024 fits one block (2048 - 24 pad); parser stops at padding
+        self.assertEqual(len(records), 11)
         self.assertEqual(records[0].model_code, 'B11')
         self.assertIsInstance(records[0], FIGGroupCategoryRecord184)
 
@@ -1479,10 +1480,100 @@ class TestFIGGroupCategoryRecords184(unittest.TestCase):
         self.assertTrue(len(records[0].desc_fr) > 0)
         self.assertTrue(len(records[0].desc_es) > 0)
 
-        # Print for inspection - should show all FIG groups (0A-9B)
+        # Print for inspection
         print("\n=== FIG Group Category Records ===")
         for i, r in enumerate(records):
             print(f"  {i:2d}. {r.model_code} | {r.fig_group_code} | {r.desc_en}")
+
+    def _parse_184_block_by_block(self, f, start_offset=0x0DF9A000, max_blocks=20):
+        """Parse 184-byte records block-by-block (11 per 2KB block)."""
+        BLOCK_SIZE = 2048
+        all_records = []
+        for i in range(max_blocks):
+            bo = start_offset + i * BLOCK_SIZE
+            recs = parser.parse_fig_group_category_records_184(f, bo)
+            if not recs:
+                break
+            all_records.extend(recs)
+        return all_records
+
+    def test_decoded_trailer_fields_184_us2(self):
+        """Verify decoded trailer fields of 184-byte records from SFCDUS2"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            records = self._parse_184_block_by_block(f)
+
+        # Should have records spanning multiple blocks
+        self.assertGreater(len(records), 11, "Should span multiple blocks")
+
+        # Check decoded trailer fields for first record (B11 0A ENGINE MAIN)
+        r0a = records[0]
+        self.assertEqual(r0a.model_code, 'B11')
+        self.assertEqual(r0a.fig_group_code, '0A')
+
+        # figure_count should be positive
+        self.assertGreater(r0a.figure_count, 0,
+                           "0A ENGINE MAIN should have figures")
+
+        # record_count should be positive
+        self.assertGreater(r0a.record_count, 0,
+                           "0A ENGINE MAIN should have catalog records")
+
+        # ptr1 and ptr2 should decode to valid offsets
+        self.assertGreater(r0a.ptr1_offset, 0, "ptr1 should decode to non-zero offset")
+        self.assertGreater(r0a.ptr2_offset, 0, "ptr2 should decode to non-zero offset")
+
+        # Group by model
+        by_model = {}
+        for r in records:
+            by_model.setdefault(r.model_code, []).append(r)
+
+        # B11 should have all 17 by-system group codes (0A-9B)
+        b11_recs = by_model.get('B11', [])
+        b11_system_codes = set(r.fig_group_code for r in b11_recs if r.fig_group_code[0].isdigit())
+        expected_codes = {'0A', '0B', '0C', '1A', '1B', '1C', '2A', '3A', '4A',
+                          '5A', '6A', '6B', '7A', '8A', '8B', '9A', '9B'}
+        self.assertEqual(b11_system_codes, expected_codes)
+
+        # Print decoded trailer for inspection (first occurrence of each group)
+        seen = set()
+        b11_system = []
+        for r in b11_recs:
+            if r.fig_group_code[0].isdigit() and r.fig_group_code not in seen:
+                seen.add(r.fig_group_code)
+                b11_system.append(r)
+
+        print(f"\n=== FIG Group Category Trailer ({r0a.model_code}) ===")
+        print(f"  trailer_constant: 0x{r0a.trailer_constant:04X}")
+        for r in b11_system:
+            print(f"  {r.fig_group_code} {r.desc_en:<40s} "
+                  f"figs={r.figure_count:3d}  recs={r.record_count:5d}  "
+                  f"ptr1=0x{r.ptr1_offset:08X}  ptr2=0x{r.ptr2_offset:08X}")
+
+    def test_trailer_ptr1_resolves_to_183_blocks(self):
+        """Verify ptr1 in trailer resolves to FIGIllustrationRecord183 blocks"""
+        if not self.has_us2:
+            self.skipTest("SFCDUS2/sffastus not found")
+
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # Parse first block — B11 0A is the first record
+            records = parser.parse_fig_group_category_records_184(f, start_offset=0x0DF9A000)
+            self.assertGreater(len(records), 0)
+            rec = records[0]
+            self.assertEqual(rec.fig_group_code, '0A')
+
+            # Read data at ptr1 offset and verify it's a 183-byte record block
+            ptr1_off = rec.ptr1_offset
+            f.seek(ptr1_off)
+            block_data = f.read(2048)
+
+            # Should be FIG illustration 183 block
+            block_type = parser.detect_block_type(block_data, offset=ptr1_off)
+            self.assertEqual(block_type, 'fig_illustration_183',
+                             f"ptr1 at 0x{ptr1_off:08X} should point to fig_illustration_183 block, "
+                             f"got {block_type}")
 
     def test_verify_fig_groups_match_documentation(self):
         """Verify FIG group codes match WINDOWS_APP_GUIDE.md"""

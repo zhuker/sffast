@@ -3743,17 +3743,32 @@ class FIGGroupCategoryRecord184:
     Located at 0x0DF9A000+
     Encoding: CP437
 
-    Contains multilingual descriptions for FIG group codes (0A-9B).
-    These are the category names shown in the Windows application.
+    Contains multilingual descriptions for FIG group codes.
+    Two grouping schemes:
+      - 0A-9B: "by system" categories (17 groups mapping to figure number ranges)
+      - A1-D3: "by book/binder" categories (~20 figures each, physical binder tabs)
 
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
-        0x06 (2):  FIG Group Code (e.g., "0A", "1B", "9B")
+        0x06 (2):  FIG Group Code (e.g., "0A", "1B", "9B", "A1", "D3")
         0x08 (40): English Description
         0x30 (40): German Description (Deutsch)
         0x58 (40): French Description (Français)
         0x80 (40): Spanish Description (Español)
-        0xA8 (16): Trailer/Metadata
+        0xA8 (16): Trailer (decoded below)
+
+    Trailer (16 bytes at 0xA8):
+        0x00 (2): Trailer ID (BE u16, varies per record)
+        0x02 (2): Record Index (BE u16, index into EngineSpecRecord230 list)
+        0x04 (4): ptr1 — figure data pointer → FIGIllustrationRecord183 blocks
+        0x08 (2): Figure Count (BE u16, number of unique figures in this category)
+        0x0A (4): ptr2 — figure data pointer → binary catalog data
+        0x0E (2): Record Count (BE u16, number of catalog records for this category)
+
+    Hierarchy:
+        FIGGroupCategoryRecord184 (category, e.g. "0A" = ENGINE MAIN)
+          └─ FIGIllustrationRecord183 (figure, e.g. "004" = CYLINDER BLOCK)
+               └─ FIGIllustrationPage89 (page, e.g. page "01", label "SYSTEM")
     """
     offset: int
     model_code: str
@@ -3763,13 +3778,38 @@ class FIGGroupCategoryRecord184:
     desc_fr: str
     desc_es: str
     trailer: bytes
+    # Decoded trailer fields
+    trailer_constant: int
+    trailer_record_index: int
+    ptr1: bytes           # raw 4-byte pointer → FIGIllustrationRecord183 blocks
+    figure_count: int     # number of figures in this category
+    ptr2: bytes           # raw 4-byte pointer → catalog data blocks
+    record_count: int     # number of catalog records for this category
     raw_data: bytes = field(repr=False)
+
+    @property
+    def ptr1_offset(self) -> int:
+        """Decode ptr1 to absolute file offset using figure data pointer encoding."""
+        return decode_fig_data_pointer(self.ptr1)
+
+    @property
+    def ptr2_offset(self) -> int:
+        """Decode ptr2 to absolute file offset using figure data pointer encoding."""
+        return decode_fig_data_pointer(self.ptr2)
 
     @staticmethod
     def parse_184(data: bytes, offset: int = 0):
         """Parse a 184-byte FIG group category record."""
         def clean(b: bytes) -> str:
             return b.decode(CHARSET, errors='replace').strip()
+
+        trailer = data[168:184]
+        trailer_constant = struct.unpack('>H', trailer[0:2])[0]
+        trailer_record_index = struct.unpack('>H', trailer[2:4])[0]
+        ptr1 = trailer[4:8]
+        figure_count = struct.unpack('>H', trailer[8:10])[0]
+        ptr2 = trailer[10:14]
+        record_count = struct.unpack('>H', trailer[14:16])[0]
 
         return FIGGroupCategoryRecord184(
             offset=offset,
@@ -3780,7 +3820,13 @@ class FIGGroupCategoryRecord184:
             desc_de=clean(data[48:88]),
             desc_fr=clean(data[88:128]),
             desc_es=clean(data[128:168]),
-            trailer=data[168:184],
+            trailer=trailer,
+            trailer_constant=trailer_constant,
+            trailer_record_index=trailer_record_index,
+            ptr1=ptr1,
+            figure_count=figure_count,
+            ptr2=ptr2,
+            record_count=record_count,
         )
 
 
