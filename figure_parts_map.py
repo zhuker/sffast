@@ -14,6 +14,7 @@ Usage: .venv/bin/python figure_parts_map.py [FIG] [PAGE] [VIN]
        .venv/bin/python figure_parts_map.py 940 01 JF1GD70655L510047
 """
 
+import math
 import struct
 import sys
 from pathlib import Path
@@ -234,8 +235,10 @@ def main():
 
         # --- Load callout coordinates ---
         # Source 1: PartGroupRecord185 (main part callouts with x,y)
+        # Same callout code can appear multiple times with different coordinates
         print("\nLoading callout coordinates...")
-        coord_lookup = {}  # part_code -> (x, y, description)
+        coord_list = []  # [(code, x, y, description), ...]
+        coord_codes = set()
 
         pg_ranges = [r for r in ranges if r[3] == PartGroupRecord185.ID]
         for rs, re_, rc, rt in pg_ranges:
@@ -250,9 +253,10 @@ def main():
                     if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
                         code = r.part_code.strip()
                         if code and r.x > 0 and r.y > 0:
-                            coord_lookup[code] = (r.x, r.y, r.desc_en)
+                            coord_list.append((code, r.x, r.y, r.desc_en))
+                            coord_codes.add(code)
 
-        pg_count = len(coord_lookup)
+        pg_count = len(coord_list)
 
         # Source 2: InventoryRecord199 (fastener/hardware callouts with x,y)
         inv_ranges = [r for r in ranges if r[3] == InventoryRecord199.ID]
@@ -267,62 +271,74 @@ def main():
                 for r in recs:
                     if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
                         code = r.part_code.strip()
-                        if code and r.x > 0 and r.y > 0 and code not in coord_lookup:
-                            coord_lookup[code] = (r.x, r.y, r.name_en)
+                        if code and r.x > 0 and r.y > 0:
+                            coord_list.append((code, r.x, r.y, r.name_en))
+                            coord_codes.add(code)
 
-        inv_count = len(coord_lookup) - pg_count
+        inv_count = len(coord_list) - pg_count
         print(f"  PartGroup185 callouts: {pg_count}")
         print(f"  Inventory199 callouts: {inv_count}")
-        print(f"  Total callouts with coordinates: {len(coord_lookup)}")
+        print(f"  Total callouts with coordinates: {len(coord_list)}")
 
-        # --- Print part-to-coordinate map ---
-        print()
-        print("=" * 100)
-        print(f"PARTS MAP: FIG {fig_target}-{page_target}  VIN {vin}  ({model_code})")
-        print("=" * 100)
-        print(f"{'Callout':<10} {'Part Number':<16} {'X':>5} {'Y':>5}  {'Px X':>5} {'Px Y':>5}  Description")
-        print("-" * 100)
-
-        callout_positions = []  # (px_x, px_y, callout_code, part_id, name)
-
+        # --- Build part number lookup from Cat466 (callout -> part_id) ---
+        part_lookup = {}  # callout_code -> (part_id, variant)
         for rec, variant in unique_parts:
             callout = rec.group_category.strip()
-            coord = coord_lookup.get(callout)
+            if callout not in part_lookup:
+                part_lookup[callout] = (rec.part_id, variant)
 
-            if coord:
-                cx, cy, name = coord
-                # Coordinate space is 2x pixel dimensions
-                px_x = cx // 2
-                px_y = cy // 2
-                v_str = f"*{variant}" if variant else ""
-                print(f"{callout:<10}{v_str:3s}{rec.part_id:<16} {cx:5d} {cy:5d}  {px_x:5d} {px_y:5d}  {name}")
-                callout_positions.append((px_x, px_y, callout, rec.part_id, name))
-            else:
-                v_str = f"*{variant}" if variant else ""
-                print(f"{callout:<10}{v_str:3s}{rec.part_id:<16}     -     -      -     -  (no coords)")
-
+        # --- Print parts map ---
         print()
-        print(f"Total: {len(unique_parts)} parts, {len(callout_positions)} with coordinates")
+        print("=" * 110)
+        print(f"PARTS MAP: FIG {fig_target}-{page_target}  VIN {vin}  ({model_code})")
+        print("=" * 110)
+        print(f"{'Callout':<10} {'Part Number':<16} {'Px X':>5} {'Px Y':>5}  Description")
+        print("-" * 110)
+
+        all_callouts = []  # (px_x, px_y, callout, desc, matched)
+        for code, cx, cy, desc in sorted(coord_list, key=lambda t: (t[0], t[2])):
+            px_x = math.floor(cx / 2)
+            px_y = math.floor(cy / 2)
+            part_info = part_lookup.get(code)
+            matched = code in part_lookup
+            if part_info:
+                part_id, variant = part_info
+                v_str = f"*{variant}" if variant else ""
+                print(f"{code:<10}{v_str:3s}{part_id:<16} {px_x:5d} {px_y:5d}  {desc}")
+            else:
+                print(f"{code:<10}   {'--':16s} {px_x:5d} {px_y:5d}  {desc}")
+            all_callouts.append((px_x, px_y, code, desc, matched))
+
+        # Cat466 parts with no coordinates (not drawn on this figure page)
+        no_coord_parts = [(rec, v) for rec, v in unique_parts if rec.group_category.strip() not in coord_codes]
+        if no_coord_parts:
+            print()
+            print("Parts without callout on this page:")
+            for rec, variant in no_coord_parts:
+                v_str = f"*{variant}" if variant else ""
+                print(f"  {rec.group_category.strip():<10}{v_str:3s}{rec.part_id}")
+
+        matched = sum(1 for _, _, _, _, m in all_callouts if m)
+        print()
+        print(f"Callouts on figure: {len(all_callouts)}  (matched to VIN: {matched}, other: {len(all_callouts) - matched})")
 
         # --- Draw bounding boxes ---
         print(f"\nDrawing callout boxes...")
         img = Image.open(base_png).convert('RGB')
         draw = ImageDraw.Draw(img)
 
-        BOX_W, BOX_H = 50, 12  # half-widths for the rectangle
+        BOX_W, BOX_H = 100, 14  # half-widths for the rectangle
 
-        for px_x, px_y, callout, part_id, name in callout_positions:
-            # Clamp to image bounds
-            px_x = max(BOX_W, min(IMAGE_WIDTH - BOX_W, px_x))
-            px_y = max(BOX_H, min(IMAGE_HEIGHT - BOX_H, px_y))
+        for px_x, px_y, callout, desc, matched in all_callouts:
+            x0 = px_x
+            y0 = px_y - 2
+            x1 = px_x-2+BOX_W
+            y1 = px_y-2+BOX_H
 
-            x0 = px_x - BOX_W
-            y0 = px_y - BOX_H
-            x1 = px_x + BOX_W
-            y1 = px_y + BOX_H
-
-            draw.rectangle([x0, y0, x1, y1], outline='red', width=2)
-            draw.text((x0 + 2, y1 + 1), callout, fill='red')
+            # Red = applicable to VIN, blue = on figure but filtered out
+            color = 'red' if matched else 'blue'
+            draw.rectangle([x0, y0, x1, y1], outline=color, width=1)
+            draw.text((x0 + 2, y1 + 1), callout, fill=color)
 
         out_path = Path(f"output/fig{fig_target}_{page_target}_annotated.png")
         img.save(out_path)

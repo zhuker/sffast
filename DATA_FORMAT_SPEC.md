@@ -856,7 +856,7 @@ Offset  Size  Field               Description
 **Coordinate Space:**
 - X range: 0-2560, Y range: 0-1280
 - Divide by 2 to get pixel coordinates on 1280x640 figure images
-- Coordinates point to the center of the callout label text on the figure
+- Coordinates point to the top-left corner of the callout label bounding box (with ~2px upward offset)
 
 **Notes:**
 - Each multilingual field (EN, DE, FR, ES) is exactly 40 bytes.
