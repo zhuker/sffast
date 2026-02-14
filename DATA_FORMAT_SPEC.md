@@ -548,28 +548,72 @@ Offset  Size  Field               Description
 0xA8    16    Trailer/Metadata    LE reference pointers or flags
 ```
 
-**Common FIG Group Codes (from [WINDOWS_APP_GUIDE.md](file:///Users/zhukov/subaru/SUBARU%20USA%200518/WINDOWS_APP_GUIDE.md)):**
-| Code | Category (EN) | Description |
-|------|---------------|-------------|
-| 0A | ENGINE MAIN | Engine internals, block, heads |
-| 1A | MANUAL TRANS | Clutch, gears, casing |
-| 1B | AUTO TRANS | Torque converter, planetary gears |
-| 5A | BODY/BUMPER | Body panels, bumpers, mirrors |
-| 9B | INNER ACCESSORIES | Floor mats, cargo nets, etc. |
+**Two Grouping Schemes:**
+
+Group codes `0A`–`9B` are "by system" categories (17 groups mapping to figure number ranges). Group codes `A1`–`D3` are "by book/binder" categories (groups of ~20 figures each, likely matching physical binder tab dividers in the printed catalog).
+
+| Code | Category (EN) | FIG Range |
+|------|---------------|-----------|
+| 0A | ENGINE MAIN | 001-036 |
+| 0B | ENGINE AUXILIARIES | 040-082 |
+| 0C | ENGINE ELECTRICAL PARTS | 090-096 |
+| 1A | MANUAL TRANSMISSION | 100-130 |
+| 1B | AUTOMATIC TRANSMISSION | 150-184 |
+| 1C | DIFFERENTIAL & PROPELLER SHAFT | 190-199 |
+| 2A | SUSPENSION, AXLE & BRAKE | 200-292 |
+| 3A | STEERING SYSTEM & CABLE | 341-380 |
+| 4A | ENGINE MOUNTING & COOLING | 410-450 |
+| 5A | BODY, KEY KIT & BUMPER | 505-595 |
+| 6A | DOOR PARTS | 605-622 |
+| 6B | SEAT & INSTRUMENT PANEL | 640-660 |
+| 7A | HEATER & AIR CONDITIONER | 720-732 |
+| 8A | BODY ELECTRICAL PARTS (1) | 810-836 |
+| 8B | BODY ELECTRICAL PARTS (2) | 840-899 |
+| 9A | OUTER ACCESSORIES | 900-922 |
+| 9B | INNER ACCESSORIES | 930-970 |
+
+**Trailer Structure (16 bytes at 0xA8):**
+
+| Offset | Width | Field | Description |
+|--------|-------|-------|-------------|
+| 0x00 | 2 | Constant | `0x0225` for G11 (model-specific) |
+| 0x02 | 2 | Record Index | BE u16, incrementing by ~61 per category (index into EngineSpecRecord230 list) |
+| 0x04 | 4 | ptr1 | Figure data pointer → FIGIllustrationRecord183 blocks for this category |
+| 0x08 | 2 | Figure Count | BE u16, number of unique figures in this category |
+| 0x0A | 4 | ptr2 | Figure data pointer → binary catalog data for this category |
+| 0x0E | 2 | Record Count | BE u16, number of catalog records for this category |
+
+ptr1 and ptr2 use the same encoding as FIGIllustrationPage89.ptr3:
+`offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8`
+
+**Example (G11, group 0A "ENGINE MAIN"):**
+- ptr1 → `0x17256000` = `fig_illustration_183` block, Figure Count = 17
+- ptr2 → `0x17462000` = binary catalog data, Record Count = 5197
+
+**Hierarchy: FIGGroupCategoryRecord184 → FIGIllustrationRecord183 → FIGIllustrationPage89**
+
+```
+FIGGroupCategoryRecord184  (e.g., "0A" = "ENGINE MAIN")
+  │  linked by: fig_group_code
+  │  ptr1 in trailer points to the 183 blocks
+  │
+  └── FIGIllustrationRecord183  (e.g., group="0A", code2="004" = "CYLINDER BLOCK")
+        │  linked by: fig_group_code2 == fig_index
+        │
+        └── FIGIllustrationPage89  (e.g., fig="004", page="01", label="SYSTEM")
+```
 
 **Notes:**
-- Group codes are alphanumeric (typically digit + letter)
 - Multilingual strings are space-padded to 40 bytes
 - Validated by scanning the file and matching codes to application categories
-
-**Validation:** Cross-reference terms with part descriptions and technical documentation.
+- Trailer pointers verified: ptr1 resolves to `fig_illustration_183` blocks for all 17 G11 categories
 
 ### FIG Illustration Records (183-byte Type) (0x0DF9B000+) - **VALIDATED ✓**
 
 **Record size:** 183 bytes
 **Encoding:** CP437
 
-Contains multilingual descriptions for individual FIG illustrations (e.g., "CYLINDER BLOCK", "PISTON & CRANKSHAFT"). These records are specifically linked to FIG groups.
+Contains multilingual descriptions for individual FIG illustrations (e.g., "CYLINDER BLOCK", "PISTON & CRANKSHAFT"). Links FIG group categories (184-byte) to individual figure pages (89-byte).
 Located in blocks around `0x0DF9B000`.
 
 **Structure:**
@@ -577,8 +621,8 @@ Located in blocks around `0x0DF9B000`.
 Offset  Size  Field               Description
 ------  ----  -----               -----------
 0x00    6     Model Code          "B11", "G11", etc.
-0x06    2     FIG Group Code      Category code (e.g., "0A", "1B")
-0x08    5     FIG Group Code 2    Secondary code (e.g., "003  ")
+0x06    2     FIG Group Code      Category code (e.g., "0A", "1B") — links to FIGGroupCategoryRecord184
+0x08    5     FIG Group Code 2    3-digit figure code (e.g., "004") — links to FIGIllustrationPage89.fig_index
 0x0D    40    Description (EN)    Illustration name in English
 0x35    40    Description (DE)    Illustration name in German
 0x5D    40    Description (FR)    Illustration name in French
@@ -586,17 +630,22 @@ Offset  Size  Field               Description
 0xAD    10    Trailer/Metadata    LE reference pointers or flags
 ```
 
-**Examples (Model B11, Group 0A):**
-- English: `004  CYLINDER BLOCK`
-- English: `010  PISTON & CRANKSHAFT`
-- English: `005  TIMING HOLE PLUG & TRANSMISSION BOL`
+**Examples (Model G11, Group 0A):**
+- `fig_group_code="0A"`, `code2="004"`, desc=`CYLINDER BLOCK`
+- `fig_group_code="0A"`, `code2="010"`, desc=`PISTON & CRANKSHAFT`
+- `fig_group_code="0B"`, `code2="040"`, desc=`TURBO CHARGER`
+
+**Record counts per group code (G11, 379 total):**
+- By-system groups (`0A`–`9B`): 3–17 figures each (e.g., `0A` = 17 figures, `1C` = 3 figures)
+- By-binder groups (`A1`–`D3`): ~20 figures each (pagination for physical catalog binders)
 
 **Notes:**
-- Used to populate the illustrated index names in the application.
-- Record size (183) is one byte smaller than the FIG Group category records.
-- The FIG index (e.g., 004, 010) is typically embedded at the start of the English description.
+- `fig_group_code` links up to FIGGroupCategoryRecord184 (parent category)
+- `fig_group_code2` links down to FIGIllustrationPage89 (individual pages via `fig_index`)
+- Record size (183) is one byte smaller than the FIG Group category records
+- FIGGroupCategoryRecord184 trailer `ptr1` points directly to the 183-byte blocks for that category
 
-**Validation:** Matches FIG illustration titles in the illustrated index menu.
+**Validation:** ✓ Matches FIG illustration titles in the illustrated index menu. All 379 G11 records link to valid category codes and figure indices.
 
 ### FIG Illustration Page Records (89-byte Type) (0x0DFA5000+) - **VALIDATED ✓**
 
@@ -614,7 +663,7 @@ Located in blocks around `0x0DFA5000`.
 | 0x06 | 3 | FIG Index | Illustration index (e.g., `002`) |
 | 0x09 | 2 | Padding | Usually spaces |
 | 0x0B | 2 | Page Index | Page number (e.g., `01`, `02`) |
-| 0x0D | 40 | Label | ASCII label (e.g., `VALVE`, `SHORT BLOCK ENGINE ASSEMBLY`) |
+| 0x0D | 40 | Label | Page-level note shown in app (see below) |
 | 0x35 | 4 | ptr1 | Model-level pointer (constant within a model group) |
 | 0x39 | 4 | ptr2 | Model-level pointer (constant within a model group) |
 | 0x3D | 8 | Reserved | Zeros |
@@ -648,13 +697,38 @@ file_offset = base + position * 8
 
 The 2-byte big-endian value at record offset 0x55 is the exact byte count of raw CCITT Group 4 data at the ptr3 offset. Verified for all 23 G11 records.
 
+**Label Field (0x0D, 40 bytes):** - **VALIDATED ✓**
+
+Page-level note displayed in the Windows application alongside the figure name. Contains sub-system identification, model year applicability, and/or engine codes. Examples from G11:
+
+| Figure | Page | Label |
+|--------|------|-------|
+| 004 | 01 | `SYSTEM` |
+| 004 | 02 | `BODY` |
+| 006 | 04 | `SYSTEM                       '02MY-'06MY` |
+| 006 | 05 | `BODY` |
+| 040 | 02 | `'02MY-'06MY` |
+| 050 | 02 | `INTAKE MANIFOLD BODY 257(-'06MY)` |
+| 081 | 04 | `SOLENOID VALVE               '04MY-'06MY` |
+| 002 | 06 | `ENGINE GASKET & SEAL KIT '04MY-'06MY` |
+
+- Empty for many pages (especially single-page figures)
+- Internal whitespace padding between sub-system name and MY range
+- `'NNMY` = model year notation (e.g., `'02MY` = 2002 model year)
+- `'NNMY-` = from that MY onward; `'NNMY-'NNMY` = range
+- I&S Bulletin pages (40+) use labels like `I&S BULLETIN        HEAD ASSY-CYL    RH`
+
+**Relationship to parent records:**
+- `fig_index` links up to FIGIllustrationRecord183 via `fig_group_code2` (figure-level descriptions)
+- FIGIllustrationRecord183.`fig_group_code` links to FIGGroupCategoryRecord184 (top-level categories)
+
 **Notes:**
 - Index numbers are ASCII strings, not 16-bit integers.
 - ptr1 and ptr2 are constant for all records within a model group.
 - All images decode to 1280×640 pixels (height is a fixed constant, not stored in the record).
 - Figure pages use T.6 uncompressed mode extensions; requires ImageMagick/Wand for decoding (Pillow/libtiff does not support uncompressed mode).
 
-**Validation Status:** ✓ ptr3 formula verified across all 23 G11 records with zero errors. All 23 figure pages successfully decoded to 1280×640 PNG images matching the Windows application display. See `known_good_g11_23.py` and `KNOWN_GOOD_FIGURES.md`.
+**Validation Status:** ✓ ptr3 formula verified across all 704 G11 records with zero errors. All figure pages successfully decoded to 1280×640 PNG images matching the Windows application display. Labels verified against Windows app for figures 004, 006, 040, 050, 081 (G11 STI).
 
 ### Variant Glossary Records (81-byte Type) (0x0E6E9000+) - **VALIDATED ✓**
  
