@@ -3818,21 +3818,32 @@ class CatalogApplicabilityRecord466:
     ID = 'catalog_applicability_466'
     """Represents a 466-byte catalog applicability record from sffastus.
 
-    Structure:
-        0x00  (6):  Model Code (e.g., "B11   ")
-        0x06  (7):  Group/Category a.k.a. Callout Code (e.g., "H505301", "14878")
-        0x0D  (12): Part ID (e.g., "98271FE090OE")
-        0x19  (3):  Padding (spaces)
-        0x1C  (1):  Date Flag (A-H letter code)
-        0x1D  (16): Date Range YYYYMMDDYYYYMMDD
-        0x2D  (19): Destination Codes (e.g., "C0U4", "U5U6")
-        0x40  (64): Spec Logic expression (e.g., "EJ22# +EJ25D")
-        0x80  (32): Usage Notes / OP (e.g., "LH", "FOR A/C", "-E/#979080")
-        0xA0  (46): Part Spec / Part Color (e.g., "T=4.68", "CLARION", "PAINT FOR USAGE")
-        0xCE  (260): Unknown tail, partially decoded:
-                     tail[54]:    Figure group letter (A-Z)
-                     tail[55:58]: Figure number (e.g., "081")
-                     tail[60:62]: Figure page (e.g., "04")
+    Structure (466 bytes total):
+        0x00  (6):   Model Code (e.g., "G11   ")
+        0x06  (7):   Group/Category a.k.a. Callout Code (e.g., "H505301", "14878")
+        0x0D  (12):  Part ID (e.g., "98271FE090OE")
+        0x19  (3):   Padding (spaces)
+        0x1C  (1):   Date Flag (A-H letter code)
+        0x1D  (16):  Date Range YYYYMMDDYYYYMMDD
+        0x2D  (19):  Destination Codes (e.g., "C0U4", "U5U6")
+        0x40  (64):  Spec Logic expression (e.g., "EJ22# +EJ25D")
+        0x80  (32):  Usage Notes / OP (e.g., "LH", "FOR A/C", "-E/#979080")
+        0xA0  (46):  Part Spec / Part Color (e.g., "T=4.68", "CLARION", "PAINT FOR USAGE")
+        --- tail region (data[206:]) ---
+        0xCE  (10):  Ref Code - 10-digit internal ref (e.g., "0100000009", "*00017300")
+        0xD8  (12):  Related Part number (e.g., "13228AB102") or spaces
+        0xE4  (6):   Figure cross-ref qualifier (right-justified number, optional letter prefix)
+        0xEA  (4):   Figure Ref: group letter (A-Z) + 3-digit number (e.g., "A012")
+        0xEE  (2):   Padding (spaces)
+        0xF0  (2):   Figure Page (e.g., "04") or spaces
+        0xF2  (44):  Secondary binder ref (e.g., "B20") + market code at end
+        0x11E (4):   Market/Locale code (e.g., "C", "T", "ND", "MI", "GL")
+        0x122 (15):  Binary bitmask (5 active bytes at [290-291, 302-304], rest zero)
+        0x131 (109): Padding (zeros)
+        0x19E (2):   Marker: 0x00 + 0x2A('*') or 0x20(' ')
+        0x1A0 (25):  Feature mask (0x40 '@' fill) or binary flag (byte 0 only)
+        0x1B9 (15):  Supplier/distribution code (e.g., "SSPCQ", "COWPX", "SUNRO")
+        0x1C8 (10):  Padding (spaces)
     """
     offset: int
 
@@ -3848,9 +3859,11 @@ class CatalogApplicabilityRecord466:
     usage_notes: str
 
     part_spec: str
+    ref_code: str
+    related_part: str
     figure_ref: str
     figure_page: str
-    unknown: bytes
+    supplier_code: str
     raw_data: bytes = field(repr=False)
 
 
@@ -3888,13 +3901,19 @@ class CatalogApplicabilityRecord466:
             # Part Spec / Part Color (extends to byte 206 where numeric code starts)
             part_spec=clean(data[160:206]),
 
-            # Figure reference from tail (data[180:])
+            # Internal reference code (10 digits)
+            ref_code=clean(data[206:216]),
+
+            # Related/companion part number
+            related_part=clean(data[216:228]),
+
+            # Figure reference (group letter + 3-digit number)
             figure_ref=(chr(data[234]) + clean(data[235:238])
                         if len(data) > 241 and 0x41 <= data[234] <= 0x5A else ''),
             figure_page=clean(data[240:242]) if len(data) > 241 else '',
 
-            # The rest is the binary feature mask
-            unknown=data[180:],
+            # Supplier/distribution code (e.g., "SSPCQ", "COWPX", "SUNRO")
+            supplier_code=clean(data[441:456]) if len(data) > 455 else '',
         )
 
 @dataclass

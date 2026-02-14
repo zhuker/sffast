@@ -378,7 +378,7 @@ Offset  Size  Field
 
 Defines part applicability per model: which parts apply to which engine/body/trim configurations, with date ranges and destination market codes. The largest block type in the file (~97,000 blocks in SFCDUS2, ~389,000 records).
 
-**Structure:**
+**Structure (466 bytes):**
 
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
@@ -390,9 +390,22 @@ Defines part applicability per model: which parts apply to which engine/body/tri
 | 0x1D | 16 | Date Range | `YYYYMMDDYYYYMMDD` (start + end, e.g. `1997100119990531`) |
 | 0x2D | 19 | Destination Codes | Market/destination codes (e.g. `C0U4`, `U5U6`, spaces if universal) |
 | 0x40 | 64 | Spec Logic | Boolean expression for applicability (e.g. `EJ22# +EJ25D`, `S +W`) |
-| 0x80 | 32 | Usage Notes | Constraint text (e.g. `USA`) |
-| 0xA0 | 20 | Internal Flags | Text-based integer fields |
-| 0xB4 | 286 | Tail | Partially decoded (see below) |
+| 0x80 | 32 | Usage Notes / OP | Operational notes (e.g. `LH`, `FOR A/C`, `FRONT`, `-E/#979080`) |
+| 0xA0 | 46 | Part Spec / Color | Part specification and color (e.g. `T=4.68`, `CLARION`, `PAINT FOR USAGE`, `MARK"7"  BLUE`) |
+| 0xCE | 10 | Ref Code | 10-digit internal reference code (e.g. `0100000009`, `*00017300`) |
+| 0xD8 | 12 | Related Part | Companion/superseding part number (e.g. `13228AB102`) or spaces |
+| 0xE4 | 6 | Fig Qualifier | Right-justified number + optional letter prefix (E/L) |
+| 0xEA | 4 | Figure Ref | Group letter (A-Z) + 3-digit number (e.g. `A012`, `B081`) |
+| 0xEE | 2 | Padding | Spaces |
+| 0xF0 | 2 | Figure Page | Page within figure (e.g. `04`) or spaces |
+| 0xF2 | 44 | Secondary Ref | Binder cross-ref code (e.g. `B20`) at start, mostly spaces |
+| 0x11E | 4 | Market Code | Locale code (e.g. `C`, `T`, `ND`, `MI`, `GL`) |
+| 0x122 | 15 | Bitmask | Binary flags — 5 active bytes at offsets 290–291, 302–304; rest zero |
+| 0x131 | 109 | Padding | Always zeros |
+| 0x19E | 2 | Marker | `0x00` + `0x2A` (`*`, 84%) or `0x20` (` `, 16%) |
+| 0x1A0 | 25 | Feature Mask | `0x40` (`@`) fill when marker=`*`; single flag byte when marker=` ` |
+| 0x1B9 | 15 | Supplier Code | Distribution/supplier code (e.g. `SSPCQ`, `COWPX`, `SUNRO`) or spaces |
+| 0x1C8 | 10 | Padding | Trailing spaces |
 
 **Destination Codes (offset 0x2D, 19 bytes):**
 
@@ -430,16 +443,69 @@ Full part number including optional 2-character suffix. ~14% of records use the 
 - Trim codes: `25GT`, `25GLI`, `STI`, `BASE`
 - **Variant prefix:** ~7.4% of records have a letter A-H at position 0 as a variant selector, not part of the spec expression. E.g. `AS.(WRX+STI)` = variant `A` + spec `S.(WRX+STI)`. Matches space-separated variant suffix in Part Group part_code (e.g. `98281  A`).
 
-**Tail (offset 0xB4, 286 bytes) — partially decoded:**
+**Usage Notes / OP (offset 0x80, 32 bytes):**
 
-| Tail Offset | Width | Field | Description |
-|-------------|-------|-------|-------------|
-| 0x36 (54) | 1 | Figure Group Letter | A-Z letter (e.g. `B` for body) |
-| 0x37 (55) | 3 | Figure Number | 3-digit figure (e.g. `081`) |
-| 0x3A (58) | 2 | Spacer | Always spaces |
-| 0x3C (60) | 2 | Figure Page | Page within figure (e.g. `04`) |
+Operational context displayed in the app's "OP" column. Present in ~2% of G11 records. Common values:
 
-Remaining tail bytes are mostly zeros with `0x2A` (`*`) end marker at ~offset 234, followed by `0x40` (`@`) fill.
+| Value | Meaning |
+|-------|---------|
+| `LH`, `RH`, `RH & LH` | Side (left/right hand) |
+| `FOR A/C`, `EXC.A/C` | Air conditioning applicability |
+| `FOR ABS`, `EXC.ABS` | Anti-lock brake applicability |
+| `FRONT`, `REAR` | Position |
+| `DOJ`, `BJ` | Joint type (double-offset / birfield) |
+| `-E/#979080`, `E/#979081-` | Serial number range (before/after) |
+| `W:2PCS`, `AT.253:5PCS` | Quantity |
+| `MANUAL`, `AUTO` | Transmission type |
+
+**Part Spec / Part Color (offset 0xA0, 46 bytes):**
+
+Part specification and color data displayed in the app's "Part Spec. Part Color" column. Present in ~13% of G11 records. Examples:
+
+| Value | Category |
+|-------|----------|
+| `T=4.68`, `T=4.69` ... `T=5.09` | Valve lifter thickness |
+| `CLARION`, `MATSUSHITA`, `NIPPON ANTENNA`, `DENSO 156700-1` | Manufacturer/supplier |
+| `M6`, `M6X12`, `6X13X13` | Bolt/fastener size |
+| `D=20`, `D=15` | Diameter |
+| `G/R=4.111`, `G/R=3.900` | Gear ratio |
+| `12V-8W` | Electrical specification |
+| `RH`, `LH`, `LH LIFTER`, `GEAR SHIFT` | Position/type |
+| `STD`, `STD GRADE"A"`, `STD GRADE"B"` | Grade/quality |
+| `OS,0.25`, `OS,0.50` | Oversize |
+| `MARK"3"`, `MARK"7"  BLUE` | Mark/color |
+| `PAINT FOR USAGE` | Paint requirement |
+| `US GRAY`, `CO GRAY` | Market-specific color |
+| `EJ251AW3AB`, `EJ205BW5BB` | Engine assembly code |
+| `STABILIZER(D=20)` | Component specification |
+
+**Ref Code (offset 0xCE, 10 bytes):**
+
+10-digit internal reference code. 1,924 unique values for G11. Structure appears to be `XXYY...YYZZ` where XX is a 2-digit prefix (commonly `01` or `02`), middle digits vary, and ZZ is `00` or `09`. Some values have `*` prefix (e.g. `*00017300`). Purpose not fully understood — may be a cross-reference to pricing or inventory data.
+
+**Related Part (offset 0xD8, 12 bytes):**
+
+Companion or superseding part number. Present in ~16% of G11 records. Examples:
+- Part `13228AB101` → related `13228AB102` (next revision of same valve lifter)
+- Part `010006120` → related `010006126` (related bolt)
+
+**Supplier Code (offset 0x1B9, 15 bytes):**
+
+Distribution or supplier code. Present in ~16% of G11 records (when marker byte = `0x20`). Known codes:
+
+| Code | Likely Meaning |
+|------|----------------|
+| `SSPCQ`, `SSPCW`, `SSPCD`, `SSPCC`, `SSPCV`, `SSPCY`, `SSPCE`, `SSPCZ`, `SSPCM` | Subaru Spare Parts Center + location variant |
+| `COWPX`, `COWPO` | Distribution center |
+| `SUNRO`, `SUNRX` | Distribution center |
+| `AICNO`, `AICNX` | Distribution center |
+| `KAWAX`, `KAWAO` | Distribution center |
+| `SPOLO` | Distribution center |
+| `COWPXKAWAX`, `COWPOKAWAX`, `COWPXKAWAO`, `COWPOKAWAO` | Combined multi-source codes |
+
+**Market Code (offset 0x11E, 4 bytes):**
+
+Present in ~12% of G11 records. Known values: `C` (1923×), `T` (1742×), `ND` (430×), `MI` (334×), `GL` (73×), `NI` (58×), `CN` (51×), `PN` (43×), `ZX` (27×), `NK` (11×), `SY` (3×). Exact meaning TBD.
 
 **Example Records:**
 ```
