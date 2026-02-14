@@ -26,6 +26,7 @@ from sffastus_parser import (
     SffastusBlockParser,
     InventoryRecord199,
     PartGroupRecord185,
+    FigureIndexRecord22,
     FIGIllustrationPage89,
     parse_figname_txt,
     parse_itca_data,
@@ -322,6 +323,30 @@ def main():
         print()
         print(f"Callouts on figure: {len(all_callouts)}  (matched to VIN: {matched}, other: {len(all_callouts) - matched})")
 
+        # --- Load figure cross-references (FigureIndexRecord22) ---
+        xref_ranges = [r for r in ranges if r[3] == 'figure_index_22']
+        fig_xrefs = []
+        for rs, re_, rc, rt in xref_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_figure_index_records_22(f, bo)
+                for r in recs:
+                    if r.model_code == model_code and r.figure.strip() == fig_target and r.page.strip() == page_target:
+                        if r.x > 0 and r.y > 0:
+                            fig_xrefs.append(r)
+
+        if fig_xrefs:
+            print()
+            print(f"Figure cross-references: {len(fig_xrefs)}")
+            for r in fig_xrefs:
+                px_x = math.floor(r.x / 2)
+                px_y = math.floor(r.y / 2)
+                print(f"  -> FIG {r.ref_figure.strip()}  px=({px_x},{px_y})")
+
         # --- Draw bounding boxes ---
         print(f"\nDrawing callout boxes...")
         img = Image.open(base_png).convert('RGB')
@@ -339,6 +364,18 @@ def main():
             color = 'red' if matched else 'blue'
             draw.rectangle([x0, y0, x1, y1], outline=color, width=1)
             draw.text((x0 + 2, y1 + 1), callout, fill=color)
+
+        # Green = figure cross-references
+        for r in fig_xrefs:
+            px_x = math.floor(r.x / 2)
+            px_y = math.floor(r.y / 2)
+            x0 = px_x
+            y0 = px_y - 2
+            x1 = px_x - 2 + BOX_W
+            y1 = px_y - 2 + BOX_H
+            label = f"-> FIG {r.ref_figure.strip()}"
+            draw.rectangle([x0, y0, x1, y1], outline='green', width=1)
+            draw.text((x0 + 2, y1 + 1), label, fill='green')
 
         out_path = Path(f"output/fig{fig_target}_{page_target}_annotated.png")
         img.save(out_path)
