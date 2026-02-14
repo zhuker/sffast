@@ -3284,25 +3284,8 @@ class FIGIllustrationPage89:
     trailer: bytes
     raw_data: bytes = field(repr=False)
 
-    @staticmethod
-    def decode_fig_ptr(ptr3_bytes):
-        """Decode 4-byte figure data pointer to file offset.
-
-        Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
-        offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
-
-        The marker byte is the highest-order address component:
-        marker: mega-section (60 * 75 * 2048 = 9,216,000 bytes each)
-        byte1:  section (75 * 2048 = 153,600 bytes each)
-        byte2:  block (2048 bytes each)
-        byte3:  position within block (8 bytes each)
-        """
-        marker, byte1, byte2, byte3 = ptr3_bytes[0], ptr3_bytes[1], ptr3_bytes[2], ptr3_bytes[3]
-        block_number = (byte1 - 4 + marker * 60) * 75 + byte2
-        return block_number * 2048 + byte3 * 8
-
     def get_figure_offset(self):
-        return FIGIllustrationPage89.decode_fig_ptr(self.ptr3)
+        return decode_fig_data_pointer(self.ptr3)
 
     @staticmethod
     def parse_89(data: bytes, offset: int = 0):
@@ -4424,9 +4407,11 @@ def encode_block_pointer(block: int) -> bytes:
 
     Inverse of decode_block_pointer.
     """
-    b1 = block // 75 + 4
     b2 = block % 75
-    return bytes([0x00, b1, b2, 0x00])
+    q = block // 75
+    b0 = q // 60
+    b1 = q % 60 + 4
+    return bytes([b0, b1, b2, 0x00])
 
 
 def decode_fig_data_pointer(ptr: bytes) -> int:
@@ -4436,11 +4421,9 @@ def decode_fig_data_pointer(ptr: bytes) -> int:
     Formula from SFCOMMON.DLL OffsetCalculator (FUN_100012f0):
       offset = ((byte1 - 4 + marker * 60) * 75 + byte2) * 2048 + byte3 * 8
 
-    The marker byte is the highest-order address component (mega-section),
-    not a flag. Constants 60, 75, 2048 are shared with decode_block_pointer.
+    Extends decode_block_pointer with sub-block precision via byte3 * 8.
     """
-    block_number = (ptr[1] - 4 + ptr[0] * 60) * 75 + ptr[2]
-    return block_number * 2048 + ptr[3] * 8
+    return decode_block_pointer(ptr) * 2048 + ptr[3] * 8
 
 
 def print_block_type_map(ranges):

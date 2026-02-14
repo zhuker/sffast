@@ -2814,9 +2814,22 @@ class TestBlockPointerEncoding(unittest.TestCase):
         """Roundtrip for a range of block numbers."""
         for block in range(0, 5000, 7):
             ptr = encode_block_pointer(block)
-            self.assertEqual(ptr[0], 0x00)
+            self.assertEqual(len(ptr), 4)
             self.assertEqual(ptr[3], 0x00)
             self.assertEqual(decode_block_pointer(ptr), block)
+
+    def test_encode_large_block_numbers(self):
+        """Blocks >= 4500 need byte0 > 0."""
+        # block 4500 = 60 * 75 → byte0=1, byte1=4, byte2=0
+        ptr = encode_block_pointer(4500)
+        self.assertEqual(ptr[0], 1)
+        self.assertEqual(ptr[1], 4)
+        self.assertEqual(ptr[2], 0)
+        self.assertEqual(decode_block_pointer(ptr), 4500)
+        # block 9000 = 2 * 60 * 75 → byte0=2
+        ptr = encode_block_pointer(9000)
+        self.assertEqual(ptr[0], 2)
+        self.assertEqual(decode_block_pointer(ptr), 9000)
 
 
 class TestBodyModelRangeIndex(unittest.TestCase):
