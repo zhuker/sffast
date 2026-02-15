@@ -3074,6 +3074,7 @@ class GlossaryRecord28:
         0x07 (17): Term/Text (e.g., "AUTO", "AXLE", "5X20")
         0x18 (4): Metadata/Flags
     """
+    ID = 'glossary_record_28'
     offset: int
     model_code: str
     category: int  # Single byte category
@@ -3211,6 +3212,7 @@ class EngineSpecRecord230:
         0x63 (6):  End Date (YYYYMM)
         0x69 (125): Trailer/Metadata
     """
+    ID = 'engine_spec_230'
     offset: int
     model_code: str
     figure: str
@@ -3272,6 +3274,7 @@ class FIGIllustrationPage89:
         base and ref_byte1 are model-specific constants.
         Verified for G11: ref_byte1=0x1A, base=0x1745D000 (23/23 records, 0 errors).
     """
+    ID = 'fig_illustration_page_89'
     offset: int
     model_code: str
     fig_index: str
@@ -3641,6 +3644,7 @@ class FigureIndexRecord22:
         0x12 (2): X Coordinate (BE uint16)
         0x14 (2): Y Coordinate (BE uint16)
     """
+    ID = 'figure_index_22'
     offset: int
     model_code: str
     figure: str
@@ -3777,6 +3781,7 @@ class FIGGroupCategoryRecord184:
           └─ FIGIllustrationRecord183 (figure, e.g. "004" = CYLINDER BLOCK)
                └─ FIGIllustrationPage89 (page, e.g. page "01", label "SYSTEM")
     """
+    ID = 'fig_group_category_184'
     offset: int
     model_code: str
     fig_group_code: str
@@ -4024,6 +4029,7 @@ class PartRangeRecord24:
         0x0D (7): Part Number End (e.g., "12024  ")
         0x14 (4): Metadata (e.g., [0x17, 0x19, Index, 0x00])
     """
+    ID = 'part_range_24'
     offset: int
     model_code: str
     part_start: str
@@ -4136,6 +4142,7 @@ class MultilingualPartRecord180:
         0x85 (40): Spanish Name
         0xAD (7):  Trailer (binary flags/metadata)
     """
+    ID = 'multilingual_part_180'
     offset: int
     model_code: str
     part_code: str
@@ -4467,6 +4474,149 @@ def decode_fig_data_pointer(ptr: bytes) -> int:
     Extends decode_block_pointer with sub-block precision via byte3 * 8.
     """
     return decode_block_pointer(ptr) * 2048 + ptr[3] * 8
+
+
+# Mapping from block type ID to index in ModelIndexRecord288.block_index_array.
+# Entries 0-29 are block pointers (4 bytes each), entries 30-44 are count pairs.
+# Indices 16-18, 23 are raw CCITT G4 figure image data (no record structure).
+# Index 20 is a NULL separator (all zeros).
+MODEL_BLOCK_INDEX = {
+    MultilingualPartRecord167.ID: 0,    # multilingual_part_167
+    CategoryIndexRecord20.ID: 1,        # category_index_20
+    PartRangeRecord24.ID: 2,            # part_range_24
+    MultilingualPartRecord180.ID: 3,    # multilingual_part_180
+    ModelSpecRecord103.ID: 4,           # model_spec_103
+    MultilingualPartRecord192.ID: 5,    # multilingual_part_192
+    CatalogApplicabilityRecord466.ID: 6, # catalog_applicability_466
+    ColorRecord91.ID: 7,               # color_record_91
+    GlossaryRecord28.ID: 8,            # glossary_record_28
+    CodeIndexRecord33.ID: 9,           # code_index_record_33
+    FIGGroupCategoryRecord184.ID: 10,  # fig_group_category_184
+    FIGIllustrationRecord183.ID: 11,   # fig_illustration_183
+    FIGIllustrationPage89.ID: 12,      # fig_illustration_page_89
+    EngineSpecRecord230.ID: 13,        # engine_spec_230
+    PartGroupRecord185.ID: 14,         # part_group_185
+    InventoryRecord199.ID: 15,         # inventory_199
+    # 16: figure_image_a (binary CCITT G4)
+    # 17: figure_image_b (binary CCITT G4)
+    # 18: figure_image_c (binary CCITT G4, main bulk)
+    VariantGlossaryRecord81.ID: 19,    # variant_glossary_81
+    # 20: NULL separator
+    VersionIndexRecord20.ID: 21,       # version_index_20
+    # 22: fig_illustration_183_b (by-book variant)
+    # 23: figure_image_d (binary CCITT G4)
+    ModelYearRecord44.ID: 24,          # model_year_44
+    MultilingualPartRecord182.ID: 25,  # multilingual_part_182
+    # 26: code_index_33_b (secondary)
+    FigureIndexRecord22.ID: 27,        # figure_index_22
+    SpecMappingRecord22.ID: 28,        # spec_mapping_22 (a)
+    # 29: spec_mapping_22_b
+}
+
+# Count pair layout: entries 30-44, each 4 bytes = 2 BE uint16 counts.
+# Maps (array_index, hi_or_lo) -> pointer index.
+# hi=True means first uint16 in the 4-byte entry, lo=True means second.
+MODEL_BLOCK_COUNTS = {
+    0: (30, 'hi'),   1: (30, 'lo'),
+    2: (31, 'hi'),   3: (31, 'lo'),
+    4: (32, 'hi'),   5: (32, 'lo'),
+    6: (33, 'hi'),   7: (33, 'lo'),
+    8: (34, 'hi'),   9: (34, 'lo'),
+    10: (35, 'hi'),  11: (35, 'lo'),
+    12: (36, 'hi'),  13: (36, 'lo'),
+    14: (37, 'hi'),  15: (37, 'lo'),
+    # 16: entry [38] hi is anomalous (NOT a block count)
+    17: (38, 'lo'),
+    18: (39, 'hi'),  19: (39, 'lo'),
+    # 20: NULL, no count
+    21: (40, 'lo'),
+    22: (41, 'hi'),  23: (41, 'lo'),
+    24: (42, 'hi'),  25: (42, 'lo'),
+    26: (43, 'hi'),  27: (43, 'lo'),
+    28: (44, 'hi'),  29: (44, 'lo'),
+}
+
+BLOCK_SIZE = 2048
+
+
+def parse_model_index(f, header):
+    """Parse all ModelIndexRecord288 entries from the model index area.
+
+    Handles inter-block padding (7 records per 2KB block, 32 bytes padding).
+    Returns a dict of model_code -> ModelIndexRecord288.
+    """
+    models = {}
+    offset = header.model_index_start_block * BLOCK_SIZE
+    records_per_block = BLOCK_SIZE // 288  # 7
+    total_records = 0
+    block_idx = 0
+    while True:
+        block_offset = offset + block_idx * BLOCK_SIZE
+        for i in range(records_per_block):
+            rec_offset = block_offset + i * 288
+            f.seek(rec_offset)
+            data = f.read(288)
+            if len(data) < 288:
+                return models
+            mc = data[0:6].decode('cp437', errors='replace').strip()
+            if not mc or not mc[0].isalnum():
+                return models
+            rec = ModelIndexRecord288.parse_288(data, rec_offset)
+            models[rec.model_code] = rec
+            total_records += 1
+        block_idx += 1
+    return models
+
+
+def get_model_block_section(model_rec, block_type_id):
+    """Get (file_offset, block_count) for a block type from a ModelIndexRecord288.
+
+    Args:
+        model_rec: ModelIndexRecord288 instance
+        block_type_id: string ID (e.g., CatalogApplicabilityRecord466.ID)
+
+    Returns:
+        (offset, count) tuple, or (0, 0) if not found.
+    """
+    idx = MODEL_BLOCK_INDEX.get(block_type_id)
+    if idx is None:
+        return (0, 0)
+
+    # Decode block pointer from array entry
+    arr = model_rec.block_index_array
+    ptr_bytes = arr[idx * 4: idx * 4 + 4]
+    if ptr_bytes == b'\x00\x00\x00\x00':
+        return (0, 0)
+    block_num = decode_block_pointer(ptr_bytes)
+    file_offset = block_num * BLOCK_SIZE
+
+    # Get block count from count pairs
+    count_info = MODEL_BLOCK_COUNTS.get(idx)
+    if count_info is None:
+        return (file_offset, 0)
+    count_entry_idx, hi_lo = count_info
+    count_bytes = arr[count_entry_idx * 4: count_entry_idx * 4 + 4]
+    if hi_lo == 'hi':
+        count = (count_bytes[0] << 8) | count_bytes[1]
+    else:
+        count = (count_bytes[2] << 8) | count_bytes[3]
+
+    return (file_offset, count)
+
+
+def iter_model_blocks(model_rec, block_type_id):
+    """Yield block offsets for a block type from a ModelIndexRecord288.
+
+    Args:
+        model_rec: ModelIndexRecord288 instance
+        block_type_id: string ID (e.g., CatalogApplicabilityRecord466.ID)
+
+    Yields:
+        int: absolute file offset for each block
+    """
+    offset, count = get_model_block_section(model_rec, block_type_id)
+    for i in range(count):
+        yield offset + i * BLOCK_SIZE
 
 
 def print_block_type_map(ranges):

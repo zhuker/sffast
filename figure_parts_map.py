@@ -9,6 +9,8 @@ figure_parts_map.py - Extract figure image, find applicable parts, draw callout 
 5. Prints part-to-coordinate map
 6. Draws bounding boxes around callouts on the figure image
 
+Uses ModelIndexRecord288 block pointers for direct seeks instead of scanning all blocks.
+
 Usage: .venv/bin/python figure_parts_map.py [FIG] [PAGE] [VIN]
        .venv/bin/python figure_parts_map.py 940 01
        .venv/bin/python figure_parts_map.py 940 01 JF1GD70655L510047
@@ -24,19 +26,24 @@ from wand.image import Image as WandImage
 
 from sffastus_parser import (
     SffastusBlockParser,
-    InventoryRecord199,
-    PartGroupRecord185,
-    FigureIndexRecord22,
+    SffastusHeader,
+    CatalogApplicabilityRecord466,
     FIGIllustrationPage89,
+    FigureIndexRecord22,
+    InventoryRecord199,
+    ModelSpecRecord103,
+    PartGroupRecord185,
     parse_figname_txt,
     parse_itca_data,
     ItcaPartsCatalog,
     is_valid_subaru_vin,
+    parse_model_index,
+    iter_model_blocks,
 )
 
 from vin_figures import (
     lookup_vin,
-    find_model_spec,
+    body_model_matches_applied,
     get_vehicle_codes,
     eval_spec_logic,
     date_in_range,
@@ -45,7 +52,6 @@ from vin_figures import (
 SFCDUS2_PATH = Path("SFCDUS2/sffastus")
 FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
 ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
-BLOCK_SIZE = 2048
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 640
 
@@ -126,12 +132,28 @@ def main():
         vehicle_date = vin_rec.date1[:6]
         print(f"  Model: {model_code}  Body: {vin_rec.body_model}  Date: {vehicle_date}")
 
-        # --- Scan block types ---
-        print("Scanning blocks...")
-        ranges = parser.scan_block_types(f)
+        # --- Parse model index (direct seek, no full scan) ---
+        print("Loading model index...")
+        f.seek(0)
+        header = SffastusHeader.parse(f.read(50))
+        models = parse_model_index(f, header)
+        model_rec = models.get(model_code)
+        if not model_rec:
+            print(f"  Model {model_code} not found in index")
+            sys.exit(1)
+        print(f"  Found {len(models)} models in index")
 
-        # --- Model spec ---
-        spec = find_model_spec(f, parser, ranges, model_code, vin_rec.body_model)
+        # --- Model spec (direct seek) ---
+        spec = None
+        for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
+            recs = parser.parse_model_spec_records_103(f, bo)
+            for s in recs:
+                if body_model_matches_applied(vin_rec.body_model, s.applied_model):
+                    spec = s
+                    break
+            if spec:
+                break
+
         if spec:
             codes = get_vehicle_codes(spec)
             print(f"  Spec: {spec.body_config}/{spec.engine}/{spec.transmission}/{spec.trim_level}")
@@ -141,23 +163,14 @@ def main():
             print("  Warning: no model spec found")
         print()
 
-        # --- Find FIG89 record for target figure ---
+        # --- Find FIG89 record for target figure (direct seek) ---
         print("Finding figure image...")
-        fig89_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
         fig89_rec = None
-        for rs, re_, rc, rt in fig89_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_fig_illustration_page_records_89(f, bo)
-                for r in recs:
-                    if r.model_code == model_code and r.fig_index == fig_target and r.page_index == page_target:
-                        fig89_rec = r
-                        break
-                if fig89_rec:
+        for bo in iter_model_blocks(model_rec, FIGIllustrationPage89.ID):
+            recs = parser.parse_fig_illustration_page_records_89(f, bo)
+            for r in recs:
+                if r.fig_index == fig_target and r.page_index == page_target:
+                    fig89_rec = r
                     break
             if fig89_rec:
                 break
@@ -179,21 +192,12 @@ def main():
         base_png.write_bytes(png_blob)
         print(f"  Saved base image: {base_png}")
 
-        # --- Load applicable parts (466-byte) for this figure ---
+        # --- Load applicable parts (466-byte) for this figure (direct seek) ---
         print("\nLoading parts...")
-        cat_ranges = [r for r in ranges if r[3] == 'catalog_applicability_466']
         fig_parts = []
-        for rs, re_, rc, rt in cat_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_catalog_applicability_records_466(f, bo)
-                for rec in recs:
-                    if rec.model_code != model_code:
-                        continue
+        for bo in iter_model_blocks(model_rec, CatalogApplicabilityRecord466.ID):
+            recs = parser.parse_catalog_applicability_records_466(f, bo)
+            for rec in recs:
                     # Match figure_ref (e.g., "A940") -> figure "940"
                     if rec.figure_ref and len(rec.figure_ref) >= 4:
                         ref_fig = rec.figure_ref[1:]
@@ -234,48 +238,33 @@ def main():
 
         print(f"  Applicable parts for fig {fig_target}-{page_target}: {len(unique_parts)}")
 
-        # --- Load callout coordinates ---
+        # --- Load callout coordinates (direct seek) ---
         # Source 1: PartGroupRecord185 (main part callouts with x,y)
-        # Same callout code can appear multiple times with different coordinates
         print("\nLoading callout coordinates...")
         coord_list = []  # [(code, x, y, description, part_number_or_None), ...]
 
-        pg_ranges = [r for r in ranges if r[3] == PartGroupRecord185.ID]
-        for rs, re_, rc, rt in pg_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_part_group_records_185(f, bo)
-                for r in recs:
-                    if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
-                        code = r.part_code.strip()
-                        if code and r.x > 0 and r.y > 0:
-                            coord_list.append((code, r.x, r.y, r.desc_en, None))
+        for bo in iter_model_blocks(model_rec, PartGroupRecord185.ID):
+            recs = parser.parse_part_group_records_185(f, bo)
+            for r in recs:
+                if r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
+                    code = r.part_code.strip()
+                    if code and r.x > 0 and r.y > 0:
+                        coord_list.append((code, r.x, r.y, r.desc_en, None))
 
-        pg_count = len(coord_list)
+        pg_count_coords = len(coord_list)
 
         # Source 2: InventoryRecord199 (fastener/hardware callouts with x,y)
-        inv_ranges = [r for r in ranges if r[3] == InventoryRecord199.ID]
-        for rs, re_, rc, rt in inv_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_inventory_records_199(f, bo)
-                for r in recs:
-                    if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
-                        code = r.part_code.strip()
-                        if code and r.x > 0 and r.y > 0:
-                            coord_list.append((code, r.x, r.y, r.name_en, r.part_number.strip() or None))
+        for bo in iter_model_blocks(model_rec, InventoryRecord199.ID):
+            recs = parser.parse_inventory_records_199(f, bo)
+            for r in recs:
+                if r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
+                    code = r.part_code.strip()
+                    if code and r.x > 0 and r.y > 0:
+                        coord_list.append((code, r.x, r.y, r.name_en, r.part_number.strip() or None))
 
-        inv_count = len(coord_list) - pg_count
-        print(f"  PartGroup185 callouts: {pg_count}")
-        print(f"  Inventory199 callouts: {inv_count}")
+        inv_count_coords = len(coord_list) - pg_count_coords
+        print(f"  PartGroup185 callouts: {pg_count_coords}")
+        print(f"  Inventory199 callouts: {inv_count_coords}")
         print(f"  Total callouts with coordinates: {len(coord_list)}")
 
         # --- Build part number lookup from Cat466 (callout -> part_id) ---
@@ -316,21 +305,14 @@ def main():
         print()
         print(f"Callouts on figure: {len(all_callouts)}  (matched to VIN: {matched}, other: {len(all_callouts) - matched})")
 
-        # --- Load figure cross-references (FigureIndexRecord22) ---
-        xref_ranges = [r for r in ranges if r[3] == 'figure_index_22']
+        # --- Load figure cross-references (direct seek) ---
         fig_xrefs = []
-        for rs, re_, rc, rt in xref_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_figure_index_records_22(f, bo)
-                for r in recs:
-                    if r.model_code == model_code and r.figure.strip() == fig_target and r.page.strip() == page_target:
-                        if r.x > 0 and r.y > 0:
-                            fig_xrefs.append(r)
+        for bo in iter_model_blocks(model_rec, FigureIndexRecord22.ID):
+            recs = parser.parse_figure_index_records_22(f, bo)
+            for r in recs:
+                if r.figure.strip() == fig_target and r.page.strip() == page_target:
+                    if r.x > 0 and r.y > 0:
+                        fig_xrefs.append(r)
 
         if fig_xrefs:
             print()

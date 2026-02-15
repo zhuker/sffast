@@ -28,12 +28,15 @@ from sffastus_parser import (
     FIGIllustrationRecord183,
     InventoryRecord199,
     ModelSpecRecord103,
+    PartGroupRecord185,
     VINModelRecord,
     decode_block_pointer,
     parse_figname_txt,
     parse_itca_data,
     ItcaPartsCatalog,
     is_valid_subaru_vin,
+    parse_model_index,
+    iter_model_blocks,
 )
 
 SFCDUS2_PATH = Path("SFCDUS2/sffastus")
@@ -315,13 +318,27 @@ def main():
         print(f"  Date:        {vin_rec.date1}")
         print()
 
-        # Step 2: Scan block types
-        print("Scanning blocks...")
-        ranges = parser.scan_block_types(f)
+        # Step 2: Parse model index (direct seek, no full scan)
+        print("Loading model index...")
+        f.seek(0)
+        header = SffastusHeader.parse(f.read(50))
+        models = parse_model_index(f, header)
+        model_rec = models.get(vin_rec.model_code)
+        if not model_rec:
+            print(f"  Model {vin_rec.model_code} not found in index")
+            sys.exit(1)
+        print(f"  Found {len(models)} models in index")
 
         # Step 3: Find model spec for body model
         print("Finding model spec...")
-        spec = find_model_spec(f, parser, ranges, vin_rec.model_code, vin_rec.body_model)
+        spec = None
+        for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
+            for s in parser.parse_model_spec_records_103(f, bo):
+                if body_model_matches_applied(vin_rec.body_model, s.applied_model):
+                    spec = s
+                    break
+            if spec:
+                break
         if not spec:
             print(f"Warning: No model spec found for body model {vin_rec.body_model}")
             print("         Using VIN record fields as fallback")
@@ -345,20 +362,9 @@ def main():
 
         # Step 4: Find engine spec 230 records for this model
         print("Loading figure applicability records...")
-        es_ranges = [r for r in ranges if r[3] == 'engine_spec_230']
-        all_es_records = []
-        for rs, re_, rc, rt in es_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_engine_spec_records_230(f, bo)
-                all_es_records.extend(recs)
-
-        model_records = [r for r in all_es_records if r.model_code == vin_rec.model_code]
+        model_records = []
+        for bo in iter_model_blocks(model_rec, EngineSpecRecord230.ID):
+            model_records.extend(parser.parse_engine_spec_records_230(f, bo))
         print(f"  Total figure applicability records: {len(model_records)}")
         print()
 
@@ -391,19 +397,9 @@ def main():
 
         # Step 6: Load FIG illustration page 89 records for this model
         print("Loading figure illustration pages...")
-        fig89_ranges = [r for r in ranges if r[3] == 'fig_illustration_page_89']
-        all_fig89 = []
-        for rs, re_, rc, rt in fig89_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_fig_illustration_page_records_89(f, bo)
-                all_fig89.extend(recs)
-
-        model_fig89 = [r for r in all_fig89 if r.model_code == vin_rec.model_code]
+        model_fig89 = []
+        for bo in iter_model_blocks(model_rec, FIGIllustrationPage89.ID):
+            model_fig89.extend(parser.parse_fig_illustration_page_records_89(f, bo))
         print(f"  Total figure pages with images: {len(model_fig89)}")
 
         # Build lookup: (fig_index, page_index) -> FIGIllustrationPage89
@@ -413,19 +409,9 @@ def main():
 
         # Step 6.1: Load FIG group category records (184) for this model
         print("\nLoading figure group categories...")
-        fig184_ranges = [r for r in ranges if r[3] == 'fig_group_category_184']
-        all_fig184 = []
-        for rs, re_, rc, rt in fig184_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_fig_group_category_records_184(f, bo)
-                all_fig184.extend(recs)
-
-        model_fig184 = [r for r in all_fig184 if r.model_code == vin_rec.model_code]
+        model_fig184 = []
+        for bo in iter_model_blocks(model_rec, FIGGroupCategoryRecord184.ID):
+            model_fig184.extend(parser.parse_fig_group_category_records_184(f, bo))
 
         # Build lookup: group_code (e.g., "0A") -> FIGGroupCategoryRecord184
         fig184_lookup = {}
@@ -435,19 +421,9 @@ def main():
 
         # Step 6.2: Load FIG illustration records (183) for this model
         print("Loading figure illustration descriptions...")
-        fig183_ranges = [r for r in ranges if r[3] == FIGIllustrationRecord183.ID]
-        all_fig183 = []
-        for rs, re_, rc, rt in fig183_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_fig_illustration_records_183(f, bo)
-                all_fig183.extend(recs)
-
-        model_fig183 = [r for r in all_fig183 if r.model_code == vin_rec.model_code]
+        model_fig183 = []
+        for bo in iter_model_blocks(model_rec, FIGIllustrationRecord183.ID):
+            model_fig183.extend(parser.parse_fig_illustration_records_183(f, bo))
 
         # Build lookup: fig_code (e.g., "004") -> FIGIllustrationRecord183
         # Each figure appears twice (by-system 0A-9B and by-binder A1-D3);
@@ -468,68 +444,40 @@ def main():
 
         # Step 6.5: Load part group descriptions (PartGroupRecord185)
         print("\nLoading part group descriptions...")
-        pg_ranges = [r for r in ranges if r[3] == 'part_group_185']
         all_pg_records = []
-        for rs, re_, rc, rt in pg_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_part_group_records_185(f, bo)
-                all_pg_records.extend(recs)
+        for bo in iter_model_blocks(model_rec, PartGroupRecord185.ID):
+            all_pg_records.extend(parser.parse_part_group_records_185(f, bo))
 
         # Build description lookup: (figure, part_code) -> desc_en
         # part_code may have variant suffix like "11021  A", strip it for matching
         part_desc_lookup = {}
         for r in all_pg_records:
-            if r.model_code == vin_rec.model_code:
-                code = r.part_code.split()[0]  # strip variant suffix
-                key = (r.figure, code)
-                if key not in part_desc_lookup:
-                    part_desc_lookup[key] = r.desc_en
+            code = r.part_code.split()[0]  # strip variant suffix
+            key = (r.figure, code)
+            if key not in part_desc_lookup:
+                part_desc_lookup[key] = r.desc_en
         print(f"  Part descriptions loaded: {len(part_desc_lookup)}")
 
         # Step 6.55: Load inventory records (InventoryRecord199) - fasteners/hardware
         print("Loading inventory records...")
-        inv_ranges = [r for r in ranges if r[3] == InventoryRecord199.ID]
         all_inv_records = []
-        for rs, re_, rc, rt in inv_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_inventory_records_199(f, bo)
-                all_inv_records.extend(recs)
+        for bo in iter_model_blocks(model_rec, InventoryRecord199.ID):
+            all_inv_records.extend(parser.parse_inventory_records_199(f, bo))
 
         # Group inventory by (figure, page)
         inv_by_fig_page = defaultdict(list)  # (fig, page) -> [InventoryRecord199, ...]
         for r in all_inv_records:
-            if r.model_code == vin_rec.model_code:
-                fig = r.figure.strip()
-                page = r.figure_page.strip()
-                if fig and page and r.part_number.strip():
-                    inv_by_fig_page[(fig, page)].append(r)
+            fig = r.figure.strip()
+            page = r.figure_page.strip()
+            if fig and page and r.part_number.strip():
+                inv_by_fig_page[(fig, page)].append(r)
         print(f"  Inventory records loaded: {len(all_inv_records)}")
 
         # Step 6.6: Load catalog applicability records (parts) for this model
         print("Loading parts catalog records...")
-        cat_ranges = [r for r in ranges if r[3] == 'catalog_applicability_466']
-        all_cat_records = []
-        for rs, re_, rc, rt in cat_ranges:
-            f.seek(rs)
-            test = f.read(6).decode('cp437', errors='replace').strip()
-            if test != vin_rec.model_code:
-                continue
-            for bi in range(rc):
-                bo = rs + bi * BLOCK_SIZE
-                recs = parser.parse_catalog_applicability_records_466(f, bo)
-                all_cat_records.extend(recs)
-
-        model_parts = [r for r in all_cat_records if r.model_code == vin_rec.model_code]
+        model_parts = []
+        for bo in iter_model_blocks(model_rec, CatalogApplicabilityRecord466.ID):
+            model_parts.extend(parser.parse_catalog_applicability_records_466(f, bo))
         print(f"  Total parts records for model: {len(model_parts)}")
 
         # Filter parts by spec logic and date range
@@ -582,12 +530,11 @@ def main():
         # Build PG185 callout positions per (figure, page) - one entry per callout location
         pg_by_fig_page = defaultdict(list)  # (fig, page) -> [(callout_code, desc), ...]
         for r in all_pg_records:
-            if r.model_code == vin_rec.model_code:
-                code = r.part_code.split()[0]
-                fig = r.figure.strip()
-                page = r.figure_page.strip()
-                if code and fig and page:
-                    pg_by_fig_page[(fig, page)].append((code, r.desc_en))
+            code = r.part_code.split()[0]
+            fig = r.figure.strip()
+            page = r.figure_page.strip()
+            if code and fig and page:
+                pg_by_fig_page[(fig, page)].append((code, r.desc_en))
 
         # Build Cat466 part lookup per (figure, callout_code)
         cat466_by_fig_callout = defaultdict(list)  # (fig, callout) -> [Cat466 rec, ...]
