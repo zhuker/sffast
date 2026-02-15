@@ -2727,181 +2727,45 @@ class SffastusBlockParser:
         except:
             return False
 
-    def parse_code_index_records_33(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
-                                    verbose: bool = False) -> List[CodeIndexRecord33]:
-        """
-        Parse code index records (33 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of CodeIndexRecord33 objects
-        """
-        RECORD_SIZE = 33
+    def _parse_fixed_records(self, f: BinaryIO, start_offset: int, record_size: int, parse_fn,
+                             max_records: Optional[int] = None, verbose: bool = False,
+                             validator=None) -> list:
+        """Generic helper to parse fixed-size records from a file stream."""
+        if validator is None:
+            validator = lambda data: is_valid_model_code(data[0:6])
         records = []
-
         f.seek(start_offset)
         count = 0
-
         while True:
             if max_records and count >= max_records:
                 break
-
             offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
+            data = f.read(record_size)
+            if len(data) < record_size:
                 break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
+            if not validator(data):
                 break
-
-            record = CodeIndexRecord33.parse_33(data, offset)
-            records.append(record)
-
+            records.append(parse_fn(data, offset))
             if verbose and count % 1000 == 0:
                 print(f"  Parsed {count} records at 0x{offset:08X}...")
-
             count += 1
-
         return records
+
+    def parse_code_index_records_33(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
+                                    verbose: bool = False) -> List[CodeIndexRecord33]:
+        return self._parse_fixed_records(f, start_offset, 33, CodeIndexRecord33.parse_33, max_records, verbose)
 
     def parse_glossary_records_28(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                   verbose: bool = False) -> List[GlossaryRecord28]:
-        """
-        Parse glossary records (28 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of GlossaryRecord28 objects
-        """
-        RECORD_SIZE = 28
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = GlossaryRecord28.parse_28(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 28, GlossaryRecord28.parse_28, max_records, verbose)
 
     def parse_color_records_91(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ColorRecord91]:
-        """
-        Parse color records (91 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of ColorRecord91 objects
-        """
-        RECORD_SIZE = 91
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = ColorRecord91.parse_91(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 91, ColorRecord91.parse_91, max_records, verbose)
 
     def parse_part_group_records_185(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[PartGroupRecord185]:
-        """
-        Parse part group description records (185 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of PartGroupRecord185 objects
-        """
-        RECORD_SIZE = 185
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = PartGroupRecord185.parse_185(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 185, PartGroupRecord185.parse_185, max_records, verbose)
 
     def parse_variant_glossary_records_81(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                           verbose: bool = False) -> List[VariantGlossaryRecord81]:
@@ -3046,91 +2910,11 @@ class SffastusBlockParser:
 
     def parse_engine_spec_records_230(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[EngineSpecRecord230]:
-        """
-        Parse engine specification records (230 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of EngineSpecRecord230 objects
-        """
-        RECORD_SIZE = 230
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = EngineSpecRecord230.parse_230(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 230, EngineSpecRecord230.parse_230, max_records, verbose)
 
     def parse_catalog_applicability_records_466(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                 verbose: bool = False) -> List[CatalogApplicabilityRecord466]:
-        """
-        Parse catalog applicability records (466 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of CatalogApplicabilityRecord466 objects
-        """
-        RECORD_SIZE = 466
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record (model code or asterisk terminator)
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = CatalogApplicabilityRecord466.parse_466(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 466, CatalogApplicabilityRecord466.parse_466, max_records, verbose)
 
     def parse_body_model_records_17(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[BodyModelRecord17]:
@@ -3203,629 +2987,80 @@ class SffastusBlockParser:
 
         return records
 
-    def _parse_records_20(self, f: BinaryIO, start_offset: int, record_class: type, max_records: Optional[int] = None,
-                          verbose: bool = False) -> list:
-        RECORD_SIZE = 20
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            if all(b == 0x2a for b in data) or all(b == 0 for b in data):
-                break
-
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = record_class.parse_20(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+    @staticmethod
+    def _validate_20(data: bytes) -> bool:
+        if all(b == 0x2a for b in data) or all(b == 0 for b in data):
+            return False
+        return is_valid_model_code(data[0:6])
 
     def parse_category_index_records_20(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                         verbose: bool = False) -> List[CategoryIndexRecord20]:
-        return self._parse_records_20(f, start_offset, CategoryIndexRecord20, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, 20, CategoryIndexRecord20.parse_20, max_records, verbose,
+                                         validator=self._validate_20)
 
     def parse_version_index_records_20(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                        verbose: bool = False) -> List[VersionIndexRecord20]:
-        return self._parse_records_20(f, start_offset, VersionIndexRecord20, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, 20, VersionIndexRecord20.parse_20, max_records, verbose,
+                                         validator=self._validate_20)
 
     def parse_part_index_records_34(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartRangeIndex34]:
-        RECORD_SIZE = 34
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not self.is_part_num(data[0:15]):
-                break
-
-            record = PartRangeIndex34.parse_34(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 34, PartRangeIndex34.parse_34, max_records, verbose,
+                                         validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_itca_records_251(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ItcaRecord]:
-        RECORD_SIZE = 251
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not self.is_part_num(data[0:15]):
-                break
-
-            record = ItcaRecord.parse_itca_251(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 251, ItcaRecord.parse_itca_251, max_records, verbose,
+                                         validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_part_index_records_21(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartIndex21]:
-        RECORD_SIZE = 21
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not self.is_part_num(data[0:15]):
-                break
-
-            record = PartIndex21.parse_21(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 21, PartIndex21.parse_21, max_records, verbose,
+                                         validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_figure_index_records_22(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[FigureIndexRecord22]:
-        """
-        Parse figure index records (22 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of FigureIndexRecord22 objects
-        """
-        RECORD_SIZE = 22
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = FigureIndexRecord22.parse_22(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 22, FigureIndexRecord22.parse_22, max_records, verbose)
 
     def parse_spec_mapping_records_22(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[SpecMappingRecord22]:
-        """
-        Parse spec mapping records (22 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of SpecMappingRecord22 objects
-        """
-        RECORD_SIZE = 22
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = SpecMappingRecord22.parse_22(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 22, SpecMappingRecord22.parse_22, max_records, verbose)
 
     def parse_fig_illustration_page_records_89(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                verbose: bool = False) -> List[FIGIllustrationPage89]:
-        """
-        Parse FIG illustration page/sub-index records (89 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of FIGIllustrationPage89 objects
-        """
-        RECORD_SIZE = 89
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = FIGIllustrationPage89.parse_89(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 89, FIGIllustrationPage89.parse_89, max_records, verbose)
 
     def parse_fig_illustration_records_183(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                            verbose: bool = False) -> List[FIGIllustrationRecord183]:
-        """
-        Parse FIG illustration description records (183 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of FIGIllustrationRecord183 objects
-        """
-        RECORD_SIZE = 183
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = FIGIllustrationRecord183.parse_183(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 183, FIGIllustrationRecord183.parse_183, max_records, verbose)
 
     def parse_fig_group_category_records_184(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                              verbose: bool = False) -> List[FIGGroupCategoryRecord184]:
-        """
-        Parse FIG group category description records (184 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of FIGGroupCategoryRecord184 objects
-        """
-        RECORD_SIZE = 184
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = FIGGroupCategoryRecord184.parse_184(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 184, FIGGroupCategoryRecord184.parse_184, max_records, verbose)
 
     def parse_model_spec_records_103(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[ModelSpecRecord103]:
-        """
-        Parse model spec records (103 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of ModelSpecRecord103 objects
-        """
-        RECORD_SIZE = 103
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            # Parse fields (cp437)
-            record = ModelSpecRecord103.parse_103(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 103, ModelSpecRecord103.parse_103, max_records, verbose)
 
     def parse_model_index_records_288(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[ModelIndexRecord288]:
-        """
-        Parse model index records (288 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of ModelIndexRecord288 objects
-        """
-        RECORD_SIZE = 288
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            # Parse fields (cp437)
-            record = ModelIndexRecord288.parse_288(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 288, ModelIndexRecord288.parse_288, max_records, verbose)
 
     def parse_part_range_records_24(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartRangeRecord24]:
-        """
-        Parse part range records (24 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of PartRangeRecord24 objects
-        """
-        RECORD_SIZE = 24
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = PartRangeRecord24.parse_24(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 24, PartRangeRecord24.parse_24, max_records, verbose)
 
     def parse_multilingual_part_records_167(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord167]:
-        """
-        Parse multilingual part name records (167 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse (None = until invalid)
-            verbose: Print progress during parsing
-
-        Returns:
-            List of MultilingualPartRecord167 objects
-        """
-        RECORD_SIZE = 167
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = MultilingualPartRecord167.parse_167(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 167, MultilingualPartRecord167.parse_167, max_records, verbose)
 
     def parse_multilingual_part_records_180(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord180]:
-        """
-        Parse multilingual part name records (180 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse (None = until invalid)
-            verbose: Print progress during parsing
-
-        Returns:
-            List of MultilingualPartRecord180 objects
-        """
-        RECORD_SIZE = 180
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = MultilingualPartRecord180.parse_180(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 180, MultilingualPartRecord180.parse_180, max_records, verbose)
 
     def parse_multilingual_part_records_192(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord192]:
-        """
-        Parse multilingual part name records (192 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse (None = until invalid)
-            verbose: Print progress during parsing
-
-        Returns:
-            List of MultilingualPartRecord objects
-        """
-        RECORD_SIZE = 192
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = MultilingualPartRecord192.parse_192(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 192, MultilingualPartRecord192.parse_192, max_records, verbose)
 
     def detect_vin_record_type(self, data: bytes) -> str:
         """
