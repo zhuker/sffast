@@ -239,8 +239,6 @@ def main():
         # Same callout code can appear multiple times with different coordinates
         print("\nLoading callout coordinates...")
         coord_list = []  # [(code, x, y, description, part_number_or_None), ...]
-        coord_codes = set()
-        callout_descs = {}  # code -> description (from PartGroup185 / Inventory199, regardless of coords)
 
         pg_ranges = [r for r in ranges if r[3] == PartGroupRecord185.ID]
         for rs, re_, rc, rt in pg_ranges:
@@ -252,14 +250,10 @@ def main():
                 bo = rs + bi * BLOCK_SIZE
                 recs = parser.parse_part_group_records_185(f, bo)
                 for r in recs:
-                    if r.model_code == model_code and r.figure.strip() == fig_target:
+                    if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
                         code = r.part_code.strip()
-                        if code:
-                            if code not in callout_descs:
-                                callout_descs[code] = r.desc_en
-                            if r.figure_page.strip() == page_target and r.x > 0 and r.y > 0:
-                                coord_list.append((code, r.x, r.y, r.desc_en, None))
-                                coord_codes.add(code)
+                        if code and r.x > 0 and r.y > 0:
+                            coord_list.append((code, r.x, r.y, r.desc_en, None))
 
         pg_count = len(coord_list)
 
@@ -274,14 +268,10 @@ def main():
                 bo = rs + bi * BLOCK_SIZE
                 recs = parser.parse_inventory_records_199(f, bo)
                 for r in recs:
-                    if r.model_code == model_code and r.figure.strip() == fig_target:
+                    if r.model_code == model_code and r.figure.strip() == fig_target and r.figure_page.strip() == page_target:
                         code = r.part_code.strip()
-                        if code:
-                            if code not in callout_descs:
-                                callout_descs[code] = r.name_en
-                            if r.figure_page.strip() == page_target and r.x > 0 and r.y > 0:
-                                coord_list.append((code, r.x, r.y, r.name_en, r.part_number.strip() or None))
-                                coord_codes.add(code)
+                        if code and r.x > 0 and r.y > 0:
+                            coord_list.append((code, r.x, r.y, r.name_en, r.part_number.strip() or None))
 
         inv_count = len(coord_list) - pg_count
         print(f"  PartGroup185 callouts: {pg_count}")
@@ -321,29 +311,6 @@ def main():
                 print(f"{code:<10}   {'--':16s} {px_x:5d} {px_y:5d}  {desc}")
                 matched = False
             all_callouts.append((px_x, px_y, code, desc, matched))
-
-        # Cat466 parts with no coordinates (not drawn on this figure page)
-        no_coord_parts = [(rec, v) for rec, v in unique_parts if rec.group_category.strip() not in coord_codes]
-        if no_coord_parts:
-            print()
-            print("Parts without callout on this page:")
-            for rec, variant in no_coord_parts:
-                v_str = f"*{variant}" if variant else ""
-                # Look up part name from ITCA catalog
-                desc = ""
-                if parser.parts_catalog:
-                    itca = parser.parts_catalog.lookup(rec.part_id)
-                    if itca:
-                        desc = itca[0].description
-                if not desc:
-                    # Fall back to PartGroup185/Inventory199 description
-                    desc = callout_descs.get(rec.group_category.strip(), "")
-                if not desc:
-                    # Fall back to usage_notes / part_spec from the Cat466 record
-                    notes = rec.usage_notes.strip()
-                    spec = rec.part_spec.strip()
-                    desc = notes or spec
-                print(f"  {rec.group_category.strip():<10}{v_str:3s}{rec.part_id:<16} {desc}")
 
         matched = sum(1 for _, _, _, _, m in all_callouts if m)
         print()
