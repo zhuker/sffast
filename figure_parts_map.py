@@ -238,7 +238,7 @@ def main():
         # Source 1: PartGroupRecord185 (main part callouts with x,y)
         # Same callout code can appear multiple times with different coordinates
         print("\nLoading callout coordinates...")
-        coord_list = []  # [(code, x, y, description), ...]
+        coord_list = []  # [(code, x, y, description, part_number_or_None), ...]
         coord_codes = set()
         callout_descs = {}  # code -> description (from PartGroup185 / Inventory199, regardless of coords)
 
@@ -258,7 +258,7 @@ def main():
                             if code not in callout_descs:
                                 callout_descs[code] = r.desc_en
                             if r.figure_page.strip() == page_target and r.x > 0 and r.y > 0:
-                                coord_list.append((code, r.x, r.y, r.desc_en))
+                                coord_list.append((code, r.x, r.y, r.desc_en, None))
                                 coord_codes.add(code)
 
         pg_count = len(coord_list)
@@ -280,7 +280,7 @@ def main():
                             if code not in callout_descs:
                                 callout_descs[code] = r.name_en
                             if r.figure_page.strip() == page_target and r.x > 0 and r.y > 0:
-                                coord_list.append((code, r.x, r.y, r.name_en))
+                                coord_list.append((code, r.x, r.y, r.name_en, r.part_number.strip() or None))
                                 coord_codes.add(code)
 
         inv_count = len(coord_list) - pg_count
@@ -304,17 +304,22 @@ def main():
         print("-" * 110)
 
         all_callouts = []  # (px_x, px_y, callout, desc, matched)
-        for code, cx, cy, desc in sorted(coord_list, key=lambda t: (t[0], t[2])):
+        for code, cx, cy, desc, inv_part in sorted(coord_list, key=lambda t: (t[0], t[2])):
             px_x = math.floor(cx / 2)
             px_y = math.floor(cy / 2)
             part_info = part_lookup.get(code)
-            matched = code in part_lookup
             if part_info:
                 part_id, variant = part_info
                 v_str = f"*{variant}" if variant else ""
                 print(f"{code:<10}{v_str:3s}{part_id:<16} {px_x:5d} {px_y:5d}  {desc}")
+                matched = True
+            elif inv_part:
+                # Inventory199 has part number directly (fasteners not in Cat466 for this figure)
+                print(f"{code:<10}   {inv_part:<16} {px_x:5d} {px_y:5d}  {desc}")
+                matched = True
             else:
                 print(f"{code:<10}   {'--':16s} {px_x:5d} {px_y:5d}  {desc}")
+                matched = False
             all_callouts.append((px_x, px_y, code, desc, matched))
 
         # Cat466 parts with no coordinates (not drawn on this figure page)
