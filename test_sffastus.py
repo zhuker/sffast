@@ -54,7 +54,7 @@ from sffastus_parser import (
     VersionIndexRecord20,
     BodyModelRecord17,
 )
-from parsers_common import get_vehicle_by_vin
+from parsers_common import get_vehicle_by_vin, eval_spec_logic, date_in_range
 
 # Test data paths
 SFCDUS1_PATH = "SFCDUS1/sffastus"
@@ -2065,8 +2065,13 @@ class TestFigurePartsLookup(unittest.TestCase):
     BLOCK = 2048
 
     # MYSTI vehicle specs (from VINModelRecord + ModelSpec)
-    MY_DATE = '20040625'
+    MY_DATE = '200406'
     MY_DEST = 'U4'
+    VEHICLE_CODES = {
+        '257', '6MT', 'S', 'STI', '4W',
+        'EJ257', 'EJ25', 'MT', '4WD', 'U4', 'TG', '51E',
+        '205', '251', 'G11', 'SEDAN', 'Sedan',
+    }
 
     @staticmethod
     def _parse_blocks(f, start, num_blocks, record_size, parse_fn):
@@ -2120,92 +2125,6 @@ class TestFigurePartsLookup(unittest.TestCase):
                 return (parts[0], parts[1])
         return (part_code.strip(), '')
 
-    def _build_spec_matcher(self):
-        """Build spec_logic matching functions for MYSTI VIN."""
-        import fnmatch
-
-        with open(SFCDUS2_PATH, 'rb') as f:
-            specs = []
-            for blk in range(self.G11_MODEL_SPEC_BLOCKS):
-                off = self.G11_MODEL_SPEC_START + blk * self.BLOCK
-                specs.extend(parser.parse_model_spec_records_103(f, start_offset=off))
-
-        my_spec = [s for s in specs if s.trim_level == 'STI'
-                   and s.engine == '257' and s.transmission == '6MT']
-        self.assertTrue(len(my_spec) >= 1)
-        spec = my_spec[0]
-        self.assertEqual(spec.body_config, 'S')
-        self.assertEqual(spec.drivetrain, '4W')
-
-        props = {spec.engine, spec.transmission, spec.body_config,
-                 spec.trim_level, spec.drivetrain,
-                 'EJ257', 'EJ25', 'MT', '4WD', 'U4', 'TG', '51E',
-                 '205', '251', 'G11', 'SEDAN', 'Sedan'}
-
-        def matches_atom(atom):
-            atom = atom.strip()
-            if not atom:
-                return True
-            if '#' in atom:
-                return any(fnmatch.fnmatch(p, atom.replace('#', '?')) for p in props)
-            return atom in props
-
-        def matches_term(term):
-            term = term.strip()
-            if not term:
-                return True
-            negate = term.startswith('*')
-            if negate:
-                term = term[1:]
-            parts, depth, cur = [], 0, ''
-            for ch in term:
-                if ch == '(':
-                    depth += 1
-                elif ch == ')':
-                    depth -= 1
-                elif ch == '.' and depth == 0:
-                    parts.append(cur)
-                    cur = ''
-                    continue
-                cur += ch
-            if cur:
-                parts.append(cur)
-            result = True
-            for p in parts:
-                p = p.strip()
-                if p.startswith('(') and p.endswith(')'):
-                    result = result and any(matches_atom(o.strip()) for o in p[1:-1].split('+'))
-                else:
-                    result = result and matches_atom(p)
-            return (not result) if negate else result
-
-        def matches_spec_logic(sl):
-            if not sl:
-                return True
-            terms, depth, cur = [], 0, ''
-            for ch in sl:
-                if ch == '(':
-                    depth += 1
-                elif ch == ')':
-                    depth -= 1
-                elif ch == '+' and depth == 0:
-                    terms.append(cur)
-                    cur = ''
-                    continue
-                cur += ch
-            if cur:
-                terms.append(cur)
-            return any(matches_term(t) for t in terms)
-
-        return matches_spec_logic
-
-    def _date_ok(self, rec):
-        d = rec.date.strip()
-        if not d or len(d) < 16:
-            return True
-        s, e = d[:8], d[8:16]
-        return (not s.isdigit() or not e.isdigit()) or (s <= self.MY_DATE <= e)
-
     def _dest_ok(self, rec):
         dc = rec.destination_codes.strip()
         if not dc:
@@ -2224,8 +2143,6 @@ class TestFigurePartsLookup(unittest.TestCase):
         Returns:
             list of (callout_code, part_id) tuples
         """
-        matches_spec_logic = self._build_spec_matcher()
-
         # Get callouts from part_group_185
         with open(SFCDUS2_PATH, 'rb') as f:
             pg_records = self._parse_blocks(
@@ -2266,9 +2183,11 @@ class TestFigurePartsLookup(unittest.TestCase):
                     if v_prefix:
                         continue
 
-                if not matches_spec_logic(actual_spec):
+                if not eval_spec_logic(actual_spec, self.VEHICLE_CODES):
                     continue
-                if not self._date_ok(rec):
+                start_date = rec.date[:6] if len(rec.date) >= 6 else ''
+                end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
+                if not date_in_range(self.MY_DATE, start_date, end_date):
                     continue
                 if not self._dest_ok(rec):
                     continue
