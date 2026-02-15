@@ -252,7 +252,7 @@ def main():
         for rec in applicable_parts:
             if rec.figure_ref and len(rec.figure_ref) >= 4:
                 fig_code = rec.figure_ref[1:]
-                callout = rec.group_category.split()[0]
+                callout = rec.callout_code.split()[0]
                 cat466_by_fig_callout[(fig_code, callout)].append(rec)
 
         parts_catalog = parser.parts_catalog
@@ -278,11 +278,11 @@ def main():
             seen = set()
             unique = []
             for p in parts_list:
-                key = (p.group_category, p.part_id)
+                key = (p.callout_code, p.part_id)
                 if key not in seen:
                     seen.add(key)
                     unique.append(p)
-            unique.sort(key=lambda r: r.group_category)
+            unique.sort(key=lambda r: r.callout_code)
             return unique
 
         total_with_image = 0
@@ -329,7 +329,7 @@ def main():
                 cat_recs = cat466_by_fig_callout.get((fig, callout), [])
                 if cat_recs:
                     for p in dedup_parts(cat_recs):
-                        desc = lookup_desc(fig, p.group_category, p.part_id)
+                        desc = lookup_desc(fig, p.callout_code, p.part_id)
                         extra = []
                         if p.usage_notes:
                             extra.append(p.usage_notes)
@@ -338,7 +338,7 @@ def main():
                         extra_str = f"  [{', '.join(extra)}]" if extra else ""
                         v = part_variant.get(id(p), '')
                         vstr = f"*{v}" if v else "  "
-                        print(f"    {p.group_category:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
+                        print(f"    {p.callout_code:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
                         pg_count += 1
                 else:
                     print(f"    {callout:8s}   {'--':14s} {pg_desc}")

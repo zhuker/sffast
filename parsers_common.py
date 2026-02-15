@@ -1,11 +1,13 @@
 """Shared constants, parser creation, and VIN resolution for FAST2 tools."""
 
+from ast import List
 import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 
 from sffastus_parser import (
+    CatalogApplicabilityRecord466,
     SffastusBlockParser,
     SffastusHeader,
     ModelIndexRecord288,
@@ -289,7 +291,7 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
                        codes=codes, vehicle_date=vehicle_date)
 
 
-def filter_cat466_parts(parts, vehicle: Vehicle) -> list:
+def filter_cat466_parts(parts: List[CatalogApplicabilityRecord466], vehicle: Vehicle) -> List[tuple[CatalogApplicabilityRecord466, str]]:
     """Filter CatalogApplicabilityRecord466 records by vehicle spec and date.
 
     Returns list of (record, variant) tuples where variant is '' or 'A'-'H'.

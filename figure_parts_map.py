@@ -173,11 +173,11 @@ def main():
         seen = set()
         unique_parts = []
         for rec, variant in fig_parts:
-            key = (rec.group_category, rec.part_id)
+            key = (rec.callout_code, rec.part_id)
             if key not in seen:
                 seen.add(key)
                 unique_parts.append((rec, variant))
-        unique_parts.sort(key=lambda x: x[0].group_category)
+        unique_parts.sort(key=lambda x: x[0].callout_code)
 
         print(f"  Applicable parts for fig {fig_target}-{page_target}: {len(unique_parts)}")
 
@@ -213,7 +213,7 @@ def main():
         # --- Build part number lookup from Cat466 (callout -> part_id) ---
         part_lookup = {}  # callout_code -> (part_id, variant)
         for rec, variant in unique_parts:
-            callout = rec.group_category.strip()
+            callout = rec.callout_code.strip()
             if callout not in part_lookup:
                 part_lookup[callout] = (rec.part_id, variant)
 
