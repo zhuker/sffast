@@ -25,47 +25,25 @@ from PIL import Image, ImageDraw
 from wand.image import Image as WandImage
 
 from sffastus_parser import (
-    SffastusBlockParser,
-    SffastusHeader,
     CatalogApplicabilityRecord466,
     FIGIllustrationPage89,
     FigureIndexRecord22,
     InventoryRecord199,
-    ModelSpecRecord103,
     PartGroupRecord185,
-    parse_figname_txt,
-    parse_itca_data,
-    ItcaPartsCatalog,
     is_valid_subaru_vin,
-    parse_model_index,
     iter_model_blocks,
 )
 
-from vin_figures import (
-    lookup_vin,
-    body_model_matches_applied,
-    get_vehicle_codes,
+from parsers_common import (
+    SFCDUS2_PATH,
+    create_parser,
+    resolve_vin,
     eval_spec_logic,
     date_in_range,
 )
 
-SFCDUS2_PATH = Path("SFCDUS2/sffastus")
-FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
-ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 640
-
-
-def create_parser():
-    figure_codes = set()
-    if Path(FIGNAME_PATH).exists():
-        figure_codes = {r.figure_code for r in parse_figname_txt(FIGNAME_PATH)}
-    itca_records = []
-    for itca_path in ITCA_DATA:
-        if Path(itca_path).exists():
-            itca_records.extend(parse_itca_data(itca_path))
-    parts_catalog = ItcaPartsCatalog(itca_records)
-    return SffastusBlockParser(figure_codes=figure_codes, parts_catalog=parts_catalog)
 
 
 def make_g4_tiff(raw_data, width, height):
@@ -121,45 +99,20 @@ def main():
     parser = create_parser()
 
     with open(SFCDUS2_PATH, 'rb') as f:
-        # --- VIN lookup ---
-        print("Looking up VIN...")
-        vin_rec = lookup_vin(f, parser, vin)
-        if not vin_rec:
-            print(f"VIN {vin} not found")
+        # --- VIN resolution ---
+        print("Resolving VIN...")
+        try:
+            vin_rec, model_rec, spec, codes, vehicle_date = resolve_vin(f, parser, vin)
+        except LookupError as e:
+            print(str(e))
             sys.exit(1)
 
         model_code = vin_rec.model_code
-        vehicle_date = vin_rec.date1[:6]
         print(f"  Model: {model_code}  Body: {vin_rec.body_model}  Date: {vehicle_date}")
-
-        # --- Parse model index (direct seek, no full scan) ---
-        print("Loading model index...")
-        f.seek(0)
-        header = SffastusHeader.parse(f.read(50))
-        models = parse_model_index(f, header)
-        model_rec = models.get(model_code)
-        if not model_rec:
-            print(f"  Model {model_code} not found in index")
-            sys.exit(1)
-        print(f"  Found {len(models)} models in index")
-
-        # --- Model spec (direct seek) ---
-        spec = None
-        for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
-            recs = parser.parse_model_spec_records_103(f, bo)
-            for s in recs:
-                if body_model_matches_applied(vin_rec.body_model, s.applied_model):
-                    spec = s
-                    break
-            if spec:
-                break
-
         if spec:
-            codes = get_vehicle_codes(spec)
             print(f"  Spec: {spec.body_config}/{spec.engine}/{spec.transmission}/{spec.trim_level}")
             print(f"  Codes: {sorted(codes)}")
         else:
-            codes = set()
             print("  Warning: no model spec found")
         print()
 

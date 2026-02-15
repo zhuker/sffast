@@ -13,269 +13,30 @@ Usage: .venv/bin/python vin_figures.py [VIN]
 """
 
 import re
-import struct
 import sys
 from collections import defaultdict
-from pathlib import Path
 
 from sffastus_parser import (
-    SffastusBlockParser,
-    SffastusHeader,
     CatalogApplicabilityRecord466,
     EngineSpecRecord230,
     FIGGroupCategoryRecord184,
     FIGIllustrationPage89,
     FIGIllustrationRecord183,
     InventoryRecord199,
-    ModelSpecRecord103,
     PartGroupRecord185,
-    VINModelRecord,
-    decode_block_pointer,
-    parse_figname_txt,
-    parse_itca_data,
-    ItcaPartsCatalog,
     is_valid_subaru_vin,
-    parse_model_index,
+    parse_figname_txt,
     iter_model_blocks,
 )
 
-SFCDUS2_PATH = Path("SFCDUS2/sffastus")
-FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
-ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
-BLOCK_SIZE = 2048
-
-
-# --- Spec Logic Expression Evaluator ---
-
-def tokenize_spec(expr: str) -> list:
-    """Tokenize a spec logic expression into tokens."""
-    tokens = []
-    i = 0
-    while i < len(expr):
-        ch = expr[i]
-        if ch in ' \t':
-            i += 1
-        elif ch in '()+.*':
-            tokens.append(ch)
-            i += 1
-        else:
-            # Alphanumeric token (may contain #, /)
-            j = i
-            while j < len(expr) and expr[j] not in '()+. \t':
-                if expr[j] == '*' and j > i:
-                    break  # * is NOT operator, not part of token
-                j += 1
-            tokens.append(expr[i:j])
-            i = j
-    return tokens
-
-
-def match_code(pattern: str, codes: set) -> bool:
-    """Check if a pattern matches any code in the set. '#' is zero-or-one-char wildcard."""
-    if pattern == 'ALL':
-        return True
-    if '#' in pattern:
-        regex = '^' + re.escape(pattern).replace(r'\#', '.?') + '$'
-        return any(re.match(regex, code) for code in codes)
-    return pattern in codes
-
-
-def eval_spec_logic(expr: str, codes: set) -> bool:
-    """Evaluate a spec logic expression against a set of vehicle codes.
-
-    Syntax:
-        + separates OR alternatives
-        . separates AND requirements
-        * negation (NOT)
-        # single-char wildcard
-        () grouping
-        ALL matches everything
-    """
-    if not expr or expr.isspace():
-        return True  # empty = universal
-
-    # Strip trailing part numbers from "ALL    partnum" patterns
-    # and from other expressions that have embedded part numbers
-    # Part numbers are 40+ chars into the applicable_model field
-    # Just take the spec expression part (strip trailing part-number-like data)
-    expr = expr.strip()
-
-    tokens = tokenize_spec(expr)
-    if not tokens:
-        return True
-
-    pos = [0]  # mutable index
-
-    def peek():
-        return tokens[pos[0]] if pos[0] < len(tokens) else None
-
-    def consume(expected=None):
-        tok = tokens[pos[0]] if pos[0] < len(tokens) else None
-        if expected and tok != expected:
-            return None
-        pos[0] += 1
-        return tok
-
-    def parse_expr():
-        """expr = and_expr ('+' and_expr)*"""
-        result = parse_and_expr()
-        while peek() == '+':
-            consume('+')
-            right = parse_and_expr()
-            result = result or right
-        return result
-
-    def parse_and_expr():
-        """and_expr = atom ('.' atom)*"""
-        result = parse_atom()
-        while peek() == '.':
-            consume('.')
-            right = parse_atom()
-            result = result and right
-        return result
-
-    def parse_atom():
-        """atom = '(' expr ')' | '*' atom | TERM"""
-        tok = peek()
-        if tok == '(':
-            consume('(')
-            result = parse_expr()
-            consume(')')
-            return result
-        elif tok == '*':
-            consume('*')
-            return not parse_atom()
-        elif tok is not None and tok not in '()+.*':
-            consume()
-            return match_code(tok, codes)
-        return False
-
-    try:
-        result = parse_expr()
-        return result
-    except (IndexError, TypeError):
-        # Parse error - be permissive, include the record
-        return True
-
-
-def date_in_range(vehicle_yyyymm: str, start_yyyymm: str, end_yyyymm: str) -> bool:
-    """Check if vehicle production date falls within the spec date range."""
-    if start_yyyymm and vehicle_yyyymm < start_yyyymm:
-        return False
-    if end_yyyymm and vehicle_yyyymm > end_yyyymm:
-        return False
-    return True
-
-
-# --- VIN Lookup ---
-
-def lookup_vin(f, parser, vin: str) -> VINModelRecord | None:
-    """Look up a VIN using the range index -> detail record."""
-    f.seek(0)
-    header = SffastusHeader.parse(f.read(50))
-
-    # Determine which VIN section to search
-    if vin.startswith('4S3') or vin.startswith('4S4'):
-        vin_offset = header.us_vin_start_block * BLOCK_SIZE
-        vin_blocks = header.us_vin_count
-    else:
-        vin_offset = header.jdm_vin_start_block * BLOCK_SIZE
-        vin_blocks = header.jdm_vin_count
-
-    # Search VIN range blocks
-    for bi in range(vin_blocks):
-        bo = vin_offset + bi * BLOCK_SIZE
-        ranges = parser.parse_vin_blocks(f, start_offset=bo, max_records=60)
-        if not ranges:
-            continue
-
-        if ranges[0].vin_start > vin:
-            break
-        if ranges[-1].vin_end < vin:
-            continue
-
-        for r in ranges:
-            if r.vin_start <= vin <= r.vin_end:
-                ptr_bytes = struct.pack('<HH', r.section, r.index)
-                bp = decode_block_pointer(ptr_bytes)
-                detail_offset = bp * BLOCK_SIZE
-                detail_recs = parser.parse_vin_model_records(f, start_offset=detail_offset)
-                for dr in detail_recs:
-                    if dr.vin == vin:
-                        return dr
-                return None
-
-    return None
-
-
-def body_model_matches_applied(body_model: str, applied_model: str) -> bool:
-    """Check if a 7-char body model matches an applied model like 'GDF-YEH'.
-
-    Body model GDFDYEH = GDF + D + YEH (7 chars)
-    Applied model GDF-YEH = GDF + '-' + YEH
-    Character 3 of body model is dropped, replaced with dash in applied model.
-    """
-    if '-' in applied_model:
-        prefix, suffix = applied_model.split('-', 1)
-        return body_model[:len(prefix)] == prefix and body_model[len(prefix)+1:] == suffix
-    # No dash - try direct match
-    return applied_model.replace(' ', '') == body_model
-
-
-def find_model_spec(f, parser, ranges, model_code: str, body_model: str) -> ModelSpecRecord103 | None:
-    """Find the ModelSpecRecord103 matching the body model."""
-    ms_ranges = [r for r in ranges if r[3] == 'model_spec_103']
-    for rs, re_, rc, rt in ms_ranges:
-        f.seek(rs)
-        test = f.read(6).decode('cp437', errors='replace').strip()
-        if test != model_code:
-            continue
-
-        specs = []
-        for bi in range(rc):
-            bo = rs + bi * BLOCK_SIZE
-            recs = parser.parse_model_spec_records_103(f, bo)
-            specs.extend(recs)
-
-        for s in specs:
-            if body_model_matches_applied(body_model, s.applied_model):
-                return s
-
-    return None
-
-
-def get_vehicle_codes(spec: ModelSpecRecord103) -> set:
-    """Extract the set of spec codes from a model specification record."""
-    codes = set()
-
-    # Body config
-    if spec.body_config:
-        codes.add(spec.body_config)
-
-    # Engine code (e.g., "257", "EJ257", "205")
-    if spec.engine:
-        codes.add(spec.engine)
-        # Also add short form if engine is like "EJ257"
-        if spec.engine.startswith('EJ') and len(spec.engine) >= 5:
-            codes.add(spec.engine[2:])
-
-    # Transmission
-    if spec.transmission:
-        codes.add(spec.transmission)
-
-    # Trim level
-    if spec.trim_level:
-        codes.add(spec.trim_level)
-
-    # Drivetrain
-    if spec.drivetrain:
-        codes.add(spec.drivetrain)
-
-    # Spec option
-    if spec.spec_option:
-        codes.add(spec.spec_option)
-
-    return codes
+from parsers_common import (
+    SFCDUS2_PATH,
+    FIGNAME_PATH,
+    create_parser,
+    resolve_vin,
+    eval_spec_logic,
+    date_in_range,
+)
 
 
 def main():
@@ -288,25 +49,15 @@ def main():
     print(f"VIN: {vin}")
     print()
 
-    # Create parser
-    figure_codes = set()
-    if Path(FIGNAME_PATH).exists():
-        figure_codes = {r.figure_code for r in parse_figname_txt(FIGNAME_PATH)}
-
-    itca_records = []
-    for itca_path in ITCA_DATA:
-        if Path(itca_path).exists():
-            itca_records.extend(parse_itca_data(itca_path))
-    parts_catalog = ItcaPartsCatalog(itca_records)
-
-    parser = SffastusBlockParser(figure_codes=figure_codes, parts_catalog=parts_catalog)
+    parser = create_parser()
 
     with open(SFCDUS2_PATH, 'rb') as f:
-        # Step 1: Look up VIN
-        print("Looking up VIN...")
-        vin_rec = lookup_vin(f, parser, vin)
-        if not vin_rec:
-            print(f"VIN {vin} not found in database")
+        # Steps 1-3: VIN lookup + model index + model spec
+        print("Resolving VIN...")
+        try:
+            vin_rec, model_rec, spec, codes, vehicle_date = resolve_vin(f, parser, vin)
+        except LookupError as e:
+            print(str(e))
             sys.exit(1)
 
         print(f"  Model:       {vin_rec.model_code}")
@@ -316,47 +67,19 @@ def main():
         print(f"  Option:      {vin_rec.option_code}")
         print(f"  Destination: {vin_rec.destination_code}")
         print(f"  Date:        {vin_rec.date1}")
-        print()
-
-        # Step 2: Parse model index (direct seek, no full scan)
-        print("Loading model index...")
-        f.seek(0)
-        header = SffastusHeader.parse(f.read(50))
-        models = parse_model_index(f, header)
-        model_rec = models.get(vin_rec.model_code)
-        if not model_rec:
-            print(f"  Model {vin_rec.model_code} not found in index")
-            sys.exit(1)
-        print(f"  Found {len(models)} models in index")
-
-        # Step 3: Find model spec for body model
-        print("Finding model spec...")
-        spec = None
-        for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
-            for s in parser.parse_model_spec_records_103(f, bo):
-                if body_model_matches_applied(vin_rec.body_model, s.applied_model):
-                    spec = s
-                    break
-            if spec:
-                break
-        if not spec:
-            print(f"Warning: No model spec found for body model {vin_rec.body_model}")
-            print("         Using VIN record fields as fallback")
-            # Build codes from VIN record fields
-            codes = set()
-        else:
+        if spec:
             print(f"  Applied Model: {spec.applied_model}")
             print(f"  Body:          {spec.body_config}")
             print(f"  Engine:        {spec.engine}")
             print(f"  Transmission:  {spec.transmission}")
             print(f"  Trim:          {spec.trim_level}")
             print(f"  Drivetrain:    {spec.drivetrain}")
-            codes = get_vehicle_codes(spec)
             print(f"  Codes:         {sorted(codes)}")
+        else:
+            print("  Warning: No model spec found")
         print()
 
         # Vehicle production date in YYYYMM format
-        vehicle_date = vin_rec.date1[:6]  # e.g., "200406"
         print(f"Production date: {vehicle_date}")
         print()
 
@@ -544,6 +267,8 @@ def main():
                 callout = rec.group_category.split()[0]
                 cat466_by_fig_callout[(fig_code, callout)].append(rec)
 
+        parts_catalog = parser.parts_catalog
+
         def lookup_desc(fig, group_category, part_id):
             # Primary: PartGroupRecord185 keyed by (figure, callout code)
             code = group_category.split()[0]
@@ -576,7 +301,7 @@ def main():
         total_without_image = 0
         total_parts = 0
 
-        # Group figures by category (184 → 183 hierarchy)
+        # Group figures by category (184 -> 183 hierarchy)
         category_figures = defaultdict(list)  # group_code -> [(fig, page), ...]
         uncategorized = []
 
