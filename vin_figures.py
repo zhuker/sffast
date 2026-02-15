@@ -26,6 +26,7 @@ from sffastus_parser import (
     FIGGroupCategoryRecord184,
     FIGIllustrationPage89,
     FIGIllustrationRecord183,
+    InventoryRecord199,
     ModelSpecRecord103,
     VINModelRecord,
     decode_block_pointer,
@@ -490,6 +491,30 @@ def main():
                     part_desc_lookup[key] = r.desc_en
         print(f"  Part descriptions loaded: {len(part_desc_lookup)}")
 
+        # Step 6.55: Load inventory records (InventoryRecord199) - fasteners/hardware
+        print("Loading inventory records...")
+        inv_ranges = [r for r in ranges if r[3] == InventoryRecord199.ID]
+        all_inv_records = []
+        for rs, re_, rc, rt in inv_ranges:
+            f.seek(rs)
+            test = f.read(6).decode('cp437', errors='replace').strip()
+            if test != vin_rec.model_code:
+                continue
+            for bi in range(rc):
+                bo = rs + bi * BLOCK_SIZE
+                recs = parser.parse_inventory_records_199(f, bo)
+                all_inv_records.extend(recs)
+
+        # Group inventory by (figure, page)
+        inv_by_fig_page = defaultdict(list)  # (fig, page) -> [InventoryRecord199, ...]
+        for r in all_inv_records:
+            if r.model_code == vin_rec.model_code:
+                fig = r.figure.strip()
+                page = r.figure_page.strip()
+                if fig and page and r.part_number.strip():
+                    inv_by_fig_page[(fig, page)].append(r)
+        print(f"  Inventory records loaded: {len(all_inv_records)}")
+
         # Step 6.6: Load catalog applicability records (parts) for this model
         print("Loading parts catalog records...")
         cat_ranges = [r for r in ranges if r[3] == 'catalog_applicability_466']
@@ -554,16 +579,23 @@ def main():
         for rec in applicable:
             by_fig_page[(rec.figure, rec.figure_page)].append(rec)
 
-        # Group parts by (figure, page) — parts with empty page are figure-wide
-        parts_by_fig_page = defaultdict(list)
-        parts_by_fig_all = defaultdict(list)  # parts with no page (apply to all pages)
+        # Build PG185 callout positions per (figure, page) - one entry per callout location
+        pg_by_fig_page = defaultdict(list)  # (fig, page) -> [(callout_code, desc), ...]
+        for r in all_pg_records:
+            if r.model_code == vin_rec.model_code:
+                code = r.part_code.split()[0]
+                fig = r.figure.strip()
+                page = r.figure_page.strip()
+                if code and fig and page:
+                    pg_by_fig_page[(fig, page)].append((code, r.desc_en))
+
+        # Build Cat466 part lookup per (figure, callout_code)
+        cat466_by_fig_callout = defaultdict(list)  # (fig, callout) -> [Cat466 rec, ...]
         for rec in applicable_parts:
             if rec.figure_ref and len(rec.figure_ref) >= 4:
-                fig_code = rec.figure_ref[1:]  # "A081" -> "081"
-                if rec.figure_page.strip():
-                    parts_by_fig_page[(fig_code, rec.figure_page)].append(rec)
-                else:
-                    parts_by_fig_all[fig_code].append(rec)
+                fig_code = rec.figure_ref[1:]
+                callout = rec.group_category.split()[0]
+                cat466_by_fig_callout[(fig_code, callout)].append(rec)
 
         def lookup_desc(fig, group_category, part_id):
             # Primary: PartGroupRecord185 keyed by (figure, callout code)
@@ -628,23 +660,43 @@ def main():
             label_str = f"  ({label})" if label else ""
             print(f"  FIG {fig}-{page} {fig_desc}{label_str}{img_flag}")
 
-            # Merge page-specific parts + figure-wide parts
-            combined = (parts_by_fig_page.get((fig, page), [])
-                        + parts_by_fig_all.get(fig, []))
-            unique_parts = dedup_parts(combined)
+            # Iterate over PG185 callout positions (one per location on figure)
+            pg_positions = pg_by_fig_page.get((fig, page), [])
+            pg_callout_codes = set()
+            pg_count = 0
+            for callout, pg_desc in sorted(pg_positions):
+                pg_callout_codes.add(callout)
+                cat_recs = cat466_by_fig_callout.get((fig, callout), [])
+                if cat_recs:
+                    for p in dedup_parts(cat_recs):
+                        desc = lookup_desc(fig, p.group_category, p.part_id)
+                        extra = []
+                        if p.usage_notes:
+                            extra.append(p.usage_notes)
+                        if p.part_spec:
+                            extra.append(p.part_spec)
+                        extra_str = f"  [{', '.join(extra)}]" if extra else ""
+                        v = part_variant.get(id(p), '')
+                        vstr = f"*{v}" if v else "  "
+                        print(f"    {p.group_category:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
+                        pg_count += 1
+                else:
+                    print(f"    {callout:8s}   {'--':14s} {pg_desc}")
+                    pg_count += 1
 
-            for p in unique_parts:
-                desc = lookup_desc(fig, p.group_category, p.part_id)
-                extra = []
-                if p.usage_notes:
-                    extra.append(p.usage_notes)
-                if p.part_spec:
-                    extra.append(p.part_spec)
-                extra_str = f"  [{', '.join(extra)}]" if extra else ""
-                v = part_variant.get(id(p), '')
-                vstr = f"*{v}" if v else "  "
-                print(f"    {p.group_category:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
-            total_parts += len(unique_parts)
+            # Add inventory (fastener/hardware) parts not already shown via PG185
+            inv_recs = inv_by_fig_page.get((fig, page), [])
+            inv_count = 0
+            for r in sorted(inv_recs, key=lambda r: r.part_code):
+                code = r.part_code.strip()
+                pn = r.part_number.strip()
+                if not code or not pn:
+                    continue
+                if code in pg_callout_codes:
+                    continue
+                print(f"    {code:8s}   {pn:14s} {r.name_en}")
+                inv_count += 1
+            total_parts += pg_count + inv_count
 
         for cat_code in sorted_cats:
             cat184 = fig184_lookup.get(cat_code)
