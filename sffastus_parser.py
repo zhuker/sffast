@@ -474,6 +474,7 @@ class SffastusHeader:
 
 @dataclass
 class VINRecord:
+    RECORD_SIZE = 38
     """Represents a VIN range record from sffastus (38 bytes)
 
     Used for VIN range lookup - maps VIN ranges to section pointers.
@@ -558,6 +559,7 @@ class VINModelRecord:
 
 @dataclass
 class BodyModelRecord17:
+    RECORD_SIZE = 17
     """Represents a 17-byte body model mapping record from sffastus
 
     Maps body model codes (7-char, e.g., "BD6AY1G") to model codes (e.g., "B11")
@@ -591,6 +593,7 @@ class BodyModelRecord17:
 
 @dataclass
 class BodyModelRangeRecord18:
+    RECORD_SIZE = 18
     """Represents an 18-byte body model range index record from sffastus.
 
     Located at the "transition block" between model index and JDM VIN section.
@@ -629,6 +632,7 @@ class BodyModelRangeRecord18:
 @dataclass
 class MultilingualPartRecord192:
     ID = 'multilingual_part_192'
+    RECORD_SIZE = 192
     """Represents a multilingual part name record from sffastus (192 bytes)
 
     Contains part names in 4 languages: English, German, French, Spanish.
@@ -682,6 +686,7 @@ class MultilingualPartRecord192:
 @dataclass
 class CodeIndexRecord33:
     ID = 'code_index_record_33'
+    RECORD_SIZE = 33
     """Represents a code/ID index record from sffastus (33 bytes)
 
     Located at 0x0DE42800+
@@ -823,6 +828,7 @@ class ItcaPartsCatalog:
 @dataclass
 class CatalogApplicabilityRecord466:
     ID = 'catalog_applicability_466'
+    RECORD_SIZE = 466
     """Represents a 466-byte catalog applicability record from sffastus.
 
     Structure (466 bytes total):
@@ -925,6 +931,7 @@ class CatalogApplicabilityRecord466:
 
 @dataclass
 class GlossaryRecord28:
+    RECORD_SIZE = 28
     """Represents a glossary/terminology record from sffastus (28 bytes)
 
     Located at 0x0DE23800+
@@ -964,6 +971,7 @@ class GlossaryRecord28:
 @dataclass
 class ColorRecord91:
     ID = 'color_record_91'
+    RECORD_SIZE = 91
     """Represents a color/paint code record from sffastus (91 bytes)
 
     Located at 0x0DE1F800+
@@ -1009,6 +1017,7 @@ class ColorRecord91:
 @dataclass
 class FIGIllustrationRecord183:
     ID = 'fig_illustration_183'
+    RECORD_SIZE = 183
     """Represents a FIG illustration description record from sffastus (183 bytes)
 
     Located at 0x0DF9B000+
@@ -1060,6 +1069,7 @@ class FIGIllustrationRecord183:
 
 @dataclass
 class EngineSpecRecord230:
+    RECORD_SIZE = 230
     """Represents a 230-byte engine specification record from sffastus
 
     Located at 0x0DFB1000+
@@ -1182,6 +1192,7 @@ class FIGIllustrationPage89:
 @dataclass
 class InventoryRecord199:
     ID = 'inventory_199'
+    RECORD_SIZE = 199
     """Represents a 199-byte inventory/part name record from sffastus
 
     Located at 0x0E147000+ (B11), 0x17451000+ (G11), etc.
@@ -1245,6 +1256,7 @@ class InventoryRecord199:
 @dataclass
 class MultilingualPartRecord182:
     ID = 'multilingual_part_182'
+    RECORD_SIZE = 182
     """Represents a 182-byte multilingual part name record from sffastus
 
     Located at 0x0E73B000+
@@ -1295,6 +1307,7 @@ class MultilingualPartRecord182:
 @dataclass
 class PartGroupRecord185:
     ID = 'part_group_185'
+    RECORD_SIZE = 185
     """Represents a 185-byte part group description record from sffastus
 
     Located at 0x0DFD3000+
@@ -1353,6 +1366,7 @@ class PartGroupRecord185:
 @dataclass
 class VariantGlossaryRecord81:
     ID = 'variant_glossary_81'
+    RECORD_SIZE = 81
     """Represents a variant glossary record from sffastus (81 bytes)
 
     Located at 0x0E6E9000+
@@ -1387,6 +1401,7 @@ class VariantGlossaryRecord81:
 
 @dataclass
 class CategoryIndexRecord20:
+    RECORD_SIZE = 20
     """20-byte category index record (text variant)
 
     One block per model code (10 blocks in SFCDUS2).
@@ -1421,6 +1436,7 @@ class CategoryIndexRecord20:
 
 @dataclass
 class VersionIndexRecord20:
+    RECORD_SIZE = 20
     """20-byte version index record (binary variant)
 
     One block per model code (10 blocks in SFCDUS2).
@@ -1455,6 +1471,7 @@ class VersionIndexRecord20:
 
 @dataclass
 class ModelYearRecord44:
+    RECORD_SIZE = 44
     """Represents a 44-byte model year version record from sffastus
 
     One block per model code (10 blocks in SFCDUS2).
@@ -1495,6 +1512,7 @@ class ModelYearRecord44:
 
 @dataclass
 class FigureIndexRecord22:
+    RECORD_SIZE = 22
     """Represents a 22-byte figure cross-reference record from sffastus
 
     Located at 0x0E75D800+ (B11), 0x17BA3800+ (G11), etc.
@@ -1589,6 +1607,7 @@ class PartRangeIndex34:
 @dataclass
 class SpecMappingRecord22:
     ID = 'spec_mapping_22'
+    RECORD_SIZE = 22
     """Represents a 22-byte spec mapping record from sffastus
 
     Located at 0x17BA7000+
@@ -1621,6 +1640,7 @@ class SpecMappingRecord22:
 
 @dataclass
 class FIGGroupCategoryRecord184:
+    RECORD_SIZE = 184
     """Represents a FIG group category description record from sffastus (184 bytes)
 
     Located at 0x0DF9A000+
@@ -1718,6 +1738,7 @@ class FIGGroupCategoryRecord184:
 @dataclass
 class ModelSpecRecord103:
     ID = 'model_spec_103'
+    RECORD_SIZE = 103
     """
     Parsed representation of a Subaru Applied Model string.
     Handles variable-length fields found in B11, B13, and G11 chassis codes.
@@ -1788,6 +1809,7 @@ class ModelSpecRecord103:
 
 @dataclass
 class PartRangeRecord24:
+    RECORD_SIZE = 24
     """Represents a part number range record from sffastus (24 bytes)
 
     Located at 0x0CD42800+
@@ -1826,6 +1848,7 @@ class PartRangeRecord24:
 
 @dataclass
 class ModelIndexRecord288:
+    RECORD_SIZE = 288
     """Represents a model index record from sffastus (288 bytes)
 
     Located at 0x13000+
@@ -1895,6 +1918,7 @@ class ModelIndexRecord288:
 @dataclass
 class MultilingualPartRecord167:
     ID = 'multilingual_part_167'
+    RECORD_SIZE = 167
     """Represents a multilingual part name record from sffastus (167 bytes)
 
     Located at 0x0CD41000+
@@ -1932,6 +1956,7 @@ class MultilingualPartRecord167:
 
 @dataclass
 class MultilingualPartRecord180:
+    RECORD_SIZE = 180
     """Represents a multilingual part name record from sffastus (180 bytes)
 
     Contains part names in 4 languages: English, German, French, Spanish.
@@ -2391,12 +2416,11 @@ class SffastusBlockParser:
 
         Returns list of BodyModelRangeRecord18.
         """
-        RECORD_SIZE = 18
         records = []
-        for i in range(2048 // RECORD_SIZE):
-            start = i * RECORD_SIZE
-            rec = data[start:start + RECORD_SIZE]
-            if len(rec) < RECORD_SIZE:
+        for i in range(2048 // BodyModelRangeRecord18.RECORD_SIZE):
+            start = i * BodyModelRangeRecord18.RECORD_SIZE
+            rec = data[start:start + BodyModelRangeRecord18.RECORD_SIZE]
+            if len(rec) < BodyModelRangeRecord18.RECORD_SIZE:
                 break
             if rec[0] == 0x2A or rec[0] == 0x00:
                 break
@@ -2753,43 +2777,51 @@ class SffastusBlockParser:
 
     def parse_code_index_records_33(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[CodeIndexRecord33]:
-        return self._parse_fixed_records(f, start_offset, 33, CodeIndexRecord33.parse_33, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, CodeIndexRecord33.RECORD_SIZE, CodeIndexRecord33.parse_33,
+                                         max_records, verbose)
 
     def parse_glossary_records_28(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                   verbose: bool = False) -> List[GlossaryRecord28]:
-        return self._parse_fixed_records(f, start_offset, 28, GlossaryRecord28.parse_28, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, GlossaryRecord28.RECORD_SIZE, GlossaryRecord28.parse_28,
+                                         max_records, verbose)
 
     def parse_color_records_91(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ColorRecord91]:
-        return self._parse_fixed_records(f, start_offset, 91, ColorRecord91.parse_91, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, ColorRecord91.RECORD_SIZE, ColorRecord91.parse_91,
+                                         max_records, verbose)
 
     def parse_part_group_records_185(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[PartGroupRecord185]:
-        return self._parse_fixed_records(f, start_offset, 185, PartGroupRecord185.parse_185, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, PartGroupRecord185.RECORD_SIZE, PartGroupRecord185.parse_185,
+                                         max_records, verbose)
 
     def parse_variant_glossary_records_81(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                           verbose: bool = False) -> List[VariantGlossaryRecord81]:
-        return self._parse_fixed_records(f, start_offset, 81, VariantGlossaryRecord81.parse_81, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, VariantGlossaryRecord81.RECORD_SIZE,
+                                         VariantGlossaryRecord81.parse_81, max_records, verbose)
 
     def parse_multilingual_part_records_182(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord182]:
-        return self._parse_fixed_records(f, start_offset, 182, MultilingualPartRecord182.parse_182, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord182.RECORD_SIZE,
+                                         MultilingualPartRecord182.parse_182, max_records, verbose)
 
     def parse_inventory_records_199(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[InventoryRecord199]:
-        return self._parse_fixed_records(f, start_offset, 199, InventoryRecord199.parse_199, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, InventoryRecord199.RECORD_SIZE, InventoryRecord199.parse_199,
+                                         max_records, verbose)
 
     def parse_engine_spec_records_230(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[EngineSpecRecord230]:
-        return self._parse_fixed_records(f, start_offset, 230, EngineSpecRecord230.parse_230, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, EngineSpecRecord230.RECORD_SIZE,
+                                         EngineSpecRecord230.parse_230, max_records, verbose)
 
     def parse_catalog_applicability_records_466(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                 verbose: bool = False) -> List[CatalogApplicabilityRecord466]:
-        return self._parse_fixed_records(f, start_offset, 466, CatalogApplicabilityRecord466.parse_466, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, CatalogApplicabilityRecord466.RECORD_SIZE,
+                                         CatalogApplicabilityRecord466.parse_466, max_records, verbose)
 
     def parse_body_model_records_17(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[BodyModelRecord17]:
-        RECORD_SIZE = 17
         records = []
 
         f.seek(start_offset)
@@ -2800,9 +2832,9 @@ class SffastusBlockParser:
                 break
 
             offset = f.tell()
-            data = f.read(RECORD_SIZE)
+            data = f.read(BodyModelRecord17.RECORD_SIZE)
 
-            if len(data) < RECORD_SIZE:
+            if len(data) < BodyModelRecord17.RECORD_SIZE:
                 break
 
             # End marker: asterisks or all zeros
@@ -2825,7 +2857,8 @@ class SffastusBlockParser:
 
     def parse_model_year_records_44(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[ModelYearRecord44]:
-        return self._parse_fixed_records(f, start_offset, 44, ModelYearRecord44.parse_44, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, ModelYearRecord44.RECORD_SIZE, ModelYearRecord44.parse_44,
+                                         max_records, verbose)
 
     @staticmethod
     def _validate_20(data: bytes) -> bool:
@@ -2835,12 +2868,14 @@ class SffastusBlockParser:
 
     def parse_category_index_records_20(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                         verbose: bool = False) -> List[CategoryIndexRecord20]:
-        return self._parse_fixed_records(f, start_offset, 20, CategoryIndexRecord20.parse_20, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, CategoryIndexRecord20.RECORD_SIZE,
+                                         CategoryIndexRecord20.parse_20, max_records, verbose,
                                          validator=self._validate_20)
 
     def parse_version_index_records_20(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                        verbose: bool = False) -> List[VersionIndexRecord20]:
-        return self._parse_fixed_records(f, start_offset, 20, VersionIndexRecord20.parse_20, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, VersionIndexRecord20.RECORD_SIZE,
+                                         VersionIndexRecord20.parse_20, max_records, verbose,
                                          validator=self._validate_20)
 
     def parse_part_index_records_34(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
@@ -2860,11 +2895,13 @@ class SffastusBlockParser:
 
     def parse_figure_index_records_22(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[FigureIndexRecord22]:
-        return self._parse_fixed_records(f, start_offset, 22, FigureIndexRecord22.parse_22, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, FigureIndexRecord22.RECORD_SIZE, FigureIndexRecord22.parse_22,
+                                         max_records, verbose)
 
     def parse_spec_mapping_records_22(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[SpecMappingRecord22]:
-        return self._parse_fixed_records(f, start_offset, 22, SpecMappingRecord22.parse_22, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, SpecMappingRecord22.RECORD_SIZE, SpecMappingRecord22.parse_22,
+                                         max_records, verbose)
 
     def parse_fig_illustration_page_records_89(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                verbose: bool = False) -> List[FIGIllustrationPage89]:
@@ -2872,35 +2909,43 @@ class SffastusBlockParser:
 
     def parse_fig_illustration_records_183(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                            verbose: bool = False) -> List[FIGIllustrationRecord183]:
-        return self._parse_fixed_records(f, start_offset, 183, FIGIllustrationRecord183.parse_183, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, FIGIllustrationRecord183.RECORD_SIZE,
+                                         FIGIllustrationRecord183.parse_183, max_records, verbose)
 
     def parse_fig_group_category_records_184(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                              verbose: bool = False) -> List[FIGGroupCategoryRecord184]:
-        return self._parse_fixed_records(f, start_offset, 184, FIGGroupCategoryRecord184.parse_184, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, FIGGroupCategoryRecord184.RECORD_SIZE,
+                                         FIGGroupCategoryRecord184.parse_184, max_records, verbose)
 
     def parse_model_spec_records_103(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[ModelSpecRecord103]:
-        return self._parse_fixed_records(f, start_offset, 103, ModelSpecRecord103.parse_103, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, ModelSpecRecord103.RECORD_SIZE, ModelSpecRecord103.parse_103,
+                                         max_records, verbose)
 
     def parse_model_index_records_288(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[ModelIndexRecord288]:
-        return self._parse_fixed_records(f, start_offset, 288, ModelIndexRecord288.parse_288, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, ModelIndexRecord288.RECORD_SIZE,
+                                         ModelIndexRecord288.parse_288, max_records, verbose)
 
     def parse_part_range_records_24(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartRangeRecord24]:
-        return self._parse_fixed_records(f, start_offset, 24, PartRangeRecord24.parse_24, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, PartRangeRecord24.RECORD_SIZE, PartRangeRecord24.parse_24,
+                                         max_records, verbose)
 
     def parse_multilingual_part_records_167(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord167]:
-        return self._parse_fixed_records(f, start_offset, 167, MultilingualPartRecord167.parse_167, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord167.RECORD_SIZE,
+                                         MultilingualPartRecord167.parse_167, max_records, verbose)
 
     def parse_multilingual_part_records_180(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord180]:
-        return self._parse_fixed_records(f, start_offset, 180, MultilingualPartRecord180.parse_180, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord180.RECORD_SIZE,
+                                         MultilingualPartRecord180.parse_180, max_records, verbose)
 
     def parse_multilingual_part_records_192(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord192]:
-        return self._parse_fixed_records(f, start_offset, 192, MultilingualPartRecord192.parse_192, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord192.RECORD_SIZE,
+                                         MultilingualPartRecord192.parse_192, max_records, verbose)
 
     def detect_vin_record_type(self, data: bytes) -> str:
         """
@@ -2970,7 +3015,6 @@ class SffastusBlockParser:
         Returns:
             List of VINRecord objects
         """
-        RECORD_SIZE = 38
         records = []
 
         f.seek(start_offset)
@@ -2981,9 +3025,9 @@ class SffastusBlockParser:
                 break
 
             offset = f.tell()
-            data = f.read(RECORD_SIZE)
+            data = f.read(VINRecord.RECORD_SIZE)
 
-            if len(data) < RECORD_SIZE:
+            if len(data) < VINRecord.RECORD_SIZE:
                 break
 
             record = VINRecord.parse_38(data, offset)
