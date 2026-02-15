@@ -18,6 +18,7 @@ Usage:
 import math
 import re
 import struct
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, List, Optional
@@ -68,13 +69,23 @@ class FigurePage:
 
 
 @dataclass
+class PartMatch:
+    """A part matched to a figure callout."""
+    part_number: str   # Cat466 part_id or Inv199 part_number
+    description: str   # resolved via lookup_part_desc (PG185 + ITCA fallback)
+    variant: str       # '' or 'A'-'H' (spec logic variant prefix)
+    usage_notes: str   # from Cat466 (or '')
+    part_spec: str     # from Cat466 (or '')
+
+
+@dataclass
 class FigureCallout:
     """A single callout on a figure image."""
     code: str          # callout code (e.g. "94088A", "W130076")
     px_x: int          # pixel X on 1280x640 image
     px_y: int          # pixel Y on 1280x640 image
-    description: str   # English description
-    part_number: str   # part number (from Cat466 or Inventory199), or ''
+    description: str   # English description (PG185 desc_en or Inv199 name_en)
+    parts: List['PartMatch']  # matched parts (deduped); empty if unmatched
     source: str        # 'part_group' | 'inventory'
 
 
@@ -310,7 +321,6 @@ class SffastDatabase:
         """
         key = (model_rec.model_code, '_fig183_lookup')
         if key not in self._cache:
-            from collections import defaultdict
             fig184_lookup = self._get_fig184_lookup(model_rec)
             by_fig = defaultdict(list)
             for r in self.get_fig_illustrations(model_rec):
@@ -409,38 +419,70 @@ class SffastDatabase:
         """Get callout coordinates for a figure page.
 
         Merges PartGroupRecord185 and InventoryRecord199 coordinates.
-        If vehicle is provided, matches Cat466 part numbers to callouts.
+        If vehicle is provided, matches Cat466 part numbers to callouts
+        and populates each callout's parts list with all matching records
+        (deduped by callout_code + part_id).
         """
-        # Build part lookup from Cat466 if vehicle provided
-        part_lookup = {}  # callout_code -> part_id
+        # Build Cat466 lookup: base_code -> [(rec, variant), ...]
+        cat466_by_callout: dict[str, list] = defaultdict(list)
         if vehicle:
             for rec, variant in self._get_filtered_parts(model_rec, vehicle):
-                if rec.figure_ref and len(rec.figure_ref) >= 4:
-                    ref_fig = rec.figure_ref[1:]
-                else:
+                if not (rec.figure_ref and len(rec.figure_ref) >= 4):
                     continue
-                if ref_fig != fig:
+                if rec.figure_ref[1:] != fig:
                     continue
                 rec_page = rec.figure_page.strip()
                 if rec_page and rec_page != page:
                     continue
-                callout = rec.callout_code.strip()
-                if callout not in part_lookup:
-                    part_lookup[callout] = rec.part_id
+                base = rec.callout_code.split()[0] if rec.callout_code else ''
+                if base:
+                    cat466_by_callout[base].append((rec, variant))
 
-        callouts = []
+        def _build_parts(base_code: str, position: str = '') -> List[PartMatch]:
+            """Build deduped PartMatch list for a callout code.
+
+            If position is set (e.g. 'A' from PG185 part_code "11021  A"),
+            only include Cat466 records whose variant matches that position.
+            Records with variant='' (no position prefix) match all positions.
+            """
+            entries = cat466_by_callout.get(base_code)
+            if not entries:
+                return []
+            seen: set = set()
+            result: list[PartMatch] = []
+            for rec, variant in entries:
+                if position and variant and variant != position:
+                    continue
+                key = (rec.callout_code, rec.part_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                desc = self.lookup_part_desc(model_rec, fig, rec.callout_code, rec.part_id)
+                result.append(PartMatch(
+                    part_number=rec.part_id,
+                    description=desc,
+                    variant=variant,
+                    usage_notes=rec.usage_notes or '',
+                    part_spec=rec.part_spec or '',
+                ))
+            return result
+
+        callouts: list[FigureCallout] = []
 
         # Source 1: PartGroupRecord185 (main part callouts)
         for r in self.get_part_groups(model_rec):
             if r.figure.strip() == fig and r.figure_page.strip() == page:
                 code = r.part_code.strip()
                 if code and r.x > 0 and r.y > 0:
+                    parts = code.split()
+                    base = parts[0]
+                    position = parts[1] if len(parts) > 1 else ''
                     callouts.append(FigureCallout(
                         code=code,
                         px_x=math.floor(r.x / 2),
                         px_y=math.floor(r.y / 2),
                         description=r.desc_en,
-                        part_number=part_lookup.get(code, ''),
+                        parts=_build_parts(base, position),
                         source='part_group',
                     ))
 
@@ -449,13 +491,26 @@ class SffastDatabase:
             if r.figure.strip() == fig and r.figure_page.strip() == page:
                 code = r.part_code.strip()
                 if code and r.x > 0 and r.y > 0:
-                    pn = part_lookup.get(code, '') or r.part_number.strip()
+                    code_parts = code.split()
+                    base = code_parts[0]
+                    position = code_parts[1] if len(code_parts) > 1 else ''
+                    parts = _build_parts(base, position)
+                    if not parts:
+                        pn = r.part_number.strip()
+                        if pn:
+                            parts = [PartMatch(
+                                part_number=pn,
+                                description=r.name_en,
+                                variant='',
+                                usage_notes='',
+                                part_spec='',
+                            )]
                     callouts.append(FigureCallout(
                         code=code,
                         px_x=math.floor(r.x / 2),
                         px_y=math.floor(r.y / 2),
                         description=r.name_en,
-                        part_number=pn,
+                        parts=parts,
                         source='inventory',
                     ))
 

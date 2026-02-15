@@ -2599,7 +2599,7 @@ class TestSffastDatabase(unittest.TestCase):
         self.assertEqual(len(self.callouts), 15)
 
     def test_matched_count(self):
-        matched = sum(1 for c in self.callouts if c.part_number)
+        matched = sum(1 for c in self.callouts if c.parts)
         self.assertEqual(matched, 12)
 
     def test_callout_codes(self):
@@ -2616,33 +2616,33 @@ class TestSffastDatabase(unittest.TestCase):
 
         # 27541 - SENSOR ASSEMBLY-FRONT RIGHT
         c = by_code_y[('27541', 183)]
-        self.assertEqual(c.part_number, '27540AE000')
+        self.assertEqual(c.parts[0].part_number, '27540AE000')
         self.assertEqual(c.px_x, 104)
         self.assertEqual(c.description, 'SENSOR ASSEMBLY-FRONT RIGHT')
 
         # 27541A - SENSOR ASSEMBLY-FRONT LEFT
         c = by_code_y[('27541A', 203)]
-        self.assertEqual(c.part_number, '27540AE010')
+        self.assertEqual(c.parts[0].part_number, '27540AE010')
         self.assertEqual(c.px_x, 104)
 
         # 27550B - TONE WHEEL-REAR
         c = by_code_y[('27550B', 379)]
-        self.assertEqual(c.part_number, '27550FE000')
+        self.assertEqual(c.parts[0].part_number, '27550FE000')
         self.assertEqual(c.px_x, 957)
 
         # 28462 - HUB-REAR AXLE
         c = by_code_y[('28462', 143)]
-        self.assertEqual(c.part_number, '28462FE010')
+        self.assertEqual(c.parts[0].part_number, '28462FE010')
         self.assertEqual(c.px_x, 1011)
 
         # M000215 - FLANGE BOLT (inventory)
         c = by_code_y[('M000215', 511)]
-        self.assertEqual(c.part_number, '901000215')
+        self.assertEqual(c.parts[0].part_number, '901000215')
         self.assertEqual(c.px_x, 196)
 
     def test_unmatched_callouts(self):
         """Callouts 27587 and 94282C have no part number."""
-        unmatched = {(c.code, c.px_y): c for c in self.callouts if not c.part_number}
+        unmatched = {(c.code, c.px_y): c for c in self.callouts if not c.parts}
         self.assertEqual(len(unmatched), 3)
         self.assertIn(('27587', 106), unmatched)
         self.assertIn(('27587', 251), unmatched)
@@ -2650,7 +2650,7 @@ class TestSffastDatabase(unittest.TestCase):
 
     def test_duplicate_callout_0101S(self):
         """0101S appears 3 times at different positions."""
-        entries = sorted([(c.px_x, c.px_y, c.part_number)
+        entries = sorted([(c.px_x, c.px_y, c.parts[0].part_number)
                           for c in self.callouts if c.code == '0101S'])
         self.assertEqual(len(entries), 3)
         self.assertEqual(entries[0], (50, 427, '010108160'))
@@ -2680,6 +2680,37 @@ class TestSffastDatabase(unittest.TestCase):
     def test_fig_img_not_found(self):
         img = self.db.get_fig_img(self.model_rec, '999', '99')
         self.assertIsNone(img)
+
+    def test_position_variant_fig004_11021_A(self):
+        """Fig 004-01: callout 11021 position A should resolve to 11021AA020 only."""
+        callouts = self.db.get_fig_callouts(self.model_rec, '004', '01', vehicle=self.vehicle)
+        pos_a = [c for c in callouts if c.code == '11021  A' and c.source == 'part_group']
+        self.assertTrue(len(pos_a) > 0, "No PG185 callouts for 11021 position A")
+        for c in pos_a:
+            self.assertTrue(c.parts, f"11021 position A should have parts")
+            pns = [p.part_number for p in c.parts]
+            self.assertIn('11021AA020', pns)
+            # All parts should have variant 'A'
+            for p in c.parts:
+                self.assertEqual(p.variant, 'A')
+
+    def test_position_variant_fig004_11021_C(self):
+        """Fig 004-01: callout 11021 position C should have no applicable parts."""
+        callouts = self.db.get_fig_callouts(self.model_rec, '004', '01', vehicle=self.vehicle)
+        pos_c = [c for c in callouts if c.code == '11021  C' and c.source == 'part_group']
+        self.assertTrue(len(pos_c) > 0, "No PG185 callouts for 11021 position C")
+        for c in pos_c:
+            self.assertEqual(c.parts, [], f"11021 position C should have no parts")
+
+    def test_no_position_fig010_12211(self):
+        """Fig 010-02: callout 12211 (no position suffix) resolves to same 4 parts."""
+        callouts = self.db.get_fig_callouts(self.model_rec, '010', '02', vehicle=self.vehicle)
+        c12211 = [c for c in callouts if c.code.split()[0] == '12211' and c.source == 'part_group']
+        self.assertTrue(len(c12211) == 2, "there has to be two 12221 callouts")
+        expected_pns = {'12211AA240', '12211AA250', '12211AA260', '12211AA270'}
+        for c in c12211:
+            pns = set(p.part_number for p in c.parts)
+            self.assertEqual(pns, expected_pns)
 
 
 if __name__ == '__main__':

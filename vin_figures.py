@@ -17,8 +17,6 @@ from collections import defaultdict
 
 from sffastus_parser import is_valid_subaru_vin
 
-from parsers_common import filter_cat466_parts
-
 from sffastus_database import SffastDatabase
 
 
@@ -95,35 +93,11 @@ def main():
         print("Loading figure illustration descriptions...")
         print(f"  Figure descriptions: {len(db.get_fig_illustrations(model_rec))}")
 
-        # Step 6.5: Load part group descriptions (PartGroupRecord185)
-        print("\nLoading part group descriptions...")
-        all_pg_records = db.get_part_groups(model_rec)
-        print(f"  Part descriptions loaded: {len(all_pg_records)}")
-
-        # Step 6.55: Load inventory records (InventoryRecord199) - fasteners/hardware
-        print("Loading inventory records...")
-        all_inv_records = db.get_inventory_records(model_rec)
-
-        # Group inventory by (figure, page)
-        inv_by_fig_page = defaultdict(list)  # (fig, page) -> [InventoryRecord199, ...]
-        for r in all_inv_records:
-            fig = r.figure.strip()
-            page = r.figure_page.strip()
-            if fig and page and r.part_number.strip():
-                inv_by_fig_page[(fig, page)].append(r)
-        print(f"  Inventory records loaded: {len(all_inv_records)}")
-
-        # Step 6.6: Load catalog applicability records (parts) for this model
-        print("Loading parts catalog records...")
-        model_parts = db.get_catalog_parts(model_rec)
-        print(f"  Total parts records for model: {len(model_parts)}")
-
-        # Filter parts by spec logic and date range
-        filtered_parts = filter_cat466_parts(model_parts, vehicle)
-        applicable_parts = [rec for rec, _ in filtered_parts]
-        part_variant = {id(rec): variant for rec, variant in filtered_parts}
-
-        print(f"  Applicable parts: {len(applicable_parts)}")
+        # Step 6.5: Preload part/inventory/catalog data (lazy-cached in db)
+        print("\nLoading part & inventory data...")
+        print(f"  Part groups: {len(db.get_part_groups(model_rec))}")
+        print(f"  Inventory records: {len(db.get_inventory_records(model_rec))}")
+        print(f"  Parts catalog: {len(db.get_catalog_parts(model_rec))}")
 
         # Step 7: Print results
         print()
@@ -140,34 +114,6 @@ def main():
         by_fig_page = defaultdict(list)
         for p in applicable_figs:
             by_fig_page[(p.figure, p.page)].append(p)
-
-        # Build PG185 callout positions per (figure, page) - one entry per callout location
-        pg_by_fig_page = defaultdict(list)  # (fig, page) -> [(callout_code, desc), ...]
-        for r in all_pg_records:
-            code = r.part_code.split()[0]
-            fig = r.figure.strip()
-            page = r.figure_page.strip()
-            if code and fig and page:
-                pg_by_fig_page[(fig, page)].append((code, r.desc_en))
-
-        # Build Cat466 part lookup per (figure, callout_code)
-        cat466_by_fig_callout = defaultdict(list)  # (fig, callout) -> [Cat466 rec, ...]
-        for rec in applicable_parts:
-            if rec.figure_ref and len(rec.figure_ref) >= 4:
-                fig_code = rec.figure_ref[1:]
-                callout = rec.callout_code.split()[0]
-                cat466_by_fig_callout[(fig_code, callout)].append(rec)
-
-        def dedup_parts(parts_list):
-            seen = set()
-            unique = []
-            for p in parts_list:
-                key = (p.callout_code, p.part_id)
-                if key not in seen:
-                    seen.add(key)
-                    unique.append(p)
-            unique.sort(key=lambda r: r.callout_code)
-            return unique
 
         total_with_image = 0
         total_without_image = 0
@@ -204,43 +150,42 @@ def main():
             label_str = f"  ({label})" if label else ""
             print(f"  FIG {fig}-{page} {fig_desc}{label_str}{img_flag}")
 
-            # Iterate over PG185 callout positions (one per location on figure)
-            pg_positions = pg_by_fig_page.get((fig, page), [])
-            pg_callout_codes = set()
-            pg_count = 0
-            for callout, pg_desc in sorted(pg_positions):
-                pg_callout_codes.add(callout)
-                cat_recs = cat466_by_fig_callout.get((fig, callout), [])
-                if cat_recs:
-                    for p in dedup_parts(cat_recs):
-                        desc = db.lookup_part_desc(model_rec, fig, p.callout_code, p.part_id)
+            callouts = db.get_fig_callouts(model_rec, fig, page, vehicle=vehicle)
+            pg_callouts = sorted([c for c in callouts if c.source == 'part_group'],
+                                 key=lambda c: c.code)
+            inv_callouts = sorted([c for c in callouts if c.source == 'inventory'],
+                                  key=lambda c: c.code)
+            pg_bases = set(c.code.split()[0] for c in pg_callouts)
+
+            count = 0
+            for c in pg_callouts:
+                base = c.code.split()[0]
+                if c.parts:
+                    for p in c.parts:
                         extra = []
                         if p.usage_notes:
                             extra.append(p.usage_notes)
                         if p.part_spec:
                             extra.append(p.part_spec)
                         extra_str = f"  [{', '.join(extra)}]" if extra else ""
-                        v = part_variant.get(id(p), '')
-                        vstr = f"*{v}" if v else "  "
-                        print(f"    {p.callout_code:8s}{vstr} {p.part_id:14s} {desc}{extra_str}")
-                        pg_count += 1
+                        vstr = f"*{p.variant}" if p.variant else "  "
+                        print(f"    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}")
+                        count += 1
                 else:
-                    print(f"    {callout:8s}   {'--':14s} {pg_desc}")
-                    pg_count += 1
+                    print(f"    {base:8s}   {'--':14s} {c.description}")
+                    count += 1
 
-            # Add inventory (fastener/hardware) parts not already shown via PG185
-            inv_recs = inv_by_fig_page.get((fig, page), [])
-            inv_count = 0
-            for r in sorted(inv_recs, key=lambda r: r.part_code):
-                code = r.part_code.strip()
-                pn = r.part_number.strip()
-                if not code or not pn:
+            for c in inv_callouts:
+                if c.code.split()[0] in pg_bases:
                     continue
-                if code in pg_callout_codes:
+                if not c.parts:
                     continue
-                print(f"    {code:8s}   {pn:14s} {r.name_en}")
-                inv_count += 1
-            total_parts += pg_count + inv_count
+                base = c.code.split()[0]
+                pn = c.parts[0].part_number
+                print(f"    {base:8s}   {pn:14s} {c.description}")
+                count += 1
+
+            total_parts += count
 
         for cat_code in sorted_cats:
             cat184 = db.get_fig_category(model_rec, cat_code)

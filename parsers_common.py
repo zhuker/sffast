@@ -299,12 +299,17 @@ def filter_cat466_parts(parts: List[CatalogApplicabilityRecord466], vehicle: Veh
     result = []
     for rec in parts:
         sl = rec.spec_logic
-        matched = eval_spec_logic(sl, vehicle.codes)
+        matched = False
         variant = ''
-        if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
+        # Position prefix: A-H followed by digit/# (e.g. "A20# +25#" = position A, logic "20# +25#")
+        # Must try prefix-stripped eval FIRST — otherwise the full expression can
+        # match via a non-prefixed OR alternative (e.g. "25#") giving variant=''
+        if len(sl) >= 2 and sl[0] in 'ABCDEFGH' and sl[1] in '0123456789#':
             if eval_spec_logic(sl[1:], vehicle.codes):
                 matched = True
                 variant = sl[0]
+        if not matched:
+            matched = eval_spec_logic(sl, vehicle.codes)
         if not matched:
             continue
         start_date = rec.date[:6] if len(rec.date) >= 6 else ''

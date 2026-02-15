@@ -93,10 +93,10 @@ def main():
         print("-" * 110)
 
         for c in sorted(callouts, key=lambda c: (c.code, c.px_y)):
-            pn_str = c.part_number if c.part_number else '--'
+            pn_str = c.parts[0].part_number if c.parts else '--'
             print(f"{c.code:<10}   {pn_str:<16} {c.px_x:5d} {c.px_y:5d}  {c.description}")
 
-        matched_count = sum(1 for c in callouts if c.part_number)
+        matched_count = sum(1 for c in callouts if c.parts)
         print()
         print(f"Callouts on figure: {len(callouts)}  (matched to VIN: {matched_count}, other: {len(callouts) - matched_count})")
 
@@ -122,7 +122,7 @@ def main():
             x1 = c.px_x - 2 + BOX_W
             y1 = c.px_y - 2 + BOX_H
 
-            color = 'red' if c.part_number else 'blue'
+            color = 'red' if c.parts else 'blue'
             draw.rectangle([x0, y0, x1, y1], outline=color, width=1)
             draw.text((x0 + 2, y1 + 1), c.code, fill=color)
 
