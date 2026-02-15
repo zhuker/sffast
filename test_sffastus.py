@@ -55,6 +55,7 @@ from sffastus_parser import (
     BodyModelRecord17,
 )
 from parsers_common import get_vehicle_by_vin, eval_spec_logic, date_in_range
+from sffastus_database import SffastDatabase, FigureCallout, FigureCrossRef
 
 # Test data paths
 SFCDUS1_PATH = "SFCDUS1/sffastus"
@@ -2577,6 +2578,108 @@ class TestGetVehicleByVin(unittest.TestCase):
         with open(SFCDUS2_PATH, 'rb') as f:
             with self.assertRaises(LookupError):
                 get_vehicle_by_vin(f, parser, 'JF1XX99999X000000')
+
+
+class TestSffastDatabase(unittest.TestCase):
+    """Test SffastDatabase against known-good output for FIG 267-01 / STI VIN."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = SffastDatabase.open()
+        cls.vehicle = cls.db.resolve_vin(MYSTI_VIN)
+        cls.model_rec = cls.vehicle.model_rec
+        cls.callouts = cls.db.get_fig_callouts(cls.model_rec, '267', '01', vehicle=cls.vehicle)
+        cls.xrefs = cls.db.get_fig_xrefs(cls.model_rec, '267', '01')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+
+    def test_callout_count(self):
+        self.assertEqual(len(self.callouts), 15)
+
+    def test_matched_count(self):
+        matched = sum(1 for c in self.callouts if c.part_number)
+        self.assertEqual(matched, 12)
+
+    def test_callout_codes(self):
+        codes = sorted(set(c.code for c in self.callouts))
+        self.assertEqual(codes, [
+            '0101S', '27541', '27541A', '27541B', '27541C',
+            '27550B', '27587', '28365', '28462',
+            '94282C', 'M000215', 'M12007X',
+        ])
+
+    def test_known_callouts(self):
+        """Verify specific callout entries match known-good data."""
+        by_code_y = {(c.code, c.px_y): c for c in self.callouts}
+
+        # 27541 - SENSOR ASSEMBLY-FRONT RIGHT
+        c = by_code_y[('27541', 183)]
+        self.assertEqual(c.part_number, '27540AE000')
+        self.assertEqual(c.px_x, 104)
+        self.assertEqual(c.description, 'SENSOR ASSEMBLY-FRONT RIGHT')
+
+        # 27541A - SENSOR ASSEMBLY-FRONT LEFT
+        c = by_code_y[('27541A', 203)]
+        self.assertEqual(c.part_number, '27540AE010')
+        self.assertEqual(c.px_x, 104)
+
+        # 27550B - TONE WHEEL-REAR
+        c = by_code_y[('27550B', 379)]
+        self.assertEqual(c.part_number, '27550FE000')
+        self.assertEqual(c.px_x, 957)
+
+        # 28462 - HUB-REAR AXLE
+        c = by_code_y[('28462', 143)]
+        self.assertEqual(c.part_number, '28462FE010')
+        self.assertEqual(c.px_x, 1011)
+
+        # M000215 - FLANGE BOLT (inventory)
+        c = by_code_y[('M000215', 511)]
+        self.assertEqual(c.part_number, '901000215')
+        self.assertEqual(c.px_x, 196)
+
+    def test_unmatched_callouts(self):
+        """Callouts 27587 and 94282C have no part number."""
+        unmatched = {(c.code, c.px_y): c for c in self.callouts if not c.part_number}
+        self.assertEqual(len(unmatched), 3)
+        self.assertIn(('27587', 106), unmatched)
+        self.assertIn(('27587', 251), unmatched)
+        self.assertIn(('94282C', 362), unmatched)
+
+    def test_duplicate_callout_0101S(self):
+        """0101S appears 3 times at different positions."""
+        entries = sorted([(c.px_x, c.px_y, c.part_number)
+                          for c in self.callouts if c.code == '0101S'])
+        self.assertEqual(len(entries), 3)
+        self.assertEqual(entries[0], (50, 427, '010108160'))
+        self.assertEqual(entries[1], (450, 147, '010108200'))
+        self.assertEqual(entries[2], (661, 55, '010108200'))
+
+    def test_xref_count(self):
+        self.assertEqual(len(self.xrefs), 5)
+
+    def test_xref_targets(self):
+        targets = sorted([(x.ref_figure, x.px_x, x.px_y) for x in self.xrefs])
+        self.assertEqual(targets, [
+            ('260', 492, 337),
+            ('260', 702, 256),
+            ('280', 476, 535),
+            ('281', 837, 131),
+            ('281', 1011, 170),
+        ])
+
+    def test_fig_img_returns_wand_image(self):
+        img = self.db.get_fig_img(self.model_rec, '267', '01')
+        self.assertIsNotNone(img)
+        self.assertEqual(img.width, 1280)
+        self.assertEqual(img.height, 640)
+        img.close()
+
+    def test_fig_img_not_found(self):
+        img = self.db.get_fig_img(self.model_rec, '999', '99')
+        self.assertIsNone(img)
 
 
 if __name__ == '__main__':
