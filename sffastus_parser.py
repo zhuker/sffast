@@ -24,6 +24,7 @@ CHARSET = 'cp437'
 # JF1 - Japan manufactured (Fuji Heavy Industries)
 # JF2 - Japan manufactured (Fuji Heavy Industries, newer)
 SUBARU_VIN_PREFIXES = ('4S3', '4S4', 'JF1', 'JF2')
+BLOCK_SIZE = 2048
 
 
 def is_valid_subaru_vin(vin: str) -> bool:
@@ -741,6 +742,7 @@ class CodeIndexRecord33:
 @dataclass
 class ItcaRecord:
     ID = "itca_251"
+    RECORD_SIZE = 251
     """Represents a record in ITCA_DATA.TXT (Parts Catalog)
 
     Structure (87 bytes/rec):
@@ -1151,6 +1153,7 @@ class FIGIllustrationPage89:
         Verified for G11: ref_byte1=0x1A, base=0x1745D000 (23/23 records, 0 errors).
     """
     ID = 'fig_illustration_page_89'
+    RECORD_SIZE = 89
     offset: int
     model_code: str
     fig_index: str
@@ -1563,6 +1566,7 @@ class FigureIndexRecord22:
 @dataclass
 class PartIndex21:
     ID = 'part_index_21'
+    RECORD_SIZE = 21
     offset: int
     part_number: str
     metadata: bytes  # block index maybe
@@ -1584,6 +1588,7 @@ class PartIndex21:
 @dataclass
 class PartRangeIndex34:
     ID = 'part_index_34'
+    RECORD_SIZE = 34
     offset: int
     part_number_from: str
     part_number_to: str
@@ -2039,259 +2044,86 @@ class SffastusBlockParser:
         self.figure_codes = figure_codes or set()
         self.parts_catalog = parts_catalog
 
-    def is_code_index_record_block_33(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 33-byte code index record block.
+    def _is_model_code_block(self, data: bytes, record_size: int, *,
+                              allow_asterisk: bool = False,
+                              extra_check=None,
+                              min_records: int = 1) -> bool:
+        """Check if data contains fixed-size records starting with valid model codes.
 
-        Detection heuristics:
-        - Consistent model codes every 33 bytes.
+        Args:
+            data: Block data bytes.
+            record_size: Size of each record in bytes.
+            allow_asterisk: If True, 2nd record can be all asterisks (0x2A sentinel).
+            extra_check: Optional callable(data) -> bool for additional first-record validation.
+            min_records: Minimum number of records required (default 1).
         """
-        if len(data) < 33:
+        min_len = record_size * min_records
+        if len(data) < min_len:
             return False
-
         try:
-            # Check first record model code
             if not is_valid_model_code(data[0:6]):
                 return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 66:  # 33 * 2
-                if not is_valid_model_code(data[33:33 + 6]):
-                    return False
-
+            if extra_check and not extra_check(data):
+                return False
+            if len(data) >= record_size * 2:
+                rec2_start = record_size
+                if not is_valid_model_code(data[rec2_start:rec2_start + 6]):
+                    if not (allow_asterisk and
+                            data[rec2_start:rec2_start + record_size].decode(CHARSET, errors='replace') == '*' * record_size):
+                        return False
             return True
-        except:
+        except Exception:
             return False
+
+    def is_code_index_record_block_33(self, data: bytes) -> bool:
+        """Check if data looks like a 33-byte code index record block."""
+        return self._is_model_code_block(data, CodeIndexRecord33.RECORD_SIZE)
 
     def is_glossary_record_block_28(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 28-byte glossary record block.
-
-        Detection heuristics:
-        - Consistent model codes every 28 bytes.
-        """
-        if len(data) < 28:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 56:  # 28 * 2
-                if not is_valid_model_code(data[28:28 + 6]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 28-byte glossary record block."""
+        return self._is_model_code_block(data, GlossaryRecord28.RECORD_SIZE)
 
     def is_color_record_block_91(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 91-byte color record block.
-
-        Detection heuristics:
-        - Consistent model codes every 91 bytes.
-        """
-        if len(data) < 91:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 182:  # 91 * 2
-                if not (is_valid_model_code(data[91:91 + 6]) or (
-                        data[91:91 + 91].decode(CHARSET, errors='replace') == "*" * 91)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 91-byte color record block."""
+        return self._is_model_code_block(data, ColorRecord91.RECORD_SIZE, allow_asterisk=True)
 
     def is_engine_spec_block_230(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 230-byte engine specification block.
-
-        Detection heuristics:
-        - Consistent model codes every 230 bytes.
-        - Numeric date patterns at offset 93.
-        """
-        if len(data) < 230:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check first record date fields (offset 93 is Start Date)
-            start_date = data[93:99].decode(CHARSET, errors='replace').strip()
-            if start_date and not start_date.isdigit():
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 230 * 2:
-                if not is_valid_model_code(data[230:230 + 6]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 230-byte engine specification block."""
+        def _check_date(d):
+            start_date = d[93:99].decode(CHARSET, errors='replace').strip()
+            return not start_date or start_date.isdigit()
+        return self._is_model_code_block(data, EngineSpecRecord230.RECORD_SIZE, extra_check=_check_date)
 
     def is_multilingual_part_block_182(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 182-byte multilingual part record block.
-        """
-        if len(data) < 182:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check for the separator pattern nearby (often at +178 or similar)
-            # Note: Separators may not be at fixed offsets if record length varies slightly,
-            # but for a block-based check we look at the next potential record start.
-            if len(data) >= 182 * 2:
-                # Next record might start with signature or model code
-                if not is_valid_model_code(data[182:182 + 6]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 182-byte multilingual part record block."""
+        return self._is_model_code_block(data, MultilingualPartRecord182.RECORD_SIZE)
 
     def is_inventory_block_199(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 199-byte inventory record block.
-        """
-        if len(data) < 199:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 199 * 2:
-                if not (is_valid_model_code(data[199:199 + 6]) or (
-                        data[199:199 + 199].decode(CHARSET, errors='replace') == "*" * 199)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 199-byte inventory record block."""
+        return self._is_model_code_block(data, InventoryRecord199.RECORD_SIZE, allow_asterisk=True)
 
     def is_part_group_block_185(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 185-byte part group block.
-
-        Detection heuristics:
-        - Consistent model codes every 185 bytes.
-        - Sequential numeric patterns in group_index.
-        """
-        if len(data) < 185:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check group index is numeric
-            idx = data[6:9].decode(CHARSET, errors='replace').strip()
-            if idx and not idx.isdigit():
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 185 * 2:
-                if not (is_valid_model_code(data[185:185 + 6]) or (
-                        data[185:185 + 185].decode(CHARSET, errors='replace') == "*" * 185)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 185-byte part group block."""
+        def _check_group_index(d):
+            idx = d[6:9].decode(CHARSET, errors='replace').strip()
+            return not idx or idx.isdigit()
+        return self._is_model_code_block(data, PartGroupRecord185.RECORD_SIZE, allow_asterisk=True, extra_check=_check_group_index)
 
     def is_fig_illustration_page_block_89(self, data: bytes) -> bool:
-        """
-        Check if data looks like an 89-byte FIG illustration page record block.
-
-        Detection heuristics:
-        - Consistent model codes every 89 bytes.
-        - Numeric patterns in fig_index and page_index fields.
-        """
-        if len(data) < 89:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check first record numeric fields
-            fig_idx = data[6:9].decode(CHARSET, errors='replace').strip()
-            page_idx = data[11:13].decode(CHARSET, errors='replace').strip()
-            if not (fig_idx.isdigit() and page_idx.isdigit()):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 89 * 2:
-                if not is_valid_model_code(data[89:89 + 6]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like an 89-byte FIG illustration page record block."""
+        def _check_numeric_fields(d):
+            fig_idx = d[6:9].decode(CHARSET, errors='replace').strip()
+            page_idx = d[11:13].decode(CHARSET, errors='replace').strip()
+            return fig_idx.isdigit() and page_idx.isdigit()
+        return self._is_model_code_block(data, FIGIllustrationPage89.RECORD_SIZE, extra_check=_check_numeric_fields)
 
     def is_fig_illustration_block_183(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 183-byte FIG illustration record block.
-
-        Detection heuristics:
-        - Consistent model codes every 183 bytes.
-        - FIG group code pattern (2 chars: digit + letter/digit)
-        """
-        if len(data) < 183:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 183 * 2:
-                if not (is_valid_model_code(data[183:183 + 6]) or (
-                        data[183:183 + 183].decode(CHARSET, errors="replace") == "*" * 183)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 183-byte FIG illustration record block."""
+        return self._is_model_code_block(data, FIGIllustrationRecord183.RECORD_SIZE, allow_asterisk=True)
 
     def is_variant_glossary_block_81(self, data: bytes) -> bool:
-        """
-        Check if data looks like an 81-byte variant glossary record block.
-
-        Detection heuristics:
-        - Consistent model codes every 81 bytes.
-        - Handles potential leading padding at start of block.
-        """
-        if len(data) < 162:  # Need at least 2 records to verify consistency
-            return False
-
-        if is_valid_model_code(data[0:0 + 6]) and \
-                (is_valid_model_code(data[81:81 + 6]) or
-                 (data[81:81 + 81].decode(CHARSET, errors="replace") == "*" * 81)):
-            return True
-
-        return False
+        """Check if data looks like an 81-byte variant glossary record block."""
+        return self._is_model_code_block(data, VariantGlossaryRecord81.RECORD_SIZE, allow_asterisk=True, min_records=2)
 
     def is_part_num(self, partnum: bytes) -> bool:
         return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
@@ -2311,7 +2143,7 @@ class SffastusBlockParser:
                 return False
             if not (0x41 <= data[26] <= 0x5A):
                 return False
-            for i in range(2, 2048 // 20):
+            for i in range(2, BLOCK_SIZE // 20):
                 rec_start = i * 20
                 if rec_start >= len(data):
                     return False
@@ -2417,7 +2249,7 @@ class SffastusBlockParser:
         Returns list of BodyModelRangeRecord18.
         """
         records = []
-        for i in range(2048 // BodyModelRangeRecord18.RECORD_SIZE):
+        for i in range(BLOCK_SIZE // BodyModelRangeRecord18.RECORD_SIZE):
             start = i * BodyModelRangeRecord18.RECORD_SIZE
             rec = data[start:start + BodyModelRangeRecord18.RECORD_SIZE]
             if len(rec) < BodyModelRangeRecord18.RECORD_SIZE:
@@ -2530,226 +2362,36 @@ class SffastusBlockParser:
             return False
 
     def is_fig_group_category_block_184(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 184-byte FIG group category record block.
-
-        Detection heuristics:
-        - Consistent model codes every 184 bytes.
-        - FIG group code pattern (2 chars: digit + letter)
-        - English description contains expected keywords
-        """
-        if len(data) < 184:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 184 * 2:
-                if not is_valid_model_code(data[184 * 2:184 * 2 + 6]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 184-byte FIG group category record block."""
+        return self._is_model_code_block(data, FIGGroupCategoryRecord184.RECORD_SIZE)
 
     def is_catalog_applicability_block_466(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 466-byte catalog applicability record block.
-
-        Detection heuristics:
-        - Consistent model codes every 466 bytes.
-        """
-        if len(data) < 466:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 932:  # 466 * 2
-                if not (is_valid_model_code(data[466:466 + 6]) or (
-                        data[466:466 + 466].decode(CHARSET, errors="replace") == "*" * 466)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 466-byte catalog applicability record block."""
+        return self._is_model_code_block(data, CatalogApplicabilityRecord466.RECORD_SIZE, allow_asterisk=True)
 
     def is_model_spec_block_103(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 103-byte model spec record block.
-
-        Detection heuristics:
-        - Consistent model codes every 103 bytes.
-        """
-        if len(data) < 103:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 206:
-                if not (is_valid_model_code(data[103:103 + 6]) or (
-                        data[103:103 + 103].decode(CHARSET, errors="replace") == "*" * 103)):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 103-byte model spec record block."""
+        return self._is_model_code_block(data, ModelSpecRecord103.RECORD_SIZE, allow_asterisk=True)
 
     def is_part_range_block_24(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 24-byte part range record block.
-
-        Detection heuristics:
-        - Starts with valid model code (6 bytes)
-        - If multiple records, next record also starts with valid model code
-        """
-        if len(data) < 24:
-            return False
-
-        try:
-            # Check first record model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # If we have at least 2 records, check the second one too
-            if len(data) >= 48:
-                if not is_valid_model_code(data[24:30]):
-                    return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 24-byte part range record block."""
+        return self._is_model_code_block(data, PartRangeRecord24.RECORD_SIZE)
 
     def is_model_index_block_288(self, data: bytes) -> bool:
-        if len(data) < 288:
-            return False
-
-        # Check first record model code
-        if not is_valid_model_code(data[0:6]):
-            return False
-
-        if len(data) >= 288 * 2:
-            if not is_valid_model_code(data[288:288 + 6]):
-                return False
-        return True
+        """Check if data looks like a 288-byte model index record block."""
+        return self._is_model_code_block(data, ModelIndexRecord288.RECORD_SIZE)
 
     def is_multilingual_part_block_167(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 167-byte multilingual part record block.
-
-        Detection heuristics:
-        - Starts with valid model code (6 bytes)
-        - Spec code (11 bytes) typically alphanumeric
-        """
-        if len(data) < 167:
-            return False
-        if len(data) >= 167 * 2:
-            return is_valid_model_code(data[0:6]) and (is_valid_model_code(data[167:167 + 6]) or (
-                    data[167:167 + 167].decode(CHARSET, errors="replace") == "*" * 167))
-
-        try:
-            # Check model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Spec code (offset 6, length 11)
-            # Often starts with digits
-            spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
-            if not spec_code:
-                # Allow empty spec? Maybe. But usually present.
-                pass
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 167-byte multilingual part record block."""
+        return self._is_model_code_block(data, MultilingualPartRecord167.RECORD_SIZE, allow_asterisk=True)
 
     def is_multilingual_part_block_180(self, data: bytes) -> bool:
-        """
-        Check if data looks like a 180-byte multilingual part record block.
-
-        Detection heuristics:
-        - Starts with valid model code (6 bytes)
-        - Has alphanumeric part code at offset 6
-        - Has readable text in name fields
-        """
-        if len(data) < 180:
-            return False
-        if len(data) >= 180 * 2:
-            return is_valid_model_code(data[0:6]) and (is_valid_model_code(data[180:180 + 6]) or (
-                    data[180:180 + 180].decode(CHARSET, errors="replace") == "*" * 180))
-
-        try:
-            # Check model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check part code - should be alphanumeric
-            # Use CP437 as requested by user
-            # Part code is 7 bytes in this format
-            part_code = data[6:13].decode(CHARSET).strip()
-            if not part_code or not part_code.replace(' ', '').isalnum():
-                # Allow some flexibility, but usually part codes are alphanumeric
-                pass
-
-            # Check that English name area has readable text
-            name_area = data[13:53]
-            printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
-            if printable / len(name_area) < 0.5:
-                return False
-
-            # Check German/French/Spanish areas too if needed, but EN is usually enough
-            return True
-        except:
-            return False
+        """Check if data looks like a 180-byte multilingual part record block."""
+        return self._is_model_code_block(data, MultilingualPartRecord180.RECORD_SIZE, allow_asterisk=True)
 
     def is_multilingual_part_block_192(self, data: bytes) -> bool:
-        """
-        Check if data looks like a multilingual part record block (192-byte records).
-
-        Detection heuristics:
-        - Starts with valid model code (6 bytes)
-        - Has alphanumeric part code at offset 6
-        - Has numeric figure code at offset 12
-        - Has readable text in name fields
-        """
-        if len(data) < 192:
-            return False
-        if len(data) >= 192 * 2:
-            return is_valid_model_code(data[0:6]) and is_valid_model_code(data[192:192 + 6])
-
-        try:
-            # Check model code
-            if not is_valid_model_code(data[0:6]):
-                return False
-
-            # Check part code - should be alphanumeric
-            part_code = data[6:12].decode(CHARSET).strip()
-            if not part_code or not part_code.replace(' ', '').isalnum():
-                return False
-
-            # Check figure code - should contain digits
-            figure_code = data[12:17].decode(CHARSET).strip()
-            if not any(c.isdigit() for c in figure_code):
-                return False
-
-            # Check that English name area has readable text
-            name_area = data[19:59]
-            printable = sum(1 for b in name_area if 32 <= b <= 126 or b == 0)
-            if printable / len(name_area) < 0.5:
-                return False
-
-            return True
-        except:
-            return False
+        """Check if data looks like a 192-byte multilingual part record block."""
+        return self._is_model_code_block(data, MultilingualPartRecord192.RECORD_SIZE)
 
     def _parse_fixed_records(self, f: BinaryIO, start_offset: int, record_size: int, parse_fn,
                              max_records: Optional[int] = None, verbose: bool = False,
@@ -2880,17 +2522,18 @@ class SffastusBlockParser:
 
     def parse_part_index_records_34(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartRangeIndex34]:
-        return self._parse_fixed_records(f, start_offset, 34, PartRangeIndex34.parse_34, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, PartRangeIndex34.RECORD_SIZE, PartRangeIndex34.parse_34, max_records, verbose,
                                          validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_itca_records_251(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ItcaRecord]:
-        return self._parse_fixed_records(f, start_offset, 251, ItcaRecord.parse_itca_251, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, ItcaRecord.RECORD_SIZE, ItcaRecord.parse_itca_251, max_records, verbose,
                                          validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_part_index_records_21(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartIndex21]:
-        return self._parse_fixed_records(f, start_offset, 21, PartIndex21.parse_21, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, PartIndex21.RECORD_SIZE, PartIndex21.parse_21, max_records,
+                                         verbose,
                                          validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_figure_index_records_22(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
@@ -2905,7 +2548,7 @@ class SffastusBlockParser:
 
     def parse_fig_illustration_page_records_89(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                verbose: bool = False) -> List[FIGIllustrationPage89]:
-        return self._parse_fixed_records(f, start_offset, 89, FIGIllustrationPage89.parse_89, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, FIGIllustrationPage89.RECORD_SIZE, FIGIllustrationPage89.parse_89, max_records, verbose)
 
     def parse_fig_illustration_records_183(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                            verbose: bool = False) -> List[FIGIllustrationRecord183]:
@@ -3057,7 +2700,6 @@ class SffastusBlockParser:
             Block type string: 'header', 'vin', 'model_index',
             'body_model', 'text', 'binary', 'padding', 'unknown'
         """
-        BLOCK_SIZE = 2048
 
         if len(data) < BLOCK_SIZE:
             return 'incomplete'
@@ -3219,7 +2861,6 @@ class SffastusBlockParser:
             List of (start_offset, end_offset, block_count, block_type) tuples.
             Consecutive blocks of same type are merged into ranges.
         """
-        BLOCK_SIZE = 2048
 
         f.seek(0, 2)
         file_size = f.tell()
@@ -3413,7 +3054,6 @@ def scan_vin_blocks_2kb(f: BinaryIO, min_contiguous: int = 5) -> List[Tuple[int,
     Returns:
         List of (start_offset, block_count, estimated_records) tuples
     """
-    BLOCK_SIZE = 2048
     RECORDS_PER_BLOCK = 53  # Approximate
 
     f.seek(0, 2)
@@ -3475,12 +3115,12 @@ def analyze_vin_blocks_2kb(f: BinaryIO, min_contiguous: int = 5) -> List[Tuple[i
     print("-" * 46)
 
     for start, blocks, records in regions:
-        end = start + blocks * 2048
+        end = start + blocks * BLOCK_SIZE
         print(f"0x{start:08X}  0x{end:08X}  {blocks:8d}  ~{records:9d}")
 
     print("-" * 46)
     print(f"{'Total':>26}  {total_blocks:8d}  ~{total_records:9d}")
-    print(f"\nTotal VIN data: {total_blocks * 2048 / 1024 / 1024:.2f} MB")
+    print(f"\nTotal VIN data: {total_blocks * BLOCK_SIZE / 1024 / 1024:.2f} MB")
 
     return regions
 
@@ -3548,7 +3188,7 @@ def decode_fig_data_pointer(ptr: bytes) -> int:
 
     Extends decode_block_pointer with sub-block precision via byte3 * 8.
     """
-    return decode_block_pointer(ptr) * 2048 + ptr[3] * 8
+    return decode_block_pointer(ptr) * BLOCK_SIZE + ptr[3] * 8
 
 
 # Mapping from block type ID to index in ModelIndexRecord288.block_index_array.
@@ -3611,7 +3251,6 @@ MODEL_BLOCK_COUNTS = {
     28: (44, 'hi'), 29: (44, 'lo'),
 }
 
-BLOCK_SIZE = 2048
 
 
 def parse_model_index(f: BinaryIO, header: SffastusHeader) -> dict[str, ModelIndexRecord288]:
