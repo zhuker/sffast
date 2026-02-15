@@ -2769,144 +2769,15 @@ class SffastusBlockParser:
 
     def parse_variant_glossary_records_81(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                           verbose: bool = False) -> List[VariantGlossaryRecord81]:
-        """
-        Parse variant glossary records (81 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of VariantGlossaryRecord81 objects
-        """
-        RECORD_SIZE = 81
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Check if valid record
-            # Note: can have leading spaces in first record of block
-            if not is_valid_model_code(data[0:6]) and not is_valid_model_code(data[0:6].strip().ljust(6)):
-                break
-
-            record = VariantGlossaryRecord81.parse_81(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 81, VariantGlossaryRecord81.parse_81, max_records, verbose)
 
     def parse_multilingual_part_records_182(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord182]:
-        """
-        Parse multilingual part records (182 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of MultilingualPartRecord182 objects
-        """
-        f.seek(start_offset)
-        records = []
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            # Peek for separator or model code
-            pos = f.tell()
-            data = f.read(10)
-            if len(data) < 10:
-                break
-
-            # If it starts with the 19 1e separator, skip it or include it?
-            # Based on analysis, the struct might be 182 bytes including the separator.
-            if data.startswith(b'\x19\x1e'):
-                f.seek(pos)
-                data = f.read(182)
-            elif is_valid_model_code(data[:6]):
-                f.seek(pos)
-                data = f.read(182)
-            else:
-                break
-
-            if len(data) < 182:
-                break
-
-            try:
-                record = MultilingualPartRecord182.parse_182(data, pos)
-                records.append(record)
-                if verbose and count % 100 == 0:
-                    print(f"  Parsed {count} 182-byte records...")
-            except:
-                break
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 182, MultilingualPartRecord182.parse_182, max_records, verbose)
 
     def parse_inventory_records_199(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[InventoryRecord199]:
-        """
-        Parse inventory records (199 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse
-            verbose: Print progress
-
-        Returns:
-            List of InventoryRecord199 objects
-        """
-        f.seek(start_offset)
-        records = []
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            data = f.read(199)
-            if len(data) < 199:
-                break
-
-            # Check for padding (all zeros in model code field)
-            if all(b == 0 for b in data[:6]):
-                break
-
-            try:
-                record = InventoryRecord199.parse_199(data, start_offset + count * 199)
-                records.append(record)
-                if verbose and count % 100 == 0:
-                    print(f"  Parsed {count} inventory records...")
-            except:
-                break
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 199, InventoryRecord199.parse_199, max_records, verbose)
 
     def parse_engine_spec_records_230(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[EngineSpecRecord230]:
@@ -2954,38 +2825,7 @@ class SffastusBlockParser:
 
     def parse_model_year_records_44(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[ModelYearRecord44]:
-        RECORD_SIZE = 44
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # End marker: all 0x2A or all zeros
-            if all(b == 0x2a for b in data) or all(b == 0 for b in data):
-                break
-
-            if not is_valid_model_code(data[0:6]):
-                break
-
-            record = ModelYearRecord44.parse_44(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 44, ModelYearRecord44.parse_44, max_records, verbose)
 
     @staticmethod
     def _validate_20(data: bytes) -> bool:
@@ -3106,49 +2946,9 @@ class SffastusBlockParser:
 
     def parse_vin_model_records(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                 verbose: bool = False) -> List[VINModelRecord]:
-        """
-        Parse VIN-Model detail records (69 bytes each).
-
-        Args:
-            f: File handle to sffastus
-            start_offset: Where records begin
-            max_records: Maximum records to parse (None = until invalid)
-            verbose: Print progress during parsing
-
-        Returns:
-            List of VINModelRecord objects
-        """
-        RECORD_SIZE = 69
-        records = []
-
-        f.seek(start_offset)
-        count = 0
-
-        while True:
-            if max_records and count >= max_records:
-                break
-
-            offset = f.tell()
-            data = f.read(RECORD_SIZE)
-
-            if len(data) < RECORD_SIZE:
-                break
-
-            # Validate VIN
-            vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
-
-            if not is_valid_subaru_vin(vin):
-                break
-
-            record = VINModelRecord.parse_69(data, offset)
-            records.append(record)
-
-            if verbose and count % 1000 == 0:
-                print(f"  Parsed {count} records at 0x{offset:08X}...")
-
-            count += 1
-
-        return records
+        return self._parse_fixed_records(f, start_offset, 69, VINModelRecord.parse_69, max_records, verbose,
+                                         validator=lambda d: is_valid_subaru_vin(
+                                             d[0:17].decode(CHARSET, errors='replace').strip('\x00')))
 
     def parse_vin_blocks(self, f: BinaryIO, start_offset: int = 0x800, max_records: Optional[int] = None,
                          verbose: bool = False) -> List[VINRecord]:
