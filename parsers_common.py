@@ -2,11 +2,13 @@
 
 import re
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 from sffastus_parser import (
     SffastusBlockParser,
     SffastusHeader,
+    ModelIndexRecord288,
     ModelSpecRecord103,
     VINModelRecord,
     decode_block_pointer,
@@ -244,10 +246,20 @@ def get_vehicle_codes(spec: ModelSpecRecord103) -> set:
     return codes
 
 
-def resolve_vin(f, parser, vin):
+@dataclass
+class Vehicle:
+    """Result of resolving a VIN: the vehicle identity and its spec codes."""
+    vin_rec: VINModelRecord
+    model_rec: ModelIndexRecord288
+    spec: ModelSpecRecord103 | None
+    codes: set
+    vehicle_date: str
+
+
+def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     """Look up VIN -> model index -> model spec -> vehicle codes.
 
-    Returns (vin_rec, model_rec, spec, codes, vehicle_date).
+    Returns Vehicle with all fields populated.
     Raises LookupError if VIN or model not found.
     """
     vin_rec = lookup_vin(f, parser, vin)
@@ -273,4 +285,29 @@ def resolve_vin(f, parser, vin):
     codes = get_vehicle_codes(spec) if spec else set()
     vehicle_date = vin_rec.date1[:6]
 
-    return vin_rec, model_rec, spec, codes, vehicle_date
+    return Vehicle(vin_rec=vin_rec, model_rec=model_rec, spec=spec,
+                       codes=codes, vehicle_date=vehicle_date)
+
+
+def filter_cat466_parts(parts, vehicle: Vehicle) -> list:
+    """Filter CatalogApplicabilityRecord466 records by vehicle spec and date.
+
+    Returns list of (record, variant) tuples where variant is '' or 'A'-'H'.
+    """
+    result = []
+    for rec in parts:
+        sl = rec.spec_logic
+        matched = eval_spec_logic(sl, vehicle.codes)
+        variant = ''
+        if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
+            if eval_spec_logic(sl[1:], vehicle.codes):
+                matched = True
+                variant = sl[0]
+        if not matched:
+            continue
+        start_date = rec.date[:6] if len(rec.date) >= 6 else ''
+        end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
+        if not date_in_range(vehicle.vehicle_date, start_date, end_date):
+            continue
+        result.append((rec, variant))
+    return result

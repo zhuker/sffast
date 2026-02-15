@@ -37,9 +37,8 @@ from sffastus_parser import (
 from parsers_common import (
     SFCDUS2_PATH,
     create_parser,
-    resolve_vin,
-    eval_spec_logic,
-    date_in_range,
+    get_vehicle_by_vin,
+    filter_cat466_parts,
 )
 
 IMAGE_WIDTH = 1280
@@ -102,16 +101,18 @@ def main():
         # --- VIN resolution ---
         print("Resolving VIN...")
         try:
-            vin_rec, model_rec, spec, codes, vehicle_date = resolve_vin(f, parser, vin)
+            vehicle = get_vehicle_by_vin(f, parser, vin)
         except LookupError as e:
             print(str(e))
             sys.exit(1)
 
-        model_code = vin_rec.model_code
-        print(f"  Model: {model_code}  Body: {vin_rec.body_model}  Date: {vehicle_date}")
-        if spec:
+        model_code = vehicle.vin_rec.model_code
+        model_rec = vehicle.model_rec
+        print(f"  Model: {model_code}  Body: {vehicle.vin_rec.body_model}  Date: {vehicle.vehicle_date}")
+        if vehicle.spec:
+            spec = vehicle.spec
             print(f"  Spec: {spec.body_config}/{spec.engine}/{spec.transmission}/{spec.trim_level}")
-            print(f"  Codes: {sorted(codes)}")
+            print(f"  Codes: {sorted(vehicle.codes)}")
         else:
             print("  Warning: no model spec found")
         print()
@@ -147,37 +148,26 @@ def main():
 
         # --- Load applicable parts (466-byte) for this figure (direct seek) ---
         print("\nLoading parts...")
-        fig_parts = []
+        model_parts = []
         for bo in iter_model_blocks(model_rec, CatalogApplicabilityRecord466.ID):
-            recs = parser.parse_catalog_applicability_records_466(f, bo)
-            for rec in recs:
-                    # Match figure_ref (e.g., "A940") -> figure "940"
-                    if rec.figure_ref and len(rec.figure_ref) >= 4:
-                        ref_fig = rec.figure_ref[1:]
-                    else:
-                        continue
-                    if ref_fig != fig_target:
-                        continue
-                    # Match page (empty = all pages)
-                    rec_page = rec.figure_page.strip()
-                    if rec_page and rec_page != page_target:
-                        continue
-                    # Filter by spec logic
-                    sl = rec.spec_logic
-                    matched = eval_spec_logic(sl, codes)
-                    variant = ''
-                    if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
-                        if eval_spec_logic(sl[1:], codes):
-                            matched = True
-                            variant = sl[0]
-                    if not matched:
-                        continue
-                    # Filter by date
-                    start_date = rec.date[:6] if len(rec.date) >= 6 else ''
-                    end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
-                    if not date_in_range(vehicle_date, start_date, end_date):
-                        continue
-                    fig_parts.append((rec, variant))
+            model_parts.extend(parser.parse_catalog_applicability_records_466(f, bo))
+
+        # Filter by VIN spec and date
+        filtered = filter_cat466_parts(model_parts, vehicle)
+
+        # Filter by target figure and page
+        fig_parts = []
+        for rec, variant in filtered:
+            if rec.figure_ref and len(rec.figure_ref) >= 4:
+                ref_fig = rec.figure_ref[1:]
+            else:
+                continue
+            if ref_fig != fig_target:
+                continue
+            rec_page = rec.figure_page.strip()
+            if rec_page and rec_page != page_target:
+                continue
+            fig_parts.append((rec, variant))
 
         # Dedup by (group_category, part_id)
         seen = set()

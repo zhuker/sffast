@@ -13,7 +13,7 @@ import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import BinaryIO, List, Optional
 
 SFFASTUS_PATH = "sffastus"
 
@@ -4539,18 +4539,15 @@ MODEL_BLOCK_COUNTS = {
 BLOCK_SIZE = 2048
 
 
-def parse_model_index(f, header):
+def parse_model_index(f: BinaryIO, header: SffastusHeader) -> dict[str, ModelIndexRecord288]:
     """Parse all ModelIndexRecord288 entries from the model index area.
 
     Handles inter-block padding (7 records per 2KB block, 32 bytes padding).
-    Returns a dict of model_code -> ModelIndexRecord288.
     """
     models = {}
     offset = header.model_index_start_block * BLOCK_SIZE
     records_per_block = BLOCK_SIZE // 288  # 7
-    total_records = 0
-    block_idx = 0
-    while True:
+    for block_idx in range(header.model_index_count):
         block_offset = offset + block_idx * BLOCK_SIZE
         for i in range(records_per_block):
             rec_offset = block_offset + i * 288
@@ -4558,13 +4555,11 @@ def parse_model_index(f, header):
             data = f.read(288)
             if len(data) < 288:
                 return models
-            mc = data[0:6].decode('cp437', errors='replace').strip()
+            mc = data[0:6].decode(CHARSET, errors='replace').strip()
             if not mc or not mc[0].isalnum():
                 return models
             rec = ModelIndexRecord288.parse_288(data, rec_offset)
             models[rec.model_code] = rec
-            total_records += 1
-        block_idx += 1
     return models
 
 

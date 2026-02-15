@@ -33,7 +33,8 @@ from parsers_common import (
     SFCDUS2_PATH,
     FIGNAME_PATH,
     create_parser,
-    resolve_vin,
+    get_vehicle_by_vin,
+    filter_cat466_parts,
     eval_spec_logic,
     date_in_range,
 )
@@ -55,10 +56,16 @@ def main():
         # Steps 1-3: VIN lookup + model index + model spec
         print("Resolving VIN...")
         try:
-            vin_rec, model_rec, spec, codes, vehicle_date = resolve_vin(f, parser, vin)
+            vehicle = get_vehicle_by_vin(f, parser, vin)
         except LookupError as e:
             print(str(e))
             sys.exit(1)
+
+        vin_rec = vehicle.vin_rec
+        model_rec = vehicle.model_rec
+        spec = vehicle.spec
+        codes = vehicle.codes
+        vehicle_date = vehicle.vehicle_date
 
         print(f"  Model:       {vin_rec.model_code}")
         print(f"  Body Model:  {vin_rec.body_model}")
@@ -204,28 +211,9 @@ def main():
         print(f"  Total parts records for model: {len(model_parts)}")
 
         # Filter parts by spec logic and date range
-        applicable_parts = []
-        part_variant = {}  # id(rec) -> variant letter (A-H) or ''
-        for rec in model_parts:
-            sl = rec.spec_logic
-            matched = eval_spec_logic(sl, codes)
-            variant = ''
-            # ~7.4% of records have a variant prefix (A-H) prepended to the spec
-            # e.g. "AS +W.WRX" = variant A + spec "S +W.WRX"
-            # App displays these as "*A", "*B", "*C" next to the callout code
-            if not matched and len(sl) >= 2 and sl[0] in 'ABCDEFGH':
-                if eval_spec_logic(sl[1:], codes):
-                    matched = True
-                    variant = sl[0]
-            if not matched:
-                continue
-            # Date field is YYYYMMDDYYYYMMDD (16 chars)
-            start_date = rec.date[:6] if len(rec.date) >= 6 else ''
-            end_date = rec.date[8:14] if len(rec.date) >= 14 else ''
-            if not date_in_range(vehicle_date, start_date, end_date):
-                continue
-            part_variant[id(rec)] = variant
-            applicable_parts.append(rec)
+        filtered_parts = filter_cat466_parts(model_parts, vehicle)
+        applicable_parts = [rec for rec, _ in filtered_parts]
+        part_variant = {id(rec): variant for rec, variant in filtered_parts}
 
         print(f"  Applicable parts: {len(applicable_parts)}")
 
