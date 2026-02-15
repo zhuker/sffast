@@ -1,6 +1,6 @@
 """Shared constants, parser creation, and VIN resolution for FAST2 tools."""
 
-from ast import List
+from typing import List
 import re
 import struct
 from dataclasses import dataclass

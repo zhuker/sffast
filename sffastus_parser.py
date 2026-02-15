@@ -485,6 +485,18 @@ class VINRecord:
     index: int
     raw_data: bytes = field(repr=False)
 
+    @staticmethod
+    def parse_38(data: bytes, offset: int = 0) -> 'VINRecord':
+        """Parse a 38-byte VIN range record."""
+        return VINRecord(
+            offset=offset,
+            raw_data=data,
+            vin_start=data[0:17].decode(CHARSET, errors='replace').strip('\x00'),
+            vin_end=data[17:34].decode(CHARSET, errors='replace').strip('\x00'),
+            section=struct.unpack('<H', data[34:36])[0],
+            index=struct.unpack('<H', data[36:38])[0],
+        )
+
 
 @dataclass
 class VINModelRecord:
@@ -522,6 +534,26 @@ class VINModelRecord:
     date3: str
     destination_code: str
     raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_69(data: bytes, offset: int = 0) -> 'VINModelRecord':
+        """Parse a 69-byte VIN-Model detail record."""
+        return VINModelRecord(
+            offset=offset,
+            raw_data=data,
+            vin=data[0:17].decode(CHARSET, errors='replace').strip('\x00'),
+            flag=data[18],
+            model_code=data[19:25].decode(CHARSET, errors='replace').strip(),
+            body_model=data[25:32].decode(CHARSET, errors='replace').strip(),
+            color_code=data[32:35].decode(CHARSET, errors='replace').strip(),
+            trim_code=data[35:38].decode(CHARSET, errors='replace').strip(),
+            option_code=data[38:40].decode(CHARSET, errors='replace').strip(),
+            binary_flags=data[41:43],
+            date1=data[43:51].decode(CHARSET, errors='replace'),
+            date2=data[51:59].decode(CHARSET, errors='replace'),
+            date3=data[59:67].decode(CHARSET, errors='replace'),
+            destination_code=data[67:69].decode(CHARSET, errors='replace'),
+        )
 
 
 @dataclass
@@ -624,6 +656,27 @@ class MultilingualPartRecord192:
     name_es: str
     trailer: bytes
     raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_192(data: bytes, offset: int = 0) -> 'MultilingualPartRecord192':
+        """Parse a 192-byte multilingual part record."""
+
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return MultilingualPartRecord192(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            part_code=clean(data[6:12]),
+            figure_code=clean(data[12:17]),
+            index=clean(data[17:20]),
+            name_en=clean(data[20:60]),
+            name_de=clean(data[60:100]),
+            name_fr=clean(data[100:140]),
+            name_es=clean(data[140:180]),
+            trailer=data[180:192],
+        )
 
 
 @dataclass
@@ -1754,6 +1807,22 @@ class PartRangeRecord24:
     metadata: bytes
     raw_data: bytes = field(repr=False)
 
+    @staticmethod
+    def parse_24(data: bytes, offset: int = 0) -> 'PartRangeRecord24':
+        """Parse a 24-byte part range record."""
+
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return PartRangeRecord24(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            part_start=clean(data[6:13]),
+            part_end=clean(data[13:20]),
+            metadata=data[20:24],
+        )
+
 
 @dataclass
 class ModelIndexRecord288:
@@ -1844,6 +1913,22 @@ class MultilingualPartRecord167:
     trailer: bytes
     raw_data: bytes = field(repr=False)
 
+    @staticmethod
+    def parse_167(data: bytes, offset: int = 0) -> 'MultilingualPartRecord167':
+        """Parse a 167-byte multilingual part record."""
+
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return MultilingualPartRecord167(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            spec_code=clean(data[6:17]),
+            description=clean(data[17:42]),
+            trailer=data[42:167],
+        )
+
 
 @dataclass
 class MultilingualPartRecord180:
@@ -1871,6 +1956,25 @@ class MultilingualPartRecord180:
     name_es: str
     trailer: bytes
     raw_data: bytes = field(repr=False)
+
+    @staticmethod
+    def parse_180(data: bytes, offset: int = 0) -> 'MultilingualPartRecord180':
+        """Parse a 180-byte multilingual part record."""
+
+        def clean(b: bytes) -> str:
+            return b.decode(CHARSET, errors='replace').strip()
+
+        return MultilingualPartRecord180(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6]),
+            part_code=clean(data[6:13]),
+            name_en=clean(data[13:53]),
+            name_de=clean(data[53:93]),
+            name_fr=clean(data[93:133]),
+            name_es=clean(data[133:173]),
+            trailer=data[173:180],
+        )
 
 
 @dataclass
@@ -3581,20 +3685,7 @@ class SffastusBlockParser:
             if not is_valid_model_code(data[0:6]):
                 break
 
-            # Parse fields (cp437)
-            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-            part_start = data[6:13].decode(CHARSET, errors='replace').strip()
-            part_end = data[13:20].decode(CHARSET, errors='replace').strip()
-            metadata = data[20:24]
-
-            record = PartRangeRecord24(
-                offset=offset,
-                model_code=model_code,
-                part_start=part_start,
-                part_end=part_end,
-                metadata=metadata,
-                raw_data=data
-            )
+            record = PartRangeRecord24.parse_24(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -3638,20 +3729,7 @@ class SffastusBlockParser:
             if not is_valid_model_code(data[0:6]):
                 break
 
-            # Parse fields (cp437 encoding)
-            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-            spec_code = data[6:17].decode(CHARSET, errors='replace').strip()
-            description = data[17:42].decode(CHARSET, errors='replace').strip()
-            trailer = data[42:167]
-
-            record = MultilingualPartRecord167(
-                offset=offset,
-                model_code=model_code,
-                spec_code=spec_code,
-                description=description,
-                trailer=trailer,
-                raw_data=data
-            )
+            record = MultilingualPartRecord167.parse_167(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -3695,29 +3773,7 @@ class SffastusBlockParser:
             if not is_valid_model_code(data[0:6]):
                 break
 
-            # Parse fields (cp437 encoding)
-            # Structure: model(6) + part(7) + en(40) + de(40) + fr(40) + es(40) + trailer(7)
-            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-            part_code = data[6:13].decode(CHARSET, errors='replace').strip()
-            # No figure/index in this format
-
-            name_en = data[13:53].decode(CHARSET, errors='replace').strip()
-            name_de = data[53:93].decode(CHARSET, errors='replace').strip()
-            name_fr = data[93:133].decode(CHARSET, errors='replace').strip()
-            name_es = data[133:173].decode(CHARSET, errors='replace').strip()
-            trailer = data[173:180]
-
-            record = MultilingualPartRecord180(
-                offset=offset,
-                model_code=model_code,
-                part_code=part_code,
-                name_en=name_en,
-                name_de=name_de,
-                name_fr=name_fr,
-                name_es=name_es,
-                trailer=trailer,
-                raw_data=data
-            )
+            record = MultilingualPartRecord180.parse_180(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -3761,31 +3817,7 @@ class SffastusBlockParser:
             if not is_valid_model_code(data[0:6]):
                 break
 
-            # Parse fields (cp437 encoding used by DOS-era Subaru software)
-            # Structure: model(6) + part(6) + figure(5) + index(2) + en(40) + de(40) + fr(40) + es(40) + trailer(13)
-            model_code = data[0:6].decode(CHARSET, errors='replace').strip()
-            part_code = data[6:12].decode(CHARSET, errors='replace').strip()
-            figure_code = data[12:17].decode(CHARSET, errors='replace').strip()
-            index = data[17:19 + 1].decode(CHARSET, errors='replace').strip()
-            name_en = data[19 + 1:59 + 1].decode(CHARSET, errors='replace').strip()
-            name_de = data[59 + 1:99 + 1].decode(CHARSET, errors='replace').strip()
-            name_fr = data[99 + 1:139 + 1].decode(CHARSET, errors='replace').strip()
-            name_es = data[139 + 1:179 + 1].decode(CHARSET, errors='replace').strip()
-            trailer = data[179 + 1:192]
-
-            record = MultilingualPartRecord192(
-                offset=offset,
-                model_code=model_code,
-                part_code=part_code,
-                figure_code=figure_code,
-                index=index,
-                name_en=name_en,
-                name_de=name_de,
-                name_fr=name_fr,
-                name_es=name_es,
-                trailer=trailer,
-                raw_data=data
-            )
+            record = MultilingualPartRecord192.parse_192(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -3867,43 +3899,13 @@ class SffastusBlockParser:
             if len(data) < RECORD_SIZE:
                 break
 
-            # Parse VIN
+            # Validate VIN
             vin = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
 
             if not is_valid_subaru_vin(vin):
-                # print(f"not subaru vin {vin}")
                 break
 
-            # Parse remaining fields
-            flag = data[18]
-            model_code = data[19:25].decode(CHARSET, errors='replace').strip()
-            body_model = data[25:32].decode(CHARSET, errors='replace').strip()
-            color_code = data[32:35].decode(CHARSET, errors='replace').strip()
-            trim_code = data[35:38].decode(CHARSET, errors='replace').strip()
-            option_code = data[38:40].decode(CHARSET, errors='replace').strip()
-            # data[40] is padding (space)
-            binary_flags = data[41:43]
-            date1 = data[43:51].decode(CHARSET, errors='replace')
-            date2 = data[51:59].decode(CHARSET, errors='replace')
-            date3 = data[59:67].decode(CHARSET, errors='replace')
-            destination_code = data[67:69].decode(CHARSET, errors='replace')
-
-            record = VINModelRecord(
-                offset=offset,
-                vin=vin,
-                flag=flag,
-                model_code=model_code,
-                body_model=body_model,
-                color_code=color_code,
-                trim_code=trim_code,
-                option_code=option_code,
-                binary_flags=binary_flags,
-                date1=date1,
-                date2=date2,
-                date3=date3,
-                destination_code=destination_code,
-                raw_data=data
-            )
+            record = VINModelRecord.parse_69(data, offset)
             records.append(record)
 
             if verbose and count % 1000 == 0:
@@ -3949,25 +3951,12 @@ class SffastusBlockParser:
             if len(data) < RECORD_SIZE:
                 break
 
-            # Parse fields
-            vin_start = data[0:17].decode(CHARSET, errors='replace').strip('\x00')
-            vin_end = data[17:34].decode(CHARSET, errors='replace').strip('\x00')
-            section = struct.unpack('<H', data[34:36])[0]
-            index = struct.unpack('<H', data[36:38])[0]
+            record = VINRecord.parse_38(data, offset)
 
             # Validate - must be a valid Subaru VIN
-            if not is_valid_subaru_vin(vin_start):
-                # End of VIN records
+            if not is_valid_subaru_vin(record.vin_start):
                 break
 
-            record = VINRecord(
-                offset=offset,
-                vin_start=vin_start,
-                vin_end=vin_end,
-                section=section,
-                index=index,
-                raw_data=data
-            )
             records.append(record)
 
             if verbose and count % 100 == 0:

@@ -55,6 +55,7 @@ from sffastus_parser import (
     VersionIndexRecord20,
     BodyModelRecord17,
 )
+from parsers_common import get_vehicle_by_vin
 
 # Test data paths
 SFCDUS1_PATH = "SFCDUS1/sffastus"
@@ -2641,6 +2642,51 @@ class TestBodyModelRangeIndex(unittest.TestCase):
                     self.assertEqual(actual_block, expected_block,
                                      f"{path} @ hdr 0x{hdr_offset:02X}: "
                                      f"decoded block {actual_block} != expected {expected_block}")
+
+
+class TestGetVehicleByVin(unittest.TestCase):
+    """Regression test for get_vehicle_by_vin using known STI VIN."""
+
+    def test_sti_vin(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            v = get_vehicle_by_vin(f, parser, MYSTI_VIN)
+
+        # VIN record fields
+        self.assertEqual(v.vin_rec.vin, MYSTI_VIN)
+        self.assertEqual(v.vin_rec.model_code, 'G11')
+        self.assertEqual(v.vin_rec.body_model, 'GDFDYEH')
+        self.assertEqual(v.vin_rec.color_code, '51E')
+        self.assertEqual(v.vin_rec.trim_code, 'B20')
+        self.assertEqual(v.vin_rec.option_code, 'TG')
+        self.assertEqual(v.vin_rec.destination_code, 'U4')
+        self.assertEqual(v.vin_rec.date1, '20040625')
+
+        # Model index record
+        self.assertEqual(v.model_rec.model_code, 'G11')
+        self.assertEqual(v.model_rec.model_name, 'IMPREZA')
+        self.assertEqual(v.model_rec.series_code, 'G')
+
+        # Model spec (applied model match)
+        self.assertIsNotNone(v.spec)
+        self.assertEqual(v.spec.model_code, 'G11')
+        self.assertEqual(v.spec.applied_model, 'GDF-YEH')
+        self.assertEqual(v.spec.body_config, 'S')
+        self.assertEqual(v.spec.engine, '257')
+        self.assertEqual(v.spec.drivetrain, '4W')
+        self.assertEqual(v.spec.transmission, '6MT')
+        self.assertEqual(v.spec.trim_level, 'STI')
+        self.assertEqual(v.spec.spec_option, 'N/S')
+
+        # Derived codes
+        self.assertEqual(sorted(v.codes), ['257', '4W', '6MT', 'N/S', 'S', 'STI'])
+
+        # Vehicle date (YYYYMM from date1)
+        self.assertEqual(v.vehicle_date, '200406')
+
+    def test_invalid_vin_raises(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            with self.assertRaises(LookupError):
+                get_vehicle_by_vin(f, parser, 'JF1XX99999X000000')
 
 
 if __name__ == '__main__':
