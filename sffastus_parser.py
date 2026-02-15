@@ -19,6 +19,15 @@ SFFASTUS_PATH = "sffastus"
 
 CHARSET = 'cp437'
 
+
+def clean(b: bytes) -> str:
+    return b.decode(CHARSET, errors='replace').strip()
+
+
+def clean_nostrip(b: bytes) -> str:
+    return b.decode(CHARSET, errors='replace')
+
+
 # Valid Subaru VIN prefixes
 # 4S3 - US manufactured (Subaru of Indiana Automotive)
 # JF1 - Japan manufactured (Fuji Heavy Industries)
@@ -545,16 +554,16 @@ class VINModelRecord:
             raw_data=data,
             vin=data[0:17].decode(CHARSET, errors='replace').strip('\x00'),
             flag=data[18],
-            model_code=data[19:25].decode(CHARSET, errors='replace').strip(),
-            body_model=data[25:32].decode(CHARSET, errors='replace').strip(),
-            color_code=data[32:35].decode(CHARSET, errors='replace').strip(),
-            trim_code=data[35:38].decode(CHARSET, errors='replace').strip(),
-            option_code=data[38:40].decode(CHARSET, errors='replace').strip(),
+            model_code=clean(data[19:25]),
+            body_model=clean(data[25:32]),
+            color_code=clean(data[32:35]),
+            trim_code=clean(data[35:38]),
+            option_code=clean(data[38:40]),
             binary_flags=data[41:43],
-            date1=data[43:51].decode(CHARSET, errors='replace'),
-            date2=data[51:59].decode(CHARSET, errors='replace'),
-            date3=data[59:67].decode(CHARSET, errors='replace'),
-            destination_code=data[67:69].decode(CHARSET, errors='replace'),
+            date1=clean_nostrip(data[43:51]),
+            date2=clean_nostrip(data[51:59]),
+            date3=clean_nostrip(data[59:67]),
+            destination_code=clean_nostrip(data[67:69]),
         )
 
 
@@ -584,9 +593,9 @@ class BodyModelRecord17:
     def parse_17(data: bytes, offset: int = 0) -> 'BodyModelRecord17':
         return BodyModelRecord17(
             offset=offset,
-            body_model=data[0:7].decode(CHARSET, errors='replace'),
+            body_model=clean_nostrip(data[0:7]),
             constant=(data[7] << 8) | data[8],
-            model_code=data[9:15].decode(CHARSET, errors='replace').strip(),
+            model_code=clean(data[9:15]),
             config_index=(data[15] << 8) | data[16],
             raw_data=data,
         )
@@ -622,8 +631,8 @@ class BodyModelRangeRecord18:
         ptr = data[14:18]
         return BodyModelRangeRecord18(
             offset=offset,
-            model_from=data[0:7].decode(CHARSET, errors='replace'),
-            model_to=data[7:14].decode(CHARSET, errors='replace'),
+            model_from=clean_nostrip(data[0:7]),
+            model_to=clean_nostrip(data[7:14]),
             block_pointer=ptr,
             block_number=decode_block_pointer(ptr),
             raw_data=data,
@@ -665,9 +674,6 @@ class MultilingualPartRecord192:
     @staticmethod
     def parse_192(data: bytes, offset: int = 0) -> 'MultilingualPartRecord192':
         """Parse a 192-byte multilingual part record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return MultilingualPartRecord192(
             offset=offset,
@@ -722,19 +728,16 @@ class CodeIndexRecord33:
     def parse_33(data: bytes, offset: int = 0) -> 'CodeIndexRecord33':
         """Parse a 33-byte code index record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
-
         # Don't strip the size_variant field to preserve all data
-        size_variant_raw = data[7:22].decode(CHARSET, errors='replace')
+        size_variant_raw = clean_nostrip(data[7:22])
 
         return CodeIndexRecord33(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]).strip(),
+            model_code=clean(data[0:6]),
             category=data[6],  # Single byte
             size_variant=size_variant_raw,  # Keep as-is, don't strip - 15 bytes
-            code=clean(data[22:29]).strip(),  # 7 bytes (was 6 + separator)
+            code=clean(data[22:29]),  # 7 bytes (was 6 + separator)
             metadata=data[29:33],  # 4 bytes
         )
 
@@ -768,9 +771,6 @@ class ItcaRecord:
 
     @staticmethod
     def parse_itca_251(data: bytes, offset: int = 0) -> 'ItcaRecord':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         part_number = data[0:15]
         supersedes_to = data[15:15 + 15]
         status = data[15 + 15:15 + 15 + 1]
@@ -888,9 +888,6 @@ class CatalogApplicabilityRecord466:
 
     @staticmethod
     def parse_466(data: bytes, offset: int = 0) -> 'CatalogApplicabilityRecord466':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return CatalogApplicabilityRecord466(
             # Identification
             offset=offset,
@@ -957,9 +954,6 @@ class GlossaryRecord28:
     def parse_28(data: bytes, offset: int = 0) -> 'GlossaryRecord28':
         """Parse a 28-byte glossary record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return GlossaryRecord28(
             offset=offset,
             raw_data=data,
@@ -1000,9 +994,6 @@ class ColorRecord91:
     @staticmethod
     def parse_91(data: bytes, offset: int = 0) -> 'ColorRecord91':
         """Parse a 91-byte color record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return ColorRecord91(
             offset=offset,
@@ -1052,9 +1043,6 @@ class FIGIllustrationRecord183:
     def parse_183(data: bytes, offset: int = 0) -> 'FIGIllustrationRecord183':
         """Parse a 183-byte FIG illustration record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return FIGIllustrationRecord183(
             offset=offset,
             raw_data=data,
@@ -1103,9 +1091,6 @@ class EngineSpecRecord230:
     @staticmethod
     def parse_230(data: bytes, offset: int = 0) -> 'EngineSpecRecord230':
         """Parse a 230-byte engine specification record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return EngineSpecRecord230(
             offset=offset,
@@ -1173,9 +1158,6 @@ class FIGIllustrationPage89:
     def parse_89(data: bytes, offset: int = 0) -> 'FIGIllustrationPage89':
         """Parse an 89-byte FIG illustration page record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         trailer = data[53:89]
         return FIGIllustrationPage89(
             offset=offset,
@@ -1236,9 +1218,6 @@ class InventoryRecord199:
     def parse_199(data: bytes, offset: int = 0) -> 'InventoryRecord199':
         """Parse a 199-byte inventory record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return InventoryRecord199(
             offset=offset,
             raw_data=data,
@@ -1289,9 +1268,6 @@ class MultilingualPartRecord182:
     @staticmethod
     def parse_182(data: bytes, offset: int = 0) -> 'MultilingualPartRecord182':
         """Parse a 182-byte multilingual part record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return MultilingualPartRecord182(
             offset=offset,
@@ -1347,9 +1323,6 @@ class PartGroupRecord185:
     def parse_185(data: bytes, offset: int = 0) -> 'PartGroupRecord185':
         """Parse a 185-byte part group description record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return PartGroupRecord185(
             offset=offset,
             raw_data=data,
@@ -1390,9 +1363,6 @@ class VariantGlossaryRecord81:
     def parse_81(data: bytes, offset: int = 0) -> 'VariantGlossaryRecord81':
         """Parse an 81-byte variant glossary record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return VariantGlossaryRecord81(
             offset=offset,
             raw_data=data,
@@ -1430,8 +1400,8 @@ class CategoryIndexRecord20:
         return CategoryIndexRecord20(
             offset=offset,
             raw_data=data,
-            model_code=data[0:6].decode(CHARSET, errors='replace').strip(),
-            label=data[6:8].decode(CHARSET, errors='replace').strip(),
+            model_code=clean(data[0:6]),
+            label=clean(data[6:8]),
             payload=data[8:16],
             pointer=data[16:20],
         )
@@ -1465,8 +1435,8 @@ class VersionIndexRecord20:
         return VersionIndexRecord20(
             offset=offset,
             raw_data=data,
-            model_code=data[0:6].decode(CHARSET, errors='replace').strip(),
-            label=data[6:8].decode(CHARSET, errors='replace').strip(),
+            model_code=clean(data[0:6]),
+            label=clean(data[6:8]),
             payload=data[8:16],
             pointer=data[16:20],
         )
@@ -1499,17 +1469,14 @@ class ModelYearRecord44:
 
     @staticmethod
     def parse_44(data: bytes, offset: int = 0) -> 'ModelYearRecord44':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
-
         return ModelYearRecord44(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            version=clean(data[6:7]),
-            date_from=clean(data[7:15]),
-            date_to=clean(data[15:23]),
-            label=clean(data[23:43]).strip(),
+            model_code=clean_nostrip(data[0:6]),
+            version=clean_nostrip(data[6:7]),
+            date_from=clean_nostrip(data[7:15]),
+            date_to=clean_nostrip(data[15:23]),
+            label=clean(data[23:43]),
         )
 
 
@@ -1548,9 +1515,6 @@ class FigureIndexRecord22:
 
     @staticmethod
     def parse_22(data: bytes, offset: int = 0) -> 'FigureIndexRecord22':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return FigureIndexRecord22(
             offset=offset,
             raw_data=data,
@@ -1574,13 +1538,10 @@ class PartIndex21:
 
     @staticmethod
     def parse_21(data: bytes, offset: int = 0) -> 'PartIndex21':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
-
         return PartIndex21(
             offset=offset,
             raw_data=data,
-            part_number=clean(data[0:15]),
+            part_number=clean_nostrip(data[0:15]),
             metadata=data[15:],
         )
 
@@ -1597,14 +1558,11 @@ class PartRangeIndex34:
 
     @staticmethod
     def parse_34(data: bytes, offset: int = 0) -> 'PartRangeIndex34':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace')
-
         return PartRangeIndex34(
             offset=offset,
             raw_data=data,
-            part_number_from=clean(data[0:15]),
-            part_number_to=clean(data[15:30]),
+            part_number_from=clean_nostrip(data[0:15]),
+            part_number_to=clean_nostrip(data[15:30]),
             metadata=data[30:],
         )
 
@@ -1631,9 +1589,6 @@ class SpecMappingRecord22:
 
     @staticmethod
     def parse_22(data: bytes, offset: int = 0) -> 'SpecMappingRecord22':
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return SpecMappingRecord22(
             offset=offset,
             raw_data=data,
@@ -1710,9 +1665,6 @@ class FIGGroupCategoryRecord184:
     def parse_184(data: bytes, offset: int = 0) -> 'FIGGroupCategoryRecord184':
         """Parse a 184-byte FIG group category record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         trailer = data[168:184]
         trailer_constant = struct.unpack('>H', trailer[0:2])[0]
         trailer_record_index = struct.unpack('>H', trailer[2:4])[0]
@@ -1787,9 +1739,6 @@ class ModelSpecRecord103:
         Uses wider windows to capture variable length fields (e.g. '5MT' vs 'MT').
         """
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         # Parsing Logic based on observed B11/G11/B13 offsets
         return ModelSpecRecord103(
             offset=offset,
@@ -1837,9 +1786,6 @@ class PartRangeRecord24:
     @staticmethod
     def parse_24(data: bytes, offset: int = 0) -> 'PartRangeRecord24':
         """Parse a 24-byte part range record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return PartRangeRecord24(
             offset=offset,
@@ -1897,9 +1843,6 @@ class ModelIndexRecord288:
     def parse_288(data: bytes, offset: int = 0) -> 'ModelIndexRecord288':
         """Parse a 288-byte model index record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return ModelIndexRecord288(
             offset=offset,
             raw_data=data,
@@ -1946,9 +1889,6 @@ class MultilingualPartRecord167:
     def parse_167(data: bytes, offset: int = 0) -> 'MultilingualPartRecord167':
         """Parse a 167-byte multilingual part record."""
 
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
-
         return MultilingualPartRecord167(
             offset=offset,
             raw_data=data,
@@ -1990,9 +1930,6 @@ class MultilingualPartRecord180:
     @staticmethod
     def parse_180(data: bytes, offset: int = 0) -> 'MultilingualPartRecord180':
         """Parse a 180-byte multilingual part record."""
-
-        def clean(b: bytes) -> str:
-            return b.decode(CHARSET, errors='replace').strip()
 
         return MultilingualPartRecord180(
             offset=offset,
@@ -2045,9 +1982,9 @@ class SffastusBlockParser:
         self.parts_catalog = parts_catalog
 
     def _is_model_code_block(self, data: bytes, record_size: int, *,
-                              allow_asterisk: bool = False,
-                              extra_check=None,
-                              min_records: int = 1) -> bool:
+                             allow_asterisk: bool = False,
+                             extra_check=None,
+                             min_records: int = 1) -> bool:
         """Check if data contains fixed-size records starting with valid model codes.
 
         Args:
@@ -2069,7 +2006,8 @@ class SffastusBlockParser:
                 rec2_start = record_size
                 if not is_valid_model_code(data[rec2_start:rec2_start + 6]):
                     if not (allow_asterisk and
-                            data[rec2_start:rec2_start + record_size].decode(CHARSET, errors='replace') == '*' * record_size):
+                            data[rec2_start:rec2_start + record_size].decode(CHARSET,
+                                                                             errors='replace') == '*' * record_size):
                         return False
             return True
         except Exception:
@@ -2089,9 +2027,11 @@ class SffastusBlockParser:
 
     def is_engine_spec_block_230(self, data: bytes) -> bool:
         """Check if data looks like a 230-byte engine specification block."""
+
         def _check_date(d):
-            start_date = d[93:99].decode(CHARSET, errors='replace').strip()
+            start_date = clean(d[93:99])
             return not start_date or start_date.isdigit()
+
         return self._is_model_code_block(data, EngineSpecRecord230.RECORD_SIZE, extra_check=_check_date)
 
     def is_multilingual_part_block_182(self, data: bytes) -> bool:
@@ -2104,17 +2044,22 @@ class SffastusBlockParser:
 
     def is_part_group_block_185(self, data: bytes) -> bool:
         """Check if data looks like a 185-byte part group block."""
+
         def _check_group_index(d):
-            idx = d[6:9].decode(CHARSET, errors='replace').strip()
+            idx = clean(d[6:9])
             return not idx or idx.isdigit()
-        return self._is_model_code_block(data, PartGroupRecord185.RECORD_SIZE, allow_asterisk=True, extra_check=_check_group_index)
+
+        return self._is_model_code_block(data, PartGroupRecord185.RECORD_SIZE, allow_asterisk=True,
+                                         extra_check=_check_group_index)
 
     def is_fig_illustration_page_block_89(self, data: bytes) -> bool:
         """Check if data looks like an 89-byte FIG illustration page record block."""
+
         def _check_numeric_fields(d):
-            fig_idx = d[6:9].decode(CHARSET, errors='replace').strip()
-            page_idx = d[11:13].decode(CHARSET, errors='replace').strip()
+            fig_idx = clean(d[6:9])
+            page_idx = clean(d[11:13])
             return fig_idx.isdigit() and page_idx.isdigit()
+
         return self._is_model_code_block(data, FIGIllustrationPage89.RECORD_SIZE, extra_check=_check_numeric_fields)
 
     def is_fig_illustration_block_183(self, data: bytes) -> bool:
@@ -2126,7 +2071,7 @@ class SffastusBlockParser:
         return self._is_model_code_block(data, VariantGlossaryRecord81.RECORD_SIZE, allow_asterisk=True, min_records=2)
 
     def is_part_num(self, partnum: bytes) -> bool:
-        return self.parts_catalog.contains(partnum.decode(CHARSET, errors='replace').strip())
+        return self.parts_catalog.contains(clean(partnum))
 
     def _is_block_20(self, data: bytes) -> bool:
         """Common check for 20-byte record blocks: valid model codes, same model, terminated by 0x2A."""
@@ -2268,8 +2213,8 @@ class SffastusBlockParser:
             ver = data[6]
             if not (0x41 <= ver <= 0x5A):  # A-Z
                 return False
-            d1 = data[7:15].decode(CHARSET, errors='replace')
-            d2 = data[15:23].decode(CHARSET, errors='replace')
+            d1 = clean_nostrip(data[7:15])
+            d2 = clean_nostrip(data[15:23])
             if not (d1.isdigit() and d2.isdigit()):
                 return False
             return True
@@ -2311,7 +2256,7 @@ class SffastusBlockParser:
                 return False
 
             # First record figure code (5 bytes, e.g. "003  ")
-            figure = data[6:11].decode(CHARSET, errors='replace').strip()
+            figure = clean(data[6:11])
 
             if self.figure_codes:
                 # Precise: must be a known figure code from figname.txt
@@ -2344,7 +2289,7 @@ class SffastusBlockParser:
                 return False
 
             # Code field (6-11) must NOT be a known figure code
-            code = data[6:11].decode(CHARSET, errors='replace').strip()
+            code = clean(data[6:11])
             if self.figure_codes and code in self.figure_codes:
                 return False
             elif not self.figure_codes:
@@ -2483,7 +2428,7 @@ class SffastusBlockParser:
             if data[0] == 0x2A or all(b == 0 for b in data):
                 break
 
-            body = data[0:7].decode(CHARSET, errors='replace')
+            body = clean_nostrip(data[0:7])
             if not (body[0].isalpha() and body.isalnum()):
                 break
 
@@ -2522,12 +2467,14 @@ class SffastusBlockParser:
 
     def parse_part_index_records_34(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[PartRangeIndex34]:
-        return self._parse_fixed_records(f, start_offset, PartRangeIndex34.RECORD_SIZE, PartRangeIndex34.parse_34, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, PartRangeIndex34.RECORD_SIZE, PartRangeIndex34.parse_34,
+                                         max_records, verbose,
                                          validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_itca_records_251(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ItcaRecord]:
-        return self._parse_fixed_records(f, start_offset, ItcaRecord.RECORD_SIZE, ItcaRecord.parse_itca_251, max_records, verbose,
+        return self._parse_fixed_records(f, start_offset, ItcaRecord.RECORD_SIZE, ItcaRecord.parse_itca_251,
+                                         max_records, verbose,
                                          validator=lambda d: self.is_part_num(d[0:15]))
 
     def parse_part_index_records_21(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
@@ -2548,7 +2495,8 @@ class SffastusBlockParser:
 
     def parse_fig_illustration_page_records_89(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                verbose: bool = False) -> List[FIGIllustrationPage89]:
-        return self._parse_fixed_records(f, start_offset, FIGIllustrationPage89.RECORD_SIZE, FIGIllustrationPage89.parse_89, max_records, verbose)
+        return self._parse_fixed_records(f, start_offset, FIGIllustrationPage89.RECORD_SIZE,
+                                         FIGIllustrationPage89.parse_89, max_records, verbose)
 
     def parse_fig_illustration_records_183(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                            verbose: bool = False) -> List[FIGIllustrationRecord183]:
@@ -2624,7 +2572,6 @@ class SffastusBlockParser:
         # Check for 69-byte pattern: null + flag + model code at offset 17-25
         try:
             if data[17] == 0x00 and data[18] in (0x00, 0x01, 0x02):
-                model_code = data[19:25].decode(CHARSET)
                 if is_valid_model_code(data[19:25]):
                     return 'vin_model'
         except:
@@ -2721,7 +2668,7 @@ class SffastusBlockParser:
         # 3. VIN block - first 17 bytes are a valid Subaru VIN
         # Distinguish between 38-byte VIN range records and 69-byte VIN-Model records
         try:
-            vin = data[0:17].decode(CHARSET, errors='replace')
+            vin = clean_nostrip(data[0:17])
             if is_valid_subaru_vin(vin):
                 vin_type = self.detect_vin_record_type(data)
                 if vin_type == 'vin_range':
@@ -3069,7 +3016,7 @@ def scan_vin_blocks_2kb(f: BinaryIO, min_contiguous: int = 5) -> List[Tuple[int,
         if len(data) < 17:
             break
 
-        vin = data.decode(CHARSET, errors='replace')
+        vin = clean_nostrip(data)
 
         if is_valid_subaru_vin(vin):
             if current_start is None:
@@ -3252,7 +3199,6 @@ MODEL_BLOCK_COUNTS = {
 }
 
 
-
 def parse_model_index(f: BinaryIO, header: SffastusHeader) -> dict[str, ModelIndexRecord288]:
     """Parse all ModelIndexRecord288 entries from the model index area.
 
@@ -3269,7 +3215,7 @@ def parse_model_index(f: BinaryIO, header: SffastusHeader) -> dict[str, ModelInd
             data = f.read(288)
             if len(data) < 288:
                 return models
-            mc = data[0:6].decode(CHARSET, errors='replace').strip()
+            mc = clean(data[0:6])
             if not mc or not mc[0].isalnum():
                 return models
             rec = ModelIndexRecord288.parse_288(data, rec_offset)
