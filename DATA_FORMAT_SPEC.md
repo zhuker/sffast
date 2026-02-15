@@ -59,15 +59,17 @@ This document describes all known data file formats for validation against the W
 
 ### Block Pointer Encoding - **VALIDATED ✓**
 
-All section-level pointers in the header and body model range index use a 4-byte encoding:
+All section-level pointers use a 4-byte encoding. The general formula from SFCOMMON.DLL (FUN_100012f0):
 
 ```
-Byte layout:  00 [b1] [b2] 00
-Block number: (b1 - 4) * 75 + b2
+Byte layout:  [b0] [b1] [b2] [pad]
+Block number: (b1 - 4 + b0 * 60) * 75 + b2
 File offset:  block_number * 2048
 ```
 
-**Examples:**
+For header and body model range index pointers, `b0` is always 0, reducing to `(b1 - 4) * 75 + b2`. In model index block pointers (entries 0–29 of the block index array), `b0` can be non-zero for models with data in the upper half of the file — `b0` acts as a mega-section multiplier (each b0 increment = 60 × 75 × 2048 = 9,216,000 bytes).
+
+**Examples (b0=0, header pointers):**
 
 | Raw bytes | b1 | b2 | Block | File offset |
 |-----------|----|----|-------|-------------|
@@ -77,7 +79,16 @@ File offset:  block_number * 2048
 | `00 1E 00 00` | 30 | 0 | 1950 | 0x3E5000 |
 | `00 29 00 00` | 41 | 0 | 2775 | 0x56D800 |
 
-**Validation Status:** ✓ Formula verified across 21 pointers (header + body model range index entries) in all 3 SFCDUS versions with 100% accuracy.
+**Figure data pointers** (used in FIGIllustrationPage89.ptr3 and FIGGroupCategoryRecord184 trailer) extend this with sub-block precision:
+
+```
+Byte layout:  [marker] [b1] [b2] [b3]
+File offset:  ((b1 - 4 + marker * 60) * 75 + b2) * 2048 + b3 * 8
+```
+
+Here `marker` IS part of the address (not just a flag). For G11: marker=0x2A for figures 001–607, marker=0x2B for figures 620–970.
+
+**Validation Status:** ✓ Standard formula verified across 21 pointers (header + body model range index) in all 3 SFCDUS versions. Extended formula verified across all 704 G11 figure page records (490 at marker 0x2A + 214 at marker 0x2B). Model index block pointers verified for all 10 SFCDUS2 models across 30 pointer indices.
 
 ### File Header (0x00-0x31) - **VALIDATED ✓**
 
@@ -168,17 +179,18 @@ This region acts as a primary index, mapping Model Codes (6 chars) to a **32-bit
 **Record size:** 288 bytes
 **Encoding:** CP437
 
-Located at offset `0x13000`, this section contains metadata and block references for each model series.
-The records are aligned to **2KB blocks** (similar to VIN blocks).
-*   **Block 0:** `0x13000` (Contains B11...S10)
-*   **Block 1:** `0x13800` (Contains S11...W10)
+Located at offset `0x13000`, this section contains metadata and block pointers for each model series. The block index array is the primary lookup mechanism — it maps each block type to a file offset and block count, enabling direct seeks to any model's data without scanning the entire file.
+
+The records are aligned to **2KB blocks** (7 records per block, 32 bytes padding).
+*   **Block 0:** `0x13000` (Contains B11...S10, 7 records)
+*   **Block 1:** `0x13800` (Contains S11...W10, 3 records)
 
 **Record Structure (288 bytes)**
 
 | Offset | Width | Field | Description |
 |--------|-------|-------|-------------|
 | 0x00 | 6 | Model Code | e.g., `B11   `, `W10   ` |
-| 0x06 | 180 | Block Index Array | Array of 4-byte entries (struct `{ u16 unknown; u16 block_idx }`) |
+| 0x06 | 180 | Block Index Array | 45 × 4-byte entries: 30 block pointers + 15 count pairs (see below) |
 | 0xBA | 2 | Series Code | Single letter (`B `, `G `, etc.) |
 | 0xBC | 15 | Model Name | e.g., `LEGACY         `, `TRIBECA        ` |
 | 0xCB | 6 | Start Date | `YYYYMM` (ASCII, e.g., "199310") |
@@ -192,13 +204,87 @@ The records are aligned to **2KB blocks** (similar to VIN blocks).
 | 0x107 | 8 | Category 6 | `SUS     ` |
 | 0x10F | 17 | Trailer | Padding/Reserved |
 
+#### Block Index Array (180 bytes at offset 0x06) - **VALIDATED ✓**
+
+The 180-byte block index array consists of 45 × 4-byte entries divided into two regions:
+
+**Entries 0–29: Block Pointers**
+
+Each 4-byte entry is a standard block pointer decoded via `block_number = (byte1 - 4 + byte0 * 60) * 75 + byte2; file_offset = block_number * 2048`. Points to the first block of each section for this model.
+
+| Index | Block Type | Record Size | Description |
+|-------|-----------|-------------|-------------|
+| 0 | `multilingual_part_167` | 167 | Mono-lingual (EN) descriptions with spec codes |
+| 1 | `category_index_20` | 20 | Category code → pointer index (text variant) |
+| 2 | `part_range_24` | 24 | Part number range index |
+| 3 | `multilingual_part_180` | 180 | 4-language part names |
+| 4 | `model_spec_103` | 103 | Applied model specifications (body/engine/trans/trim) |
+| 5 | `multilingual_part_192` | 192 | 4-language part names with figure codes |
+| 6 | `catalog_applicability_466` | 466 | Part applicability (largest section, ~97K blocks) |
+| 7 | `color_record_91` | 91 | Paint/color codes with multilingual names |
+| 8 | `glossary_record_28` | 28 | Technical terminology index |
+| 9 | `code_index_record_33` | 33 | Part code index with multilingual qualifiers |
+| 10 | `fig_group_category_184` | 184 | FIG group categories (0A–9B, A1–D3) |
+| 11 | `fig_illustration_183` | 183 | FIG illustration descriptions (by-system) |
+| 12 | `fig_illustration_page_89` | 89 | FIG page sub-index with image pointers |
+| 13 | `engine_spec_230` | 230 | Engine specs and figure applicability |
+| 14 | `part_group_185` | 185 | Part callout coordinates on figures |
+| 15 | `inventory_199` | 199 | Fastener/hardware callout coordinates |
+| 16 | (figure image A) | — | Raw CCITT Group 4 compressed image data |
+| 17 | (figure image B) | — | Raw CCITT Group 4 compressed image data |
+| 18 | (figure image C) | — | Raw CCITT Group 4 compressed image data (main bulk) |
+| 19 | `variant_glossary_81` | 81 | Variant code → description mapping |
+| 20 | (NULL separator) | — | All zeros (0x00000000) |
+| 21 | `version_index_20` | 20 | Version letter+digit → binary data (binary variant) |
+| 22 | `fig_illustration_183` (B) | 183 | FIG illustration descriptions (by-binder variant) |
+| 23 | (figure image D) | — | Raw CCITT Group 4 compressed image data |
+| 24 | `model_year_44` | 44 | Version letters → date ranges and MY labels |
+| 25 | `multilingual_part_182` | 182 | 4-language part names with figure linkage |
+| 26 | `code_index_record_33` (B) | 33 | Secondary code index |
+| 27 | `figure_index_22` | 22 | Inter-figure cross-reference arrows with coordinates |
+| 28 | `spec_mapping_22` (A) | 22 | Spec code → description mapping |
+| 29 | `spec_mapping_22` (B) | 22 | Spec code → description mapping (secondary) |
+
+**Entries 30–44: Block Count Pairs**
+
+Each 4-byte entry contains two BE uint16 values — block counts for two consecutive pointer indices. The pairing is sequential: entry [30] holds counts for indices 0 and 1, entry [31] for indices 2 and 3, etc.
+
+| Entry | High uint16 (count for) | Low uint16 (count for) |
+|-------|------------------------|----------------------|
+| 30 | Index 0 (multilingual_part_167) | Index 1 (category_index_20) |
+| 31 | Index 2 (part_range_24) | Index 3 (multilingual_part_180) |
+| 32 | Index 4 (model_spec_103) | Index 5 (multilingual_part_192) |
+| 33 | Index 6 (catalog_applicability_466) | Index 7 (color_record_91) |
+| 34 | Index 8 (glossary_record_28) | Index 9 (code_index_record_33) |
+| 35 | Index 10 (fig_group_category_184) | Index 11 (fig_illustration_183) |
+| 36 | Index 12 (fig_illustration_page_89) | Index 13 (engine_spec_230) |
+| 37 | Index 14 (part_group_185) | Index 15 (inventory_199) |
+| 38 | **Anomalous** (NOT index 16 count) | Index 17 (figure image B) |
+| 39 | Index 18 (figure image C) | Index 19 (variant_glossary_81) |
+| 40 | (zero, skips NULL at 20) | Index 21 (version_index_20) |
+| 41 | Index 22 (fig_illustration_183 B) | Index 23 (figure image D) |
+| 42 | Index 24 (model_year_44) | Index 25 (multilingual_part_182) |
+| 43 | Index 26 (code_index_33 B) | Index 27 (figure_index_22) |
+| 44 | Index 28 (spec_mapping_22 A) | Index 29 (spec_mapping_22 B) |
+
+**Entry [38] Anomaly:** The high uint16 of entry [38] does NOT contain the block count for index 16 (figure image A). For G11, it reads 9344 while the actual section has only 5 blocks. The value may encode something else (e.g., image count or byte count). All other 29 count values match actual block counts exactly.
+
+**Example: Direct Lookup for G11 Catalog Applicability**
+
+```
+Index 6 → catalog_applicability_466
+Pointer entry [6]: bytes at array offset 24 → decode_block_pointer() → file offset 0x17462000
+Count entry [33] high uint16: 2694 blocks
+→ Read 2694 blocks starting at 0x17462000, each containing 4 × 466-byte records
+```
+
 **Example Records:**
 - B11 (LEGACY): 199310 to 199905
 - B12 (LEGACY): 199902 to 200604
 - G10 (IMPREZA): 199206 to 200011
 - C12 (SVX): 199308 to 199611
 
-**Validation Status:** ✓ Structure validated by parsing records from 0x13000
+**Validation Status:** ✓ Block index array verified across all 10 SFCDUS2 models. 29 of 30 pointer/count pairs confirmed by reading actual blocks and running detect_block_type(). Layout is identical across all models.
 
 ### Body Model Range Index (18-byte Type) - **VALIDATED ✓**
 
@@ -1644,24 +1730,23 @@ Please verify the following in the Windows app:
 - **Part codes** are 7 characters
 
 ### High Confidence (Validated in Scripts)
-- Block pointer encoding: `(b1-4)*75+b2` (verified across all 3 versions)
+- Block pointer encoding: `(b1 - 4 + b0 * 60) * 75 + b2` (verified across all 3 versions, all 10 models)
+- Figure data pointer encoding: `((b1 - 4 + marker * 60) * 75 + b2) * 2048 + b3 * 8` (verified 704 G11 records)
 - File header structure (50 bytes, all section pointers decoded)
+- Model index block index array: 30 block pointers + 15 count pairs (verified all 10 SFCDUS2 models, 29/30 counts match)
 - Body model range index (18-byte records, verified pointer targets)
-- Contiguous file layout (header → US VIN → model index → range index → JDM VIN → body model → VIN detail)
+- Contiguous file layout (header → US VIN → model index → range index → JDM VIN → body model → VIN detail → per-model catalog data)
 - tekious.txt structure (256-byte records at 0x800)
 - figname.txt / figgname.txt format
 - XOR 0x44 encoding for figure primitives
 - 183-byte figure record size
 
 ### Medium Confidence (Pattern Matching)
-- sffastus model table offsets
 - VIN record structure (38 bytes)
 - Multilingual record format (33 bytes)
-- Model-spec record size (~69 bytes)
 - Header catalog descriptors (3-level pointer encoding)
+- Entry [38] high uint16 meaning (NOT a block count — may be image count or total byte count)
 
 ### Speculative (Needs Validation)
 - source_data_us.txt flag meanings
-- Diagram compression format
 - SFMESSDT internal structure
-- Exact coordinate offsets in figure primitives
