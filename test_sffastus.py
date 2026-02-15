@@ -5,7 +5,6 @@ Run from project root: python3 -m pytest test_sffastus.py -v
 Or directly: python3 test_sffastus.py
 """
 
-import os
 import unittest
 from io import BufferedReader
 from typing import Any
@@ -67,9 +66,7 @@ MYSTI_VIN = "JF1GD70655L510047"
 
 def create_parser():
     # Shared parser instance with figure codes for block disambiguation
-    _figure_codes = set()
-    if os.path.exists(FIGNAME_PATH):
-        _figure_codes = {r.figure_code for r in parse_figname_txt(FIGNAME_PATH)}
+    _figure_codes = {r.figure_code for r in parse_figname_txt(FIGNAME_PATH)}
 
     itca_records = []
     for itca_data_txt in ITCA_DATA:
@@ -2382,16 +2379,12 @@ class TestSffastusHeader(unittest.TestCase):
     def test_magic(self):
         """All versions have the same 4-byte magic."""
         for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
-            if not os.path.exists(path):
-                continue
             hdr = self._parse_header(path)
             self.assertEqual(hdr.magic, b'\x00\x04\x01\x00', f"{path}")
 
     def test_section_counts_and_pointers(self):
         """All decoded section counts and block pointers match expected values."""
         for path, exp in self.EXPECTED.items():
-            if not os.path.exists(path):
-                continue
             hdr = self._parse_header(path)
             for field_name, expected_val in exp.items():
                 actual = getattr(hdr, field_name)
@@ -2401,8 +2394,6 @@ class TestSffastusHeader(unittest.TestCase):
     def test_sections_contiguous(self):
         """Sections are laid out contiguously: each starts where the previous ends."""
         for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
-            if not os.path.exists(path):
-                continue
             hdr = self._parse_header(path)
             # US VIN → model index → range index → JDM VIN → body model → VIN detail
             self.assertEqual(hdr.model_index_start_block,
@@ -2419,16 +2410,12 @@ class TestSffastusHeader(unittest.TestCase):
     def test_range_index_always_one_block(self):
         """Body model range index is always exactly 1 block."""
         for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
-            if not os.path.exists(path):
-                continue
             hdr = self._parse_header(path)
             self.assertEqual(hdr.body_model_range_index_count, 1, f"{path}")
 
     def test_catalog_descriptors_count(self):
         """Header always has exactly 3 catalog descriptors."""
         for path in [SFCDUS1_PATH, SFCDUS2_PATH, SFCDUS3_PATH]:
-            if not os.path.exists(path):
-                continue
             hdr = self._parse_header(path)
             self.assertEqual(len(hdr.catalog_descriptors), 3, f"{path}")
 
@@ -2531,8 +2518,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_record_counts(self):
         """Each version has the expected number of body model range records."""
         for path, offset, expected_count in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             records = self._read_index(path, offset)
             self.assertEqual(len(records), expected_count,
                              f"{path} @ 0x{offset:X}: expected {expected_count} records, got {len(records)}")
@@ -2540,8 +2525,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_block_detection(self):
         """is_body_model_range_block_18 correctly identifies the index block."""
         for path, offset, _ in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             with open(path, 'rb') as f:
                 f.seek(offset)
                 data = f.read(2048)
@@ -2550,8 +2533,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
 
     def test_block_detection_rejects_body_model_17(self):
         """Body model data blocks (17-byte records) should NOT be detected as range index."""
-        if not os.path.exists(SFCDUS2_PATH):
-            return
         with open(SFCDUS2_PATH, 'rb') as f:
             f.seek(0x3E1800)  # actual body model data
             data = f.read(2048)
@@ -2560,8 +2541,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_pointer_resolves_to_correct_block(self):
         """Each pointer resolves to a body model block whose first record matches model_from."""
         for path, offset, _ in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             records = self._read_index(path, offset)
             with open(path, 'rb') as f:
                 for rec in records:
@@ -2576,8 +2555,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_pointers_sequential(self):
         """Block numbers increment by 1 across consecutive records."""
         for path, offset, _ in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             records = self._read_index(path, offset)
             for i in range(1, len(records)):
                 self.assertEqual(records[i].block_number, records[i-1].block_number + 1,
@@ -2586,8 +2563,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_ranges_sorted_and_contiguous(self):
         """model_from values are sorted and model_to < next model_from."""
         for path, offset, _ in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             records = self._read_index(path, offset)
             for i in range(len(records)):
                 self.assertLess(records[i].model_from, records[i].model_to,
@@ -2599,8 +2574,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
     def test_header_pointers_match_body_model_start(self):
         """The header pointer at offset 0x12 matches the first body model range entry."""
         for path, offset, _ in self.VERSIONS:
-            if not os.path.exists(path):
-                continue
             with open(path, 'rb') as f:
                 f.seek(0x12)
                 hdr_ptr = f.read(4)
@@ -2632,8 +2605,6 @@ class TestBodyModelRangeIndex(unittest.TestCase):
             },
         }
         for path, sections in expected_sections.items():
-            if not os.path.exists(path):
-                continue
             with open(path, 'rb') as f:
                 for hdr_offset, expected_block in sections.items():
                     f.seek(hdr_offset)
