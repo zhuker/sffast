@@ -32,22 +32,27 @@ from sffastus_database import SffastDatabase, PartMatch
 SLIDE_WIDTH = Inches(13.333)
 SLIDE_HEIGHT = Inches(7.5)
 
-# Image: 1280x640 -> 2:1 aspect ratio
-IMG_WIDTH = Inches(12.0)
-IMG_HEIGHT = Inches(6.0)  # 12/2 = 6
-IMG_LEFT = (SLIDE_WIDTH - IMG_WIDTH) // 2
-IMG_TOP = Inches(0.6)
-
-# Text areas
+# Layout: side-by-side (image left, text right)
+MARGIN = Inches(0.2)
 HEADER_TOP = Inches(0.05)
-HEADER_HEIGHT = Inches(0.5)
-CALLOUT_TOP = IMG_TOP + IMG_HEIGHT + Inches(0.05)
-CALLOUT_LEFT = Inches(0.3)
-CALLOUT_WIDTH = SLIDE_WIDTH - Inches(0.6)
+HEADER_HEIGHT = Inches(0.45)
+CONTENT_TOP = HEADER_TOP + HEADER_HEIGHT
+
+# Image: 1280x640 -> 2:1 aspect ratio, left side
+IMG_WIDTH = Inches(8.0)
+IMG_HEIGHT = Inches(4.0)  # 8/2 = 4
+IMG_LEFT = MARGIN
+IMG_TOP = CONTENT_TOP + Inches(0.05)
+
+# Text panel: right side, full height below header
+TEXT_LEFT = IMG_LEFT + IMG_WIDTH + Inches(0.15)
+TEXT_TOP = CONTENT_TOP
+TEXT_WIDTH = SLIDE_WIDTH - TEXT_LEFT - MARGIN
+TEXT_HEIGHT = SLIDE_HEIGHT - TEXT_TOP - MARGIN
 
 FONT_NAME = "Courier New"
-FONT_SIZE = Pt(6)
-HEADER_FONT_SIZE = Pt(12)
+FONT_SIZE = Pt(5.5)
+HEADER_FONT_SIZE = Pt(11)
 
 
 def format_callout_line(callout_code, variant, part):
@@ -139,8 +144,8 @@ def build_callout_text(db, model_rec, fig, page, vehicle):
     return lines, callouts
 
 
-def build_xref_text(db, model_rec, fig, page):
-    """Build cross-reference text lines."""
+def build_xref_lines(db, model_rec, fig, page):
+    """Build cross-reference lines as callout-table rows with -- as part number."""
     lines = []
     xrefs = db.get_fig_xrefs(model_rec, fig, page)
     for xr in xrefs:
@@ -151,7 +156,7 @@ def build_xref_text(db, model_rec, fig, page):
             cat184 = db.get_fig_category(model_rec, xr_info.fig_group_code)
             if cat184:
                 xr_cat = f" [{cat184.desc_en}]"
-        lines.append(f"  -> FIG {xr.ref_figure}{xr_cat} {xr_desc}")
+        lines.append(f"{'FIG ' + xr.ref_figure:8s}   {'--':14s} {xr_desc}{xr_cat}")
     return lines
 
 
@@ -208,7 +213,7 @@ def add_text_frame(slide, left, top, width, height, text_lines, font_size=FONT_S
 
 def add_header(slide, text):
     """Add a header text box at the top of the slide."""
-    add_text_frame(slide, Inches(0.3), HEADER_TOP, SLIDE_WIDTH - Inches(0.6),
+    add_text_frame(slide, MARGIN, HEADER_TOP, SLIDE_WIDTH - 2 * MARGIN,
                    HEADER_HEIGHT, [text], font_size=HEADER_FONT_SIZE,
                    font_name="Arial", bold=True)
 
@@ -345,19 +350,30 @@ def main():
             # Callouts
             callout_lines, callouts = build_callout_text(db, model_rec, fig, page, vehicle)
 
-            # Cross-references
-            xref_lines = build_xref_text(db, model_rec, fig, page)
+            # Cross-references (as callout rows with --)
+            xref_lines = build_xref_lines(db, model_rec, fig, page)
 
-            # Bulletin references from parts
+            # Bulletin references from parts (separate section)
             bref_lines = build_bulletin_ref_lines(callouts)
 
-            all_lines = callout_lines + xref_lines + bref_lines
+            # Build text panel with column header + table + bulletin section
+            table_lines = callout_lines + xref_lines
+            all_lines = []
+
+            if table_lines or bref_lines:
+                # Column header
+                all_lines.append(f"{'Callout':8s}   {'Part Number':14s} Details")
+                all_lines.append("-" * 60)
+                all_lines.extend(table_lines)
+
+            if bref_lines:
+                all_lines.append("")
+                all_lines.append("Bulletins:")
+                all_lines.extend(bref_lines)
 
             if all_lines:
-                # Calculate available height below image
-                available_height = SLIDE_HEIGHT - CALLOUT_TOP - Inches(0.1)
-                add_text_frame(slide, CALLOUT_LEFT, CALLOUT_TOP,
-                               CALLOUT_WIDTH, available_height, all_lines)
+                add_text_frame(slide, TEXT_LEFT, TEXT_TOP,
+                               TEXT_WIDTH, TEXT_HEIGHT, all_lines)
 
             # Track bulletin refs for later
             for c in callouts:
@@ -415,9 +431,8 @@ def main():
                 if ref_lines:
                     header_line = f"Referenced by {len(ref_lines)} part(s):"
                     all_lines = [header_line] + ref_lines
-                    available_height = SLIDE_HEIGHT - CALLOUT_TOP - Inches(0.1)
-                    add_text_frame(slide, CALLOUT_LEFT, CALLOUT_TOP,
-                                   CALLOUT_WIDTH, available_height, all_lines)
+                    add_text_frame(slide, TEXT_LEFT, TEXT_TOP,
+                                   TEXT_WIDTH, TEXT_HEIGHT, all_lines)
 
         # Save
         os.makedirs("output", exist_ok=True)
