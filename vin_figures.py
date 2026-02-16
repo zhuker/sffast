@@ -14,10 +14,11 @@ Usage: .venv/bin/python vin_figures.py [VIN]
 
 import sys
 from collections import defaultdict
+from typing import NamedTuple
 
 from sffastus_parser import is_valid_subaru_vin
 
-from sffastus_database import SffastDatabase
+from sffastus_database import SffastDatabase, PartMatch
 
 
 def main():
@@ -161,13 +162,18 @@ def main():
             for c in pg_callouts:
 
                 if c.parts:
-                    for i, p in enumerate(c.parts):
+                    class DisplayPart(NamedTuple):
+                        cc: str
+                        extra_str: str
+                        chain_str: str
+
+                    def display_part(p: PartMatch) -> DisplayPart:
                         extra = []
                         if p.usage_notes:
                             extra.append(p.usage_notes)
                         if p.part_spec:
                             extra.append(p.part_spec)
-                        extra_str = f"  [{', '.join(extra)}]" if extra else ""
+                        extra_str = f"[{', '.join(extra)}]" if extra else ""
                         cc = c.callout_code
                         if p.variant != "":
                             cc = cc + "*" + p.variant
@@ -189,9 +195,37 @@ def main():
                                 chain_str = f" [{bltn}]{chain_str}"
                             else:
                                 chain_str = f" [{bltn}]"
-                        indent_ = "" if i == 0 else "\t"
-                        print(f"{indent_}    {cc:8s} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
-                        count += 1
+                        return DisplayPart(cc, extra_str, chain_str)
+
+                    str_buf = ""
+                    p0 = c.parts[0]
+                    d0 = display_part(p0)
+                    str_buf += f"    {d0.cc:8s}   {p0.part_number:14s} {p0.description} {d0.extra_str} {d0.chain_str}"
+
+                    part_strings = []
+
+                    for pN in c.parts[1:]:
+                        dN = display_part(pN)
+                        pN_str_list = []
+                        if dN.cc != d0.cc:
+                            pN_str_list.append(f"{dN.cc}")
+                        if pN.part_number != p0.part_number:
+                            pN_str_list.append(f"{pN.part_number}")
+
+                        if pN.description != p0.description:
+                            pN_str_list.append(f"{pN.description}")
+
+                        if dN.extra_str != d0.extra_str:
+                            pN_str_list.append(dN.extra_str)
+
+                        if dN.chain_str != d0.chain_str:
+                            pN_str_list.append(dN.chain_str)
+                        part_strings.append(" ".join(pN_str_list))
+
+                    if len(part_strings) > 0:
+                        str_buf += " OR "
+                        str_buf += " OR ".join(part_strings)
+                    print(str_buf)
                 else:
                     cc = c.callout_code
                     if c.variant != "":
@@ -206,7 +240,7 @@ def main():
                     continue
                 base = c.callout_code
                 pn = c.parts[0].part_number
-                print(f"    {base:8s}   {pn:14s} {c.description}")
+                print(f"x   {base:8s}   {pn:14s} {c.description}")
                 count += 1
 
             total_parts += count
