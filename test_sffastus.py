@@ -2689,7 +2689,7 @@ class TestSffastDatabase(unittest.TestCase):
     def test_no_position_fig010_12211(self):
         """Fig 010-02: callout 12211 (no position suffix) resolves to same 4 parts."""
         callouts = self.db.get_fig_callouts(self.model_rec, '010', '02', vehicle=self.vehicle)
-        c12211 = [c for c in callouts if c.code.split()[0] == '12211' and c.source == 'part_group']
+        c12211 = [c for c in callouts if c.callout_code == '12211' and c.source == 'part_group']
         self.assertTrue(len(c12211) == 2, "there has to be two 12221 callouts")
         expected_pns = {'12211AA240', '12211AA250', '12211AA260', '12211AA270'}
         for c in c12211:

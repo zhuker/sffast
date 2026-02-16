@@ -109,12 +109,20 @@ class PartMatch:
 @dataclass
 class FigureCallout:
     """A single callout on a figure image."""
-    code: str          # callout code (e.g. "94088A", "W130076")
+    callout_code: str  # callout code (e.g. "94088A", "W130076", "42037BA")
+    variant: str       # variant letter (e.g. "A", "B") or '' if none
     px_x: int          # pixel X on 1280x640 image
     px_y: int          # pixel Y on 1280x640 image
     description: str   # English description (PG185 desc_en or Inv199 name_en)
     parts: List[PartMatch]  # matched parts (deduped); empty if unmatched
     source: str        # 'part_group' | 'inventory'
+
+    @property
+    def code(self) -> str:
+        """Legacy accessor: 'callout_code variant' or just 'callout_code'."""
+        if self.variant:
+            return f'{self.callout_code} {self.variant}'
+        return self.callout_code
 
 
 @dataclass
@@ -627,7 +635,8 @@ class SffastDatabase:
             if r.figure.strip() == fig and r.figure_page.strip() == page:
                 if r.callout_code and r.x > 0 and r.y > 0:
                     callouts.append(FigureCallout(
-                        code=r.part_code,
+                        callout_code=r.callout_code,
+                        variant=r.variant,
                         px_x=math.floor(r.x / 2),
                         px_y=math.floor(r.y / 2),
                         description=r.desc_en,
@@ -652,7 +661,8 @@ class SffastDatabase:
                                 part_spec='',
                             )]
                     callouts.append(FigureCallout(
-                        code=code,
+                        callout_code=code,
+                        variant='',
                         px_x=math.floor(r.x / 2),
                         px_y=math.floor(r.y / 2),
                         description=r.name_en,

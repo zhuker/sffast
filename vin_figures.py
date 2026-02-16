@@ -152,14 +152,14 @@ def main():
 
             callouts = db.get_fig_callouts(model_rec, fig, page, vehicle=vehicle)
             pg_callouts = sorted([c for c in callouts if c.source == 'part_group'],
-                                 key=lambda c: c.code)
+                                 key=lambda c: c.callout_code)
             inv_callouts = sorted([c for c in callouts if c.source == 'inventory'],
-                                  key=lambda c: c.code)
-            pg_bases = set(c.code.split()[0] for c in pg_callouts)
+                                  key=lambda c: c.callout_code)
+            pg_bases = set(c.callout_code for c in pg_callouts)
 
             count = 0
             for c in pg_callouts:
-                base = c.code.split()[0]
+                base = c.callout_code
                 if c.parts:
                     for i, p in enumerate(c.parts):
                         extra = []
@@ -195,11 +195,11 @@ def main():
                     count += 1
 
             for c in inv_callouts:
-                if c.code.split()[0] in pg_bases:
+                if c.callout_code in pg_bases:
                     continue
                 if not c.parts:
                     continue
-                base = c.code.split()[0]
+                base = c.callout_code
                 pn = c.parts[0].part_number
                 print(f"    {base:8s}   {pn:14s} {c.description}")
                 count += 1
