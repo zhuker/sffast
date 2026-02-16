@@ -159,7 +159,7 @@ def main():
 
             count = 0
             for c in pg_callouts:
-                base = c.callout_code
+
                 if c.parts:
                     for i, p in enumerate(c.parts):
                         extra = []
@@ -168,7 +168,9 @@ def main():
                         if p.part_spec:
                             extra.append(p.part_spec)
                         extra_str = f"  [{', '.join(extra)}]" if extra else ""
-                        vstr = f"*{p.variant}" if p.variant else "  "
+                        cc = c.callout_code
+                        if p.variant != "":
+                            cc = cc + "*" + p.variant
                         chain_str = ""
                         if p.itca_chain:
                             parts_str = []
@@ -188,10 +190,13 @@ def main():
                             else:
                                 chain_str = f" [{bltn}]"
                         indent_ = "" if i == 0 else "\t"
-                        print(f"{indent_}    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
+                        print(f"{indent_}    {cc:8s} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
                         count += 1
                 else:
-                    print(f"    {base:8s}   {'--':14s} {c.description}")
+                    cc = c.callout_code
+                    if c.variant != "":
+                        cc = cc + "*" + c.variant
+                    print(f"    {cc:8s}   {'--':14s} {c.description}")
                     count += 1
 
             for c in inv_callouts:
