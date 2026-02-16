@@ -64,6 +64,7 @@ SFCDUS3_PATH = "SFCDUS3/sffastus"
 FIGNAME_PATH = "SFCDUS2/sffastpg/win/figname.txt"
 ITCA_DATA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
 MYSTI_VIN = "JF1GD70655L510047"
+MYRS_VIN = "JF1GM67561G401526"
 
 def create_parser():
     # Shared parser instance with figure codes for block disambiguation
@@ -2719,6 +2720,63 @@ class TestSffastDatabase(unittest.TestCase):
             pns = [p.part_number for p in c.parts]
             self.assertEqual(pns, ['010408160'],
                              f"Callout {c.code} should resolve to 010408160 only, got {pns}")
+
+class TestMYRS_VIN(unittest.TestCase):
+    """Tests for 2001 Impreza RS VIN (MYRS_VIN) which has multiple matching model specs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = SffastDatabase.open()
+        cls.vehicle = cls.db.resolve_vin(MYRS_VIN)
+        cls.model_rec = cls.vehicle.model_rec
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+
+    def test_engine_is_ej251(self):
+        """The FAST2 app resolves this VIN to engine EJ251 (not EJ25D)."""
+        self.assertIn('EJ251', self.vehicle.codes)
+
+    def test_fig010_02_callout_12006_piston_set(self):
+        """FIG 010-02 callout 12006 PISTON SET should resolve to 4 parts."""
+        callouts = self.db.get_fig_callouts(
+            self.model_rec, '010', '02', vehicle=self.vehicle)
+        c12006 = [c for c in callouts
+                   if c.callout_code == '12006' and c.source == 'part_group']
+        self.assertTrue(len(c12006) > 0, "No callouts for 12006")
+        # Each callout instance should have the same 4 parts
+        expected_pns = {'12006AB470', '12006AB480', '12006AB490', '12006AB500'}
+        for c in c12006:
+            pns = set(p.part_number for p in c.parts)
+            self.assertEqual(pns, expected_pns,
+                             f"Callout 12006 should have 4 EJ251 piston parts, got {sorted(pns)}")
+
+    def test_fig004_03_callout_11021_position_variants(self):
+        """FIG 004-03 callout 11021 positions A and B should resolve to correct parts.
+
+        Spec logic like 'AEJ22# +EJ251' has position prefix A before engine code.
+        """
+        callouts = self.db.get_fig_callouts(
+            self.model_rec, '004', '03', vehicle=self.vehicle)
+        pos_a = [c for c in callouts
+                 if c.callout_code == '11021' and c.variant == 'A' and c.source == 'part_group']
+        self.assertTrue(len(pos_a) > 0, "No callouts for 11021 position A")
+        for c in pos_a:
+            self.assertTrue(c.parts, "11021 position A should have parts")
+            pns = [p.part_number for p in c.parts]
+            self.assertEqual(pns, ['11021AA020'])
+            self.assertEqual(c.parts[0].variant, 'A')
+
+        pos_b = [c for c in callouts
+                 if c.callout_code == '11021' and c.variant == 'B' and c.source == 'part_group']
+        self.assertTrue(len(pos_b) > 0, "No callouts for 11021 position B")
+        for c in pos_b:
+            self.assertTrue(c.parts, "11021 position B should have parts")
+            pns = [p.part_number for p in c.parts]
+            self.assertEqual(pns, ['11021AA121'])
+            self.assertEqual(c.parts[0].variant, 'B')
+
 
 if __name__ == '__main__':
     # Run tests

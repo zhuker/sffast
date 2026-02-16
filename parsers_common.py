@@ -275,16 +275,19 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     if not model_rec:
         raise LookupError(f"Model {vin_rec.model_code} not found in index")
 
-    spec = None
+    # Collect ALL matching specs — the same body model can appear with different
+    # engine variants across model years (e.g. GME-Y7J: EJ25D, EJ253, EJ251).
+    # Union their codes so Cat466 date filtering disambiguates naturally.
+    matching_specs = []
     for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
         for s in parser.parse_model_spec_records_103(f, bo):
             if body_model_matches_applied(vin_rec.body_model, s.applied_model):
-                spec = s
-                break
-        if spec:
-            break
+                matching_specs.append(s)
 
-    codes = get_vehicle_codes(spec) if spec else set()
+    spec = matching_specs[-1] if matching_specs else None
+    codes = set()
+    for s in matching_specs:
+        codes |= get_vehicle_codes(s)
     vehicle_date = vin_rec.date1[:6]
 
     return Vehicle(vin_rec=vin_rec, model_rec=model_rec, spec=spec,
@@ -301,10 +304,10 @@ def filter_cat466_parts(parts: List[CatalogApplicabilityRecord466], vehicle: Veh
         sl = rec.spec_logic
         matched = False
         variant = ''
-        # Position prefix: A-H followed by digit/# (e.g. "A20# +25#" = position A, logic "20# +25#")
+        # Position prefix: A-H followed by spec logic (e.g. "A20# +25#", "AEJ22# +EJ251")
         # Must try prefix-stripped eval FIRST — otherwise the full expression can
-        # match via a non-prefixed OR alternative (e.g. "25#") giving variant=''
-        if len(sl) >= 2 and sl[0] in 'ABCDEFGH' and sl[1] in '0123456789#':
+        # match via a non-prefixed OR alternative (e.g. "+EJ251") giving variant=''
+        if len(sl) >= 2 and sl[0] in 'ABCDEFGH':
             if eval_spec_logic(sl[1:], vehicle.codes):
                 matched = True
                 variant = sl[0]
