@@ -65,8 +65,10 @@ def main():
             print("  Warning: No model spec found")
         print()
 
-        # Vehicle production date in YYYYMM format
+        # Vehicle production date and model year
+        model_year = db.get_model_year(vehicle)
         print(f"Production date: {vehicle_date}")
+        print(f"Model year:      {model_year}")
         print()
 
         # Step 4-5: Find applicable figure pages
@@ -107,7 +109,7 @@ def main():
         print(f"  {vin_rec.model_code} / {spec.applied_model if spec else vin_rec.body_model}"
               f" / {spec.engine if spec else '?'} / {spec.transmission if spec else '?'}"
               f" / {spec.trim_level if spec else '?'}")
-        print(f"  Production: {vehicle_date}")
+        print(f"  Production: {vehicle_date}  Model year: {model_year}")
         print("=" * 80)
         print()
 
