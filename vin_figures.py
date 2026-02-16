@@ -240,14 +240,32 @@ def main():
                     continue
                 base = c.callout_code
                 pn = c.parts[0].part_number
-                print(f"x   {base:8s}   {pn:14s} {c.description}")
+                print(f"    {base:8s}   {pn:14s} {c.description}")
                 count += 1
 
             total_parts += count
 
             xrefs = db.get_fig_xrefs(model_rec, fig, page)
+            bulletin_refs = set()
+            for c in callouts:
+                for p in c.parts:
+                    if p.bulletin_figure:
+                        bulletin_refs.add((p.bulletin_figure, p.bulletin_page, p.bulletin_label))
+                    if p.itca_chain:
+                        for link in p.itca_chain:
+                            if link.bulletin_figure:
+                                bulletin_refs.add((link.bulletin_figure, link.bulletin_page, link.bulletin_label))
             for xr in xrefs:
-                print(f"    -> FIG {xr.ref_figure}")
+                xr_info = db.get_fig_info(model_rec, xr.ref_figure)
+                xr_desc = xr_info.desc_en if xr_info else db.get_figname(xr.ref_figure)
+                xr_cat = ""
+                if xr_info:
+                    cat184 = db.get_fig_category(model_rec, xr_info.fig_group_code)
+                    if cat184:
+                        xr_cat = f" [{cat184.desc_en}]"
+                print(f"    FIG {xr.ref_figure} {xr_cat} {xr_desc}")
+            for bf, bp, bl in sorted(bulletin_refs):
+                print(f"    -> FIG {bf}-{bp} {bl}")
 
         for cat_code in sorted_cats:
             cat184 = db.get_fig_category(model_rec, cat_code)
