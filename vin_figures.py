@@ -169,7 +169,25 @@ def main():
                             extra.append(p.part_spec)
                         extra_str = f"  [{', '.join(extra)}]" if extra else ""
                         vstr = f"*{p.variant}" if p.variant else "  "
-                        print(f"    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}")
+                        chain_str = ""
+                        if p.itca_chain:
+                            parts_str = []
+                            for link in p.itca_chain:
+                                if link.bulletin_figure:
+                                    parts_str.append(
+                                        f"{link.part_number}({link.code.label}"
+                                        f" FIG {link.bulletin_figure}-{link.bulletin_page}"
+                                        f" {link.bulletin_label})")
+                                else:
+                                    parts_str.append(f"{link.part_number}({link.code.label})")
+                            chain_str = " -> " + " -> ".join(parts_str)
+                        if p.bulletin_figure:
+                            bltn = f"FIG {p.bulletin_figure}-{p.bulletin_page} {p.bulletin_label}"
+                            if chain_str:
+                                chain_str = f" [{bltn}]{chain_str}"
+                            else:
+                                chain_str = f" [{bltn}]"
+                        print(f"    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
                         count += 1
                 else:
                     print(f"    {base:8s}   {'--':14s} {c.description}")

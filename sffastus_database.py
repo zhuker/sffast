@@ -33,6 +33,7 @@ from sffastus_parser import (
     FIGIllustrationRecord183,
     FigureIndexRecord22,
     InventoryRecord199,
+    ItcaCode,
     PartGroupRecord185,
     SffastusBlockParser,
     SffastusHeader,
@@ -69,6 +70,29 @@ class FigurePage:
 
 
 @dataclass
+class BulletinMatch:
+    """A bulletin page reachable through a vehicle's ITCA interchangeability chain."""
+    figure: str            # bulletin figure code (e.g. "911")
+    page: str              # bulletin page code (e.g. "41")
+    bulletin_part: str     # part number embedded in the bulletin spec
+    source_figure: str     # figure where the triggering part appears
+    source_page: str       # page where the triggering part appears
+    source_callout: str    # callout code on that page
+    source_part: str       # vehicle's Cat466 part number on that callout
+    itca_code: Optional[ItcaCode]  # ITCA code on the interchangeable record (None if direct match)
+
+
+@dataclass
+class ItcaChainLink:
+    """A single hop in an ITCA supersession chain."""
+    part_number: str              # supersedes_to part number
+    code: ItcaCode                # ITCA condition code
+    bulletin_figure: str = ''     # bulletin figure code (e.g. "004") or ''
+    bulletin_page: str = ''       # bulletin page code (e.g. "40") or ''
+    bulletin_label: str = ''      # bulletin label (e.g. "I&S BULLETIN COVER-OIL SEPR") or ''
+
+
+@dataclass
 class PartMatch:
     """A part matched to a figure callout."""
     part_number: str   # Cat466 part_id or Inv199 part_number
@@ -76,6 +100,10 @@ class PartMatch:
     variant: str       # '' or 'A'-'H' (spec logic variant prefix)
     usage_notes: str   # from Cat466 (or '')
     part_spec: str     # from Cat466 (or '')
+    itca_chain: Optional[List[ItcaChainLink]] = None
+    bulletin_figure: str = ''     # bulletin for this part itself ('' if none)
+    bulletin_page: str = ''
+    bulletin_label: str = ''
 
 
 @dataclass
@@ -85,7 +113,7 @@ class FigureCallout:
     px_x: int          # pixel X on 1280x640 image
     px_y: int          # pixel Y on 1280x640 image
     description: str   # English description (PG185 desc_en or Inv199 name_en)
-    parts: List['PartMatch']  # matched parts (deduped); empty if unmatched
+    parts: List[PartMatch]  # matched parts (deduped); empty if unmatched
     source: str        # 'part_group' | 'inventory'
 
 
@@ -282,6 +310,101 @@ class SffastDatabase:
 
         return result
 
+    # -- Bulletin index (lazy) --
+
+    def _get_bulletin_index(self, model_rec: ModelIndexRecord288) -> dict[str, list[tuple[str, str]]]:
+        """Lazy-cached bulletin_part_number -> [(fig, page), ...] from EngineSpecRecord230.
+
+        Bulletin entries have page >= 40 and applicable_model = "ALL" + embedded part number.
+        """
+        key = (model_rec.model_code, '_bulletin_index')
+        if key not in self._cache:
+            index: dict[str, list[tuple[str, str]]] = defaultdict(list)
+            for rec in self.get_engine_specs(model_rec):
+                page_num = int(rec.figure_page) if rec.figure_page.isdigit() else 0
+                if page_num < 40:
+                    continue
+                parts = re.split(r'\s{3,}', rec.applicable_model, maxsplit=1)
+                if len(parts) >= 2:
+                    embedded_pn = parts[1].strip()
+                    if embedded_pn:
+                        index[embedded_pn].append((rec.figure, rec.figure_page))
+            self._cache[key] = dict(index)
+        return self._cache[key]
+
+    def get_bulletin_index(self, model_rec: ModelIndexRecord288) -> dict[str, list[tuple[str, str]]]:
+        """Public access to bulletin_part_number -> [(fig, page), ...] index."""
+        return self._get_bulletin_index(model_rec)
+
+    # -- VIN bulletins (ITCA chain walk) --
+
+    def get_vin_bulletins(self, vehicle: Vehicle) -> List[BulletinMatch]:
+        """Find I&S Bulletin pages reachable through the vehicle's ITCA chain.
+
+        Walks each applicable Cat466 part -> ITCA interchangeability -> bulletin index.
+        Returns BulletinMatch entries with full provenance (source figure/callout/part).
+        """
+        model_rec = vehicle.model_rec
+        bulletin_index = self._get_bulletin_index(model_rec)
+        if not bulletin_index:
+            return []
+
+        catalog = self.parts_catalog
+
+        # Collect vehicle parts with their figure/page/callout provenance
+        filtered = self._get_filtered_parts(model_rec, vehicle)
+        results: list[BulletinMatch] = []
+        seen: set[tuple[str, str, str]] = set()  # (bulletin_fig, bulletin_page, source_part)
+
+        for rec, _ in filtered:
+            pn = rec.part_id.strip()
+            if not pn:
+                continue
+
+            fig_ref = ''
+            if rec.figure_ref and len(rec.figure_ref) >= 4:
+                fig_ref = rec.figure_ref[1:]  # strip group letter
+            page_ref = rec.figure_page.strip()
+            callout = rec.callout_code.strip()
+
+            # Collect all part numbers reachable through ITCA chain
+            # (part itself + interchangeable parts with bulletin-eligible codes)
+            chain: list[tuple[str, Optional[ItcaCode]]] = [(pn, None)]
+
+            itca_recs = catalog.lookup(pn)
+            for ir in itca_recs:
+                code = ItcaCode.from_str(ir.itca_code)
+                if code and code.has_bulletin:
+                    # Forward: this part supersedes to another
+                    sup = ir.supersedes_to.strip()
+                    if sup and sup != pn:
+                        chain.append((sup, code))
+                    # Reverse: another part that shares this supersedes_to target
+                    own_pn = ir.part_number.strip()
+                    if own_pn and own_pn != pn:
+                        chain.append((own_pn, code))
+
+            for chain_pn, code in chain:
+                if chain_pn not in bulletin_index:
+                    continue
+                for bfig, bpage in bulletin_index[chain_pn]:
+                    dedup_key = (bfig, bpage, pn)
+                    if dedup_key in seen:
+                        continue
+                    seen.add(dedup_key)
+                    results.append(BulletinMatch(
+                        figure=bfig,
+                        page=bpage,
+                        bulletin_part=chain_pn,
+                        source_figure=fig_ref,
+                        source_page=page_ref,
+                        source_callout=callout,
+                        source_part=pn,
+                        itca_code=code,
+                    ))
+
+        return results
+
     # -- ITCA parts catalog --
 
     @property
@@ -438,6 +561,34 @@ class SffastDatabase:
                 if base:
                     cat466_by_callout[base].append((rec, variant))
 
+        bulletin_index = self._get_bulletin_index(model_rec)
+
+        def _bulletin_fields(pn: str) -> tuple[str, str, str]:
+            """Look up bulletin fig/page/label for a part number."""
+            entries = bulletin_index.get(pn)
+            if not entries:
+                return ('', '', '')
+            bfig, bpage = entries[0]
+            fig89 = self.get_fig_page(model_rec, bfig, bpage)
+            label = " ".join(fig89.label.split()) if fig89 and fig89.label else ""
+            return (bfig, bpage, label)
+
+        def _build_chain(part_id: str) -> Optional[List[ItcaChainLink]]:
+            """Build ITCA chain with bulletin refs for a part number."""
+            if not self._parser.parts_catalog:
+                return None
+            raw = self._parser.parts_catalog.follow_chain(part_id)
+            if not raw:
+                return None
+            chain = []
+            for pn, code in raw:
+                bf, bp, bl = _bulletin_fields(pn)
+                chain.append(ItcaChainLink(
+                    part_number=pn, code=code,
+                    bulletin_figure=bf, bulletin_page=bp, bulletin_label=bl,
+                ))
+            return chain
+
         def _build_parts(base_code: str, position: str = '') -> List[PartMatch]:
             """Build deduped PartMatch list for a callout code.
 
@@ -458,12 +609,16 @@ class SffastDatabase:
                     continue
                 seen.add(key)
                 desc = self.lookup_part_desc(model_rec, fig, rec.callout_code, rec.part_id)
+                chain = _build_chain(rec.part_id)
+                bf, bp, bl = _bulletin_fields(rec.part_id)
                 result.append(PartMatch(
                     part_number=rec.part_id,
                     description=desc,
                     variant=variant,
                     usage_notes=rec.usage_notes or '',
                     part_spec=rec.part_spec or '',
+                    itca_chain=chain,
+                    bulletin_figure=bf, bulletin_page=bp, bulletin_label=bl,
                 ))
             return result
 

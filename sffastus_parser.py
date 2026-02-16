@@ -13,6 +13,7 @@ import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import BinaryIO, Dict, Generator, List, Optional, Tuple
 
 SFFASTUS_PATH = "sffastus"
@@ -742,6 +743,48 @@ class CodeIndexRecord33:
         )
 
 
+class ItcaCode(Enum):
+    """ITCA interchangeability condition codes."""
+    MUTUAL = '1'              # New ↔ Old: mutually interchangeable
+    NEW_REPLACES_OLD = '2'    # New → Old: only new can replace old
+    OLD_REPLACES_NEW = '3'    # Old → New: only old can replace new
+    SIMPLE_MOD = '4'          # New → Old with simple modifications
+    WITH_OTHER_PARTS = '6'    # New + other parts → Old
+    BOTH_SIDES = '7'          # Must replace both RH and LH (color/appearance)
+    KIT = '8'                 # New part number (parts kit) replaces old
+    COMPULSORY = '9'          # Compulsory replacement (other conditions)
+
+    @property
+    def label(self) -> str:
+        return {
+            '1': 'mutual',
+            '2': 'new→old',
+            '3': 'old→new',
+            '4': 'simple mod',
+            '6': 'w/other parts',
+            '7': 'both sides',
+            '8': 'kit',
+            '9': 'compulsory',
+        }[self.value]
+
+    @property
+    def has_bulletin(self) -> bool:
+        """Whether this code can trigger an I&S Bulletin.
+
+        Per FAST2 manual (pdf/FAST2.txt p.23): "Detailed data of ITCA Bltn
+        is available only when ITCA condition codes represents 4, 6, 7, and 8."
+        """
+        return self.value in ('4', '6', '7', '8')
+
+    @classmethod
+    def from_str(cls, s: str) -> Optional['ItcaCode']:
+        s = s.strip()
+        try:
+            return cls(s)
+        except ValueError:
+            return None
+
+
 @dataclass
 class ItcaRecord:
     ID = "itca_251"
@@ -825,6 +868,30 @@ class ItcaPartsCatalog:
         if part_number in self.supersedes_index:
             results.extend(self.supersedes_index[part_number])
         return results
+
+    def follow_chain(self, part_number: str) -> List[tuple[str, ItcaCode]]:
+        """Walk the supersession chain from a part number.
+
+        Returns list of (supersedes_to, ItcaCode) hops, e.g.:
+            A --(6)--> B --(6)--> C  =>  [("B", WITH_OTHER_PARTS), ("C", WITH_OTHER_PARTS)]
+        Stops at dead-ends, cycles, or unknown codes.
+        """
+        part_number = part_number.strip()
+        chain: list[tuple[str, ItcaCode]] = []
+        visited: set[str] = {part_number}
+        current = part_number
+        while current in self.primary_index:
+            rec = self.primary_index[current]
+            nxt = rec.supersedes_to.strip()
+            if not nxt or nxt in visited:
+                break
+            code = ItcaCode.from_str(rec.itca_code)
+            if code is None:
+                break
+            chain.append((nxt, code))
+            visited.add(nxt)
+            current = nxt
+        return chain
 
 
 @dataclass
