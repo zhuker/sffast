@@ -2109,23 +2109,6 @@ class TestFigurePartsLookup(unittest.TestCase):
             return (first, spec_logic[1:])
         return ('', spec_logic)
 
-    @staticmethod
-    def _parse_callout(part_code):
-        """Parse part_code into (callout_code, variant_letter).
-
-        Space-separated trailing letter = variant (matches spec_logic prefix):
-            '98281  A' -> ('98281', 'A')
-        Everything else = callout code directly (matches group_category 7-byte field):
-            '98201A'  -> ('98201A', '')
-            'N450024' -> ('N450024', '')
-            '98271'   -> ('98271', '')
-        """
-        if '  ' in part_code or (len(part_code) > 5 and part_code[5] == ' '):
-            parts = part_code.split()
-            if len(parts) == 2 and len(parts[1]) == 1 and parts[1].isalpha():
-                return (parts[0], parts[1])
-        return (part_code.strip(), '')
-
     def _dest_ok(self, rec):
         dc = rec.destination_codes.strip()
         if not dc:
@@ -2167,7 +2150,8 @@ class TestFigurePartsLookup(unittest.TestCase):
 
         resolved = []
         for pgr in page_callouts:
-            callout_code, variant = self._parse_callout(pgr.part_code)
+            callout_code = pgr.callout_code
+            variant = pgr.variant
 
             candidates = []
             for rec in fig_catalog:
@@ -2684,7 +2668,7 @@ class TestSffastDatabase(unittest.TestCase):
     def test_position_variant_fig004_11021_A(self):
         """Fig 004-01: callout 11021 position A should resolve to 11021AA020 only."""
         callouts = self.db.get_fig_callouts(self.model_rec, '004', '01', vehicle=self.vehicle)
-        pos_a = [c for c in callouts if c.code == '11021  A' and c.source == 'part_group']
+        pos_a = [c for c in callouts if c.code == '11021 A' and c.source == 'part_group']
         self.assertTrue(len(pos_a) > 0, "No PG185 callouts for 11021 position A")
         for c in pos_a:
             self.assertTrue(c.parts, f"11021 position A should have parts")
@@ -2697,7 +2681,7 @@ class TestSffastDatabase(unittest.TestCase):
     def test_position_variant_fig004_11021_C(self):
         """Fig 004-01: callout 11021 position C should have no applicable parts."""
         callouts = self.db.get_fig_callouts(self.model_rec, '004', '01', vehicle=self.vehicle)
-        pos_c = [c for c in callouts if c.code == '11021  C' and c.source == 'part_group']
+        pos_c = [c for c in callouts if c.code == '11021 C' and c.source == 'part_group']
         self.assertTrue(len(pos_c) > 0, "No PG185 callouts for 11021 position C")
         for c in pos_c:
             self.assertEqual(c.parts, [], f"11021 position C should have no parts")
@@ -2723,12 +2707,12 @@ class TestSffastDatabase(unittest.TestCase):
         self.assertEqual(p0, p1)
 
     def test_050_16_0104S_G_callouts(self):
-        """Fig 050-16: all 4 '0104S  G' callouts resolve to 010408160 only."""
+        """Fig 050-16: all 4 '0104S G' callouts resolve to 010408160 only."""
         callouts = self.db.get_fig_callouts(self.model_rec, '050', '16', vehicle=self.vehicle)
-        c0104s = [c for c in callouts if c.code == '0104S  G' and c.source == 'part_group']
-        self.assertEqual(len(c0104s), 4, f"Expected 4 '0104S  G' callouts, got {len(c0104s)}")
+        c0104s = [c for c in callouts if c.code == '0104S G' and c.source == 'part_group']
+        self.assertEqual(len(c0104s), 4, f"Expected 4 '0104S G' callouts, got {len(c0104s)}")
         # No other 0104S callouts on this page
-        other = [c for c in callouts if c.code.startswith('0104S') and c.code != '0104S  G']
+        other = [c for c in callouts if c.code.startswith('0104S') and c.code != '0104S G']
         self.assertEqual(len(other), 0, f"Unexpected non-G 0104S callouts: {[c.code for c in other]}")
         for c in c0104s:
             self.assertTrue(c.parts, f"Callout {c.code} should have parts")

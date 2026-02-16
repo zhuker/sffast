@@ -472,8 +472,7 @@ class SffastDatabase:
         if key not in self._cache:
             lookup: dict[tuple[str, str], str] = {}
             for r in self.get_part_groups(model_rec):
-                code = r.part_code.split()[0]
-                k = (r.figure, code)
+                k = (r.figure, r.callout_code)
                 if k not in lookup:
                     lookup[k] = r.desc_en
             self._cache[key] = lookup
@@ -482,8 +481,7 @@ class SffastDatabase:
     def lookup_part_desc(self, model_rec: ModelIndexRecord288,
                          fig: str, callout_code: str, part_id: str = '') -> str:
         """Look up a part description: PG185 first, then ITCA fallback."""
-        code = callout_code.split()[0]
-        desc = self._get_part_desc_lookup(model_rec).get((fig, code), '')
+        desc = self._get_part_desc_lookup(model_rec).get((fig, callout_code.strip()), '')
         if desc:
             return desc
         if part_id and self._parser.parts_catalog:
@@ -627,17 +625,13 @@ class SffastDatabase:
         # Source 1: PartGroupRecord185 (main part callouts)
         for r in self.get_part_groups(model_rec):
             if r.figure.strip() == fig and r.figure_page.strip() == page:
-                code = r.part_code.strip()
-                if code and r.x > 0 and r.y > 0:
-                    parts = code.split()
-                    base = parts[0]
-                    position = parts[1] if len(parts) > 1 else ''
+                if r.callout_code and r.x > 0 and r.y > 0:
                     callouts.append(FigureCallout(
-                        code=code,
+                        code=r.part_code,
                         px_x=math.floor(r.x / 2),
                         px_y=math.floor(r.y / 2),
                         description=r.desc_en,
-                        parts=_build_parts(base, position),
+                        parts=_build_parts(r.callout_code, r.variant),
                         source='part_group',
                     ))
 
@@ -646,10 +640,7 @@ class SffastDatabase:
             if r.figure.strip() == fig and r.figure_page.strip() == page:
                 code = r.part_code.strip()
                 if code and r.x > 0 and r.y > 0:
-                    code_parts = code.split()
-                    base = code_parts[0]
-                    position = code_parts[1] if len(code_parts) > 1 else ''
-                    parts = _build_parts(base, position)
+                    parts = _build_parts(code)
                     if not parts:
                         pn = r.part_number.strip()
                         if pn:

@@ -1365,7 +1365,8 @@ class PartGroupRecord185:
         0x00 (6):  Model Code (e.g., "B11   ")
         0x06 (3):  Figure (e.g., "940")
         0x09 (4):  Figure Page (e.g., "01  ")
-        0x0D (8):  Part Code / Callout (e.g., "94088A", "W130076")
+        0x0D (7):  Callout Code (e.g., "94088A ", "W130076", "42037BA")
+        0x14 (1):  Variant Letter (A-R) or space (0x20 = no variant)
         0x15 (40): Description (EN)
         0x3D (40): Description (DE)
         0x65 (40): Description (FR)
@@ -1377,7 +1378,8 @@ class PartGroupRecord185:
     model_code: str
     figure: str
     figure_page: str
-    part_code: str
+    callout_code: str
+    variant: str
     desc_en: str
     desc_de: str
     desc_fr: str
@@ -1386,17 +1388,24 @@ class PartGroupRecord185:
     y: int
     raw_data: bytes = field(repr=False)
 
+    @property
+    def part_code(self) -> str:
+        """Legacy accessor: returns 'callout_code variant' or just 'callout_code'."""
+        if self.variant:
+            return f'{self.callout_code} {self.variant}'
+        return self.callout_code
+
     @staticmethod
     def parse_185(data: bytes, offset: int = 0) -> 'PartGroupRecord185':
         """Parse a 185-byte part group description record."""
-
         return PartGroupRecord185(
             offset=offset,
             raw_data=data,
             model_code=clean(data[0:6]),
             figure=clean(data[6:9]),
             figure_page=clean(data[9:13]),
-            part_code=clean(data[13:21]),
+            callout_code=clean(data[13:20]),
+            variant=clean(data[20:21]),
             desc_en=clean(data[21:61]),
             desc_de=clean(data[61:101]),
             desc_fr=clean(data[101:141]),
