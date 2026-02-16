@@ -245,6 +245,10 @@ def main():
 
             total_parts += count
 
+            xrefs = db.get_fig_xrefs(model_rec, fig, page)
+            for xr in xrefs:
+                print(f"    -> FIG {xr.ref_figure}")
+
         for cat_code in sorted_cats:
             cat184 = db.get_fig_category(model_rec, cat_code)
             cat_desc = cat184.desc_en if cat184 else cat_code
