@@ -106,7 +106,7 @@ def build_callout_text(db, model_rec, fig, page, vehicle):
         if c.parts:
             p0 = c.parts[0]
             cc0, extra0, chain0 = format_callout_line(c.callout_code, c.variant, p0)
-            buf = f"{cc0:8s}   {p0.part_number:14s} {p0.description} {extra0} {chain0}"
+            buf = f"Callout: {cc0:8s} Part number: {p0.part_number:14s}\nDetail: {p0.description} {extra0} {chain0}"
 
             alt_parts = []
             for pN in c.parts[1:]:
@@ -127,11 +127,11 @@ def build_callout_text(db, model_rec, fig, page, vehicle):
             if alt_parts:
                 buf += " OR " + " OR ".join(alt_parts)
             lines.append(buf)
-        else:
-            cc = c.callout_code
-            if c.variant:
-                cc = cc + "*" + c.variant
-            lines.append(f"{cc:8s}   {'--':14s} {c.description}")
+        # else:
+            # cc = c.callout_code
+            # if c.variant:
+            #     cc = cc + "*" + c.variant
+            # lines.append(f"{cc:8s}   {'--':14s} {c.description}")
 
     for c in inv_callouts:
         if c.callout_code in pg_bases:
@@ -139,7 +139,7 @@ def build_callout_text(db, model_rec, fig, page, vehicle):
         if not c.parts:
             continue
         pn = c.parts[0].part_number
-        lines.append(f"{c.callout_code:8s}   {pn:14s} {c.description}")
+        lines.append(f"Callout: {c.callout_code:8s} Part number: {pn:14s} {c.description}")
 
     return lines, callouts
 
@@ -156,7 +156,7 @@ def build_xref_lines(db, model_rec, fig, page):
             cat184 = db.get_fig_category(model_rec, xr_info.fig_group_code)
             if cat184:
                 xr_cat = f" [{cat184.desc_en}]"
-        lines.append(f"{'FIG ' + xr.ref_figure:8s}   {'--':14s} {xr_desc}{xr_cat}")
+        lines.append(f"Callout: {'FIG ' + xr.ref_figure:8s} Figure Name: {xr_desc}{xr_cat}")
     return lines
 
 
@@ -173,7 +173,7 @@ def build_bulletin_ref_lines(callouts):
                         bulletin_refs.add((link.bulletin_figure, link.bulletin_page, link.bulletin_label))
     lines = []
     for bf, bp, bl in sorted(bulletin_refs):
-        lines.append(f"  -> FIG {bf}-{bp} {bl}")
+        lines.append(f"Bulletin FIG {bf}-{bp} {bl}")
     return lines
 
 
@@ -264,7 +264,9 @@ def main():
         model_rec = vehicle.model_rec
         spec = vehicle.spec
 
+        model_year = db.get_model_year(vehicle)
         print(f"  Model: {vehicle.vin_rec.model_code}")
+        print(f"  Model year: {model_year}")
         if spec:
             print(f"  Applied Model: {spec.applied_model} / {spec.engine} / {spec.transmission}")
 
@@ -318,7 +320,7 @@ def main():
                 f"Engine: {spec.engine}  Trans: {spec.transmission}  Trim: {spec.trim_level}",
                 f"Body: {spec.body_config}  Drivetrain: {spec.drivetrain}",
             ])
-        title_lines.append(f"Production: {vehicle.vehicle_date}")
+        title_lines.append(f"Production: {vehicle.vehicle_date}  Model year: {model_year}")
         title_lines.append(f"")
         title_lines.append(f"Figures: {len(by_fig_page)}  Bulletins: {len(bulletin_pages)}")
         add_text_frame(slide, Inches(1), Inches(1.5), Inches(11), Inches(5),
@@ -357,18 +359,26 @@ def main():
             bref_lines = build_bulletin_ref_lines(callouts)
 
             # Build text panel with column header + table + bulletin section
-            table_lines = callout_lines + xref_lines
+            table_lines = callout_lines
             all_lines = []
 
-            if table_lines or bref_lines:
+            if table_lines:
                 # Column header
-                all_lines.append(f"{'Callout':8s}   {'Part Number':14s} Details")
-                all_lines.append("-" * 60)
+                # all_lines.append(f"{'Callout':8s}   {'Part Number':14s} Details")
+                # all_lines.append("-" * 60)
                 all_lines.extend(table_lines)
+
+            if xref_lines:
+                all_lines.append("")
+                all_lines.append("Figure References:")
+                # all_lines.append(f"{'Callout':8s}   Figure name")
+                # all_lines.append("-" * 60)
+                all_lines.extend(xref_lines)
+
 
             if bref_lines:
                 all_lines.append("")
-                all_lines.append("Bulletins:")
+                all_lines.append("Bulletin References:")
                 all_lines.extend(bref_lines)
 
             if all_lines:
