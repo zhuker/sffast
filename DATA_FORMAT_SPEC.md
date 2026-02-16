@@ -930,7 +930,8 @@ Offset  Size  Field               Description
 0x00    6     Model Code          "B11", "G11", etc.
 0x06    3     Figure              FIG index (e.g., "940")
 0x09    4     Figure Page         Page within figure (e.g., "01  ")
-0x0D    8     Part Code           Callout code (e.g., "94088A", "W130076")
+0x0D    7     Callout Code        Callout code (e.g., "94088A ", "W130076", "42037BA")
+0x14    1     Variant             Variant letter (A-R) or space (0x20 = no variant)
 0x15    40    Description (EN)    English label
 0x3D    40    Description (DE)    German label
 0x65    40    Description (FR)    French label
@@ -938,6 +939,19 @@ Offset  Size  Field               Description
 0xB5    2     X Coordinate        BE uint16 - callout position on figure
 0xB7    2     Y Coordinate        BE uint16 - callout position on figure
 ```
+
+**Callout Code + Variant (8 bytes at 0x0D):**
+
+The 8-byte field is split into two parts:
+- **Bytes 0-6 (7 bytes):** Callout code, space-padded right. Matches the 7-byte Group/Category field in Cat466 records.
+- **Byte 7 (1 byte):** Variant letter (A-R) or space (no variant).
+
+87.2% of records have no variant (space). When a variant is present, it corresponds to the variant prefix in the Cat466 spec_logic field (e.g., variant `A` matches Cat466 records where spec_logic starts with `A`).
+
+Examples:
+- `"11021  A"` → callout_code=`"11021"`, variant=`"A"`
+- `"W130076 "` → callout_code=`"W130076"`, variant=`""`
+- `"42037BAB"` → callout_code=`"42037BA"`, variant=`"B"` (7-char code with variant)
 
 **Coordinate Space:**
 - X range: 0-2560, Y range: 0-1280
