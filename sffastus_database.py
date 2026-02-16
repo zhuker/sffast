@@ -34,6 +34,7 @@ from sffastus_parser import (
     FigureIndexRecord22,
     InventoryRecord199,
     ItcaCode,
+    ModelYearRecord44,
     PartGroupRecord185,
     SffastusBlockParser,
     SffastusHeader,
@@ -288,6 +289,25 @@ class SffastDatabase:
         """FigureIndexRecord22 — figure cross-references."""
         return self._load(model_rec, FigureIndexRecord22,
                           self._parser.parse_figure_index_records_22)
+
+    def get_model_years(self, model_rec: ModelIndexRecord288) -> List[ModelYearRecord44]:
+        """ModelYearRecord44 — version letters to date ranges and MY labels."""
+        return self._load(model_rec, ModelYearRecord44,
+                          self._parser.parse_model_year_records_44)
+
+    # -- Model year lookup --
+
+    def get_model_year(self, vehicle: Vehicle) -> str:
+        """Find the model year label for a vehicle based on its production date.
+
+        Matches vehicle_date (YYYYMM) against ModelYearRecord44 date ranges.
+        Returns the label string (e.g. "'05MY") or '' if no match.
+        """
+        vd = vehicle.vehicle_date
+        for r in self.get_model_years(vehicle.model_rec):
+            if r.date_from[:6] <= vd <= r.date_to[:6]:
+                return r.label
+        return ''
 
     # -- VIN figures --
 

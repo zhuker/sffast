@@ -2778,6 +2778,28 @@ class TestMYRS_VIN(unittest.TestCase):
             self.assertEqual(c.parts[0].variant, 'B')
 
 
+class TestModelYear(unittest.TestCase):
+    """Test model year lookup for known VINs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = SffastDatabase.open()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+
+    def test_sti_model_year(self):
+        """MYSTI_VIN (2005 STI, G11, date 200406) should be '05MY."""
+        vehicle = self.db.resolve_vin(MYSTI_VIN)
+        self.assertEqual(self.db.get_model_year(vehicle), "'05MY")
+
+    def test_rs_model_year(self):
+        """MYRS_VIN (2001 RS, G10, date 200009) should be '01MY."""
+        vehicle = self.db.resolve_vin(MYRS_VIN)
+        self.assertEqual(self.db.get_model_year(vehicle), "'01MY")
+
+
 if __name__ == '__main__':
     # Run tests
     unittest.main(verbosity=2)
