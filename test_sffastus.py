@@ -2712,6 +2712,16 @@ class TestSffastDatabase(unittest.TestCase):
             pns = set(p.part_number for p in c.parts)
             self.assertEqual(pns, expected_pns)
 
+    def test_012_04(self):
+        callouts = self.db.get_fig_callouts(self.model_rec, '012', '04', vehicle=self.vehicle)
+        callout13228 = [c for c in callouts if c.code == "13228"]
+        self.assertEqual(2, len(callout13228))
+        self.assertEqual(94, len(callout13228[0].parts))
+        self.assertEqual(94, len(callout13228[1].parts))
+        p0 = [p.part_number for p in callout13228[0].parts]
+        p1 = [p.part_number for p in callout13228[1].parts]
+        self.assertEqual(p0, p1)
+
 
 if __name__ == '__main__':
     # Run tests
