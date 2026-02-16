@@ -161,7 +161,7 @@ def main():
             for c in pg_callouts:
                 base = c.code.split()[0]
                 if c.parts:
-                    for p in c.parts:
+                    for i, p in enumerate(c.parts):
                         extra = []
                         if p.usage_notes:
                             extra.append(p.usage_notes)
@@ -187,7 +187,8 @@ def main():
                                 chain_str = f" [{bltn}]{chain_str}"
                             else:
                                 chain_str = f" [{bltn}]"
-                        print(f"    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
+                        indent_ = "" if i == 0 else "\t"
+                        print(f"{indent_}    {base:8s}{vstr} {p.part_number:14s} {p.description}{extra_str}{chain_str}")
                         count += 1
                 else:
                     print(f"    {base:8s}   {'--':14s} {c.description}")
