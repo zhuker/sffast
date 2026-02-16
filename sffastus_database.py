@@ -547,7 +547,7 @@ class SffastDatabase:
         (deduped by callout_code + part_id).
         """
         # Build Cat466 lookup: base_code -> [(rec, variant), ...]
-        cat466_by_callout: dict[str, list] = defaultdict(list)
+        cat466_by_callout: dict[str, list[tuple[CatalogApplicabilityRecord466, str]]] = defaultdict(list)
         if vehicle:
             for rec, variant in self._get_filtered_parts(model_rec, vehicle):
                 if not (rec.figure_ref and len(rec.figure_ref) >= 4):
@@ -602,7 +602,7 @@ class SffastDatabase:
             seen: set = set()
             result: list[PartMatch] = []
             for rec, variant in entries:
-                if position and variant and variant != position:
+                if position and variant != position:
                     continue
                 key = (rec.callout_code, rec.part_id)
                 if key in seen:

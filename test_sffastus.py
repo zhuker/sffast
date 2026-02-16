@@ -2722,6 +2722,19 @@ class TestSffastDatabase(unittest.TestCase):
         p1 = [p.part_number for p in callout13228[1].parts]
         self.assertEqual(p0, p1)
 
+    def test_050_16_0104S_G_callouts(self):
+        """Fig 050-16: all 4 '0104S  G' callouts resolve to 010408160 only."""
+        callouts = self.db.get_fig_callouts(self.model_rec, '050', '16', vehicle=self.vehicle)
+        c0104s = [c for c in callouts if c.code == '0104S  G' and c.source == 'part_group']
+        self.assertEqual(len(c0104s), 4, f"Expected 4 '0104S  G' callouts, got {len(c0104s)}")
+        # No other 0104S callouts on this page
+        other = [c for c in callouts if c.code.startswith('0104S') and c.code != '0104S  G']
+        self.assertEqual(len(other), 0, f"Unexpected non-G 0104S callouts: {[c.code for c in other]}")
+        for c in c0104s:
+            self.assertTrue(c.parts, f"Callout {c.code} should have parts")
+            pns = [p.part_number for p in c.parts]
+            self.assertEqual(pns, ['010408160'],
+                             f"Callout {c.code} should resolve to 010408160 only, got {pns}")
 
 if __name__ == '__main__':
     # Run tests
