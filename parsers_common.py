@@ -161,45 +161,6 @@ def date_in_range(vehicle_yyyymm: str, start_yyyymm: str, end_yyyymm: str) -> bo
 
 # --- VIN Lookup ---
 
-def lookup_vin(f, parser, vin: str) -> VINModelRecord | None:
-    """Look up a VIN using the range index -> detail record."""
-    f.seek(0)
-    header = SffastusHeader.parse(f.read(50))
-
-    # Determine which VIN section to search
-    if vin.startswith('4S3') or vin.startswith('4S4'):
-        vin_offset = header.us_vin_start_block * BLOCK_SIZE
-        vin_blocks = header.us_vin_count
-    else:
-        vin_offset = header.jdm_vin_start_block * BLOCK_SIZE
-        vin_blocks = header.jdm_vin_count
-
-    # Search VIN range blocks
-    for bi in range(vin_blocks):
-        bo = vin_offset + bi * BLOCK_SIZE
-        ranges = parser.parse_vin_blocks(f, start_offset=bo, max_records=60)
-        if not ranges:
-            continue
-
-        if ranges[0].vin_start > vin:
-            break
-        if ranges[-1].vin_end < vin:
-            continue
-
-        for r in ranges:
-            if r.vin_start <= vin <= r.vin_end:
-                ptr_bytes = struct.pack('<HH', r.section, r.index)
-                bp = decode_block_pointer(ptr_bytes)
-                detail_offset = bp * BLOCK_SIZE
-                detail_recs = parser.parse_vin_model_records(f, start_offset=detail_offset)
-                for dr in detail_recs:
-                    if dr.vin == vin:
-                        return dr
-                return None
-
-    return None
-
-
 def body_model_matches_applied(body_model: str, applied_model: str) -> bool:
     """Check if a 7-char body model matches an applied model like 'GDF-YEH'.
 
@@ -264,12 +225,44 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     Returns Vehicle with all fields populated.
     Raises LookupError if VIN or model not found.
     """
-    vin_rec = lookup_vin(f, parser, vin)
+    f.seek(0)
+    header = SffastusHeader.parse(f.read(50))
+
+    # Look up VIN using range index -> detail record
+    if vin.startswith('4S3') or vin.startswith('4S4'):
+        vin_offset = header.us_vin_start_block * BLOCK_SIZE
+        vin_blocks = header.us_vin_count
+    else:
+        vin_offset = header.jdm_vin_start_block * BLOCK_SIZE
+        vin_blocks = header.jdm_vin_count
+
+    vin_rec = None
+    for bi in range(vin_blocks):
+        bo = vin_offset + bi * BLOCK_SIZE
+        ranges = parser.parse_vin_blocks(f, start_offset=bo, max_records=60)
+        if not ranges:
+            continue
+        if ranges[0].vin_start > vin:
+            break
+        if ranges[-1].vin_end < vin:
+            continue
+        for r in ranges:
+            if r.vin_start <= vin <= r.vin_end:
+                ptr_bytes = struct.pack('<HH', r.section, r.index)
+                bp = decode_block_pointer(ptr_bytes)
+                detail_offset = bp * BLOCK_SIZE
+                detail_recs = parser.parse_vin_model_records(f, start_offset=detail_offset)
+                for dr in detail_recs:
+                    if dr.vin == vin:
+                        vin_rec = dr
+                        break
+                break
+        if vin_rec:
+            break
+
     if not vin_rec:
         raise LookupError(f"VIN {vin} not found in database")
 
-    f.seek(0)
-    header = SffastusHeader.parse(f.read(50))
     models = parse_model_index(f, header)
     model_rec = models.get(vin_rec.model_code)
     if not model_rec:
