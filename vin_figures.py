@@ -18,20 +18,38 @@ from typing import NamedTuple
 
 from sffastus_parser import is_valid_subaru_vin
 
-from sffastus_database import SffastDatabase, PartMatch
+from parts_database import SubaruPartsDatabase, PartMatch
 
 
 def main():
-    vin = sys.argv[1] if len(sys.argv) > 1 else "JF1GD70655L510047"
+    # Usage: vin_figures.py [VIN] [--db PATH]
+    vin = None
+    db_path = None
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == '--db' and i + 1 < len(args):
+            db_path = args[i + 1]
+            i += 2
+        elif vin is None:
+            vin = args[i]
+            i += 1
+        else:
+            i += 1
+
+    if vin is None:
+        vin = "JF1GD70655L510047"
 
     if not is_valid_subaru_vin(vin):
         print(f"Error: '{vin}' is not a valid Subaru VIN")
         sys.exit(1)
 
     print(f"VIN: {vin}")
+    if db_path:
+        print(f"Database: {db_path}")
     print()
 
-    with SffastDatabase.open() as db:
+    with SubaruPartsDatabase.open(db_path) as db:
         # Steps 1-3: VIN lookup + model index + model spec
         print("Resolving VIN...")
         try:
@@ -52,7 +70,7 @@ def main():
         print(f"  Trim:        {vin_rec.trim_code}")
         print(f"  Option:      {vin_rec.option_code}")
         print(f"  Destination: {vin_rec.destination_code}")
-        print(f"  Date:        {vin_rec.date1}")
+        print(f"  Date:        {vin_rec.body_production_date}")
         if spec:
             print(f"  Applied Model: {spec.applied_model}")
             print(f"  Body:          {spec.body_config}")

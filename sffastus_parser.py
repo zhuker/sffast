@@ -29,6 +29,22 @@ def clean_nostrip(b: bytes) -> str:
     return b.decode(CHARSET, errors='replace')
 
 
+def check_bitmask(data: bytes, position: int) -> bool:
+    """Check if a 1-based bit position is set in a binary bitmask.
+
+    Equivalent to EPC3's _check_bitmask() but operates on raw bytes
+    instead of hex strings. Position 1 = MSB of byte 0.
+    """
+    if not data or position < 1:
+        return False
+    pos0 = position - 1
+    byte_idx = pos0 // 8
+    bit_idx = pos0 % 8
+    if byte_idx >= len(data):
+        return False
+    return bool(data[byte_idx] & (0x80 >> bit_idx))
+
+
 # Valid Subaru VIN prefixes
 # 4S3 - US manufactured (Subaru of Indiana Automotive)
 # JF1 - Japan manufactured (Fuji Heavy Industries)
@@ -527,9 +543,9 @@ class VINModelRecord:
         0x26 (2):  Main Option Code (e.g., "NT")
         0x28 (1):  Padding (space)
         0x29 (2):  Binary flags
-        0x2B (8):  Date 1 (YYYYMMDD)
-        0x33 (8):  Date 2 (YYYYMMDD)
-        0x3B (8):  Date 3 (YYYYMMDD)
+        0x2B (8):  Body Production Date (YYYYMMDD) — EPC3: BD_SEISAN_YMD
+        0x33 (8):  Engine Production Date (YYYYMMDD) — EPC3: EG_SEISAN_YMD
+        0x3B (8):  Trans Production Date (YYYYMMDD) — EPC3: TM_SEISAN_YMD
         0x43 (2):  Destination Code (e.g., "U5")
     """
     offset: int
@@ -541,9 +557,9 @@ class VINModelRecord:
     trim_code: str
     option_code: str
     binary_flags: bytes
-    date1: str
-    date2: str
-    date3: str
+    body_production_date: str
+    engine_production_date: str
+    trans_production_date: str
     destination_code: str
     raw_data: bytes = field(repr=False)
 
@@ -561,9 +577,9 @@ class VINModelRecord:
             trim_code=clean(data[35:38]),
             option_code=clean(data[38:40]),
             binary_flags=data[41:43],
-            date1=clean_nostrip(data[43:51]),
-            date2=clean_nostrip(data[51:59]),
-            date3=clean_nostrip(data[59:67]),
+            body_production_date=clean_nostrip(data[43:51]),
+            engine_production_date=clean_nostrip(data[51:59]),
+            trans_production_date=clean_nostrip(data[59:67]),
             destination_code=clean_nostrip(data[67:69]),
         )
 
@@ -574,20 +590,20 @@ class BodyModelRecord17:
     """Represents a 17-byte body model mapping record from sffastus
 
     Maps body model codes (7-char, e.g., "BD6AY1G") to model codes (e.g., "B11")
-    and a configuration index.
+    and a model position (bit index for APPLIED_MODEL bitmask filtering).
 
     Structure:
         0x00 (7):  Body Model Code (e.g., "BD6AY1G", "SHMDY6S")
         0x07 (2):  Constant (always 0x0001 BE)
         0x09 (6):  Model Code (e.g., "B11   ", "S12   ")
-        0x0F (2):  Config Index (BE uint16)
+        0x0F (2):  Model Position (BE uint16) — EPC3: MODEL_POSITION
     """
     ID = 'body_model'
     offset: int
     body_model: str
     constant: int
     model_code: str
-    config_index: int
+    model_position: int
     raw_data: bytes = field(repr=False)
 
     @staticmethod
@@ -597,7 +613,7 @@ class BodyModelRecord17:
             body_model=clean_nostrip(data[0:7]),
             constant=(data[7] << 8) | data[8],
             model_code=clean(data[9:15]),
-            config_index=(data[15] << 8) | data[16],
+            model_position=(data[15] << 8) | data[16],
             raw_data=data,
         )
 
@@ -905,7 +921,7 @@ class CatalogApplicabilityRecord466:
         0x06  (7):   Group/Category a.k.a. Callout Code (e.g., "H505301", "14878")
         0x0D  (12):  Part ID (e.g., "98271FE090OE")
         0x19  (3):   Padding (spaces)
-        0x1C  (1):   Date Flag (A-H letter code)
+        0x1C  (1):   Model Year Version (A-H letter code) — EPC3: NENKAI
         0x1D  (16):  Date Range YYYYMMDDYYYYMMDD
         0x2D  (19):  Destination Codes (e.g., "C0U4", "U5U6")
         0x40  (64):  Spec Logic expression (e.g., "EJ22# +EJ25D")
@@ -920,10 +936,10 @@ class CatalogApplicabilityRecord466:
         0xF0  (2):   Figure Page (e.g., "04") or spaces
         0xF2  (44):  Secondary binder ref (e.g., "B20") + market code at end
         0x11E (4):   Market/Locale code (e.g., "C", "T", "ND", "MI", "GL")
-        0x122 (15):  Binary bitmask (5 active bytes at [290-291, 302-304], rest zero)
+        0x122 (15):  Option Position bitmask (EPC3: OPTION_POSITION)
         0x131 (109): Padding (zeros)
-        0x19E (2):   Marker: 0x00 + 0x2A('*') or 0x20(' ')
-        0x1A0 (25):  Feature mask (0x40 '@' fill) or binary flag (byte 0 only)
+        0x19E (2):   Option flag: 0x00 + 0x2A('*') or 0x20(' ') (EPC3: OP_FLG)
+        0x1A0 (25):  Line Options (EPC3: LINE_OP1..LINE_OP5, 5x5 bytes)
         0x1B9 (15):  Supplier/distribution code (e.g., "SSPCQ", "COWPX", "SUNRO")
         0x1C8 (10):  Padding (spaces)
     """
@@ -933,7 +949,7 @@ class CatalogApplicabilityRecord466:
     callout_code: str
     part_id: str
 
-    date_flag: str
+    model_year_version: str
     date: str
     destination_codes: str
 
@@ -946,6 +962,9 @@ class CatalogApplicabilityRecord466:
     figure_ref: str
     figure_page: str
     supplier_code: str
+    option_flag: str
+    option_position: bytes
+    line_options: bytes
     raw_data: bytes = field(repr=False)
 
     @property
@@ -964,7 +983,7 @@ class CatalogApplicabilityRecord466:
             part_id=clean(data[13:25]),
 
             # Validity Range
-            date_flag=clean(data[28:29]),
+            model_year_version=clean(data[28:29]),
             date=clean(data[29:45]),
 
             # Destination / Market Codes (e.g., C0=Canada, U4/U5/U6=US)
@@ -992,6 +1011,15 @@ class CatalogApplicabilityRecord466:
 
             # Supplier/distribution code (e.g., "SSPCQ", "COWPX", "SUNRO")
             supplier_code=clean(data[441:456]) if len(data) > 455 else '',
+
+            # Option flag: '*' = has option condition, ' ' = none (EPC3: OP_FLG)
+            option_flag=chr(data[0x19F]) if len(data) > 0x19F else '',
+
+            # Option position bitmask (EPC3: OPTION_POSITION)
+            option_position=data[0x122:0x131] if len(data) > 0x130 else b'',
+
+            # Line options (EPC3: LINE_OP1..LINE_OP5, 5x5 bytes)
+            line_options=data[0x1A0:0x1B9] if len(data) > 0x1B8 else b'',
         )
 
 
@@ -1007,14 +1035,16 @@ class GlossaryRecord28:
         0x00 (6): Model Code (e.g., "B11   ")
         0x06 (1): Category/Type byte
         0x07 (17): Term/Text (e.g., "AUTO", "AXLE", "5X20")
-        0x18 (4): Metadata/Flags
+        0x18 (2): Display Order (BE uint16) — EPC3: HYOUZI_ORDER
+        0x1A (2): Metadata tail
     """
     ID = 'glossary_record_28'
     offset: int
     model_code: str
     category: int  # Single byte category
     term: str
-    metadata: bytes  # 4 bytes of metadata
+    display_order: int
+    metadata_tail: bytes
     raw_data: bytes = field(repr=False)
 
     @staticmethod
@@ -1027,7 +1057,8 @@ class GlossaryRecord28:
             model_code=clean(data[0:6]),
             category=data[6],  # Single byte
             term=clean(data[7:24]),  # 17 bytes
-            metadata=data[24:28],  # 4 bytes
+            display_order=(data[24] << 8) | data[25],
+            metadata_tail=data[26:28],
         )
 
 
@@ -1133,6 +1164,8 @@ class EngineSpecRecord230:
     Encoding: CP437
 
     Contains engine types and production periods.
+    The 125-byte applied_model_bitmask encodes which model positions this
+    figure page applies to (EPC3: M_ILLUST_NARROW.APPLIED_MODEL).
 
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
@@ -1142,7 +1175,7 @@ class EngineSpecRecord230:
         0x58 (5):  Padding
         0x5D (6):  Start Date (YYYYMM)
         0x63 (6):  End Date (YYYYMM)
-        0x69 (125): Trailer/Metadata
+        0x69 (125): Applied Model bitmask (EPC3: APPLIED_MODEL, 1000 bits)
     """
     ID = 'engine_spec_230'
     offset: int
@@ -1152,8 +1185,12 @@ class EngineSpecRecord230:
     applicable_model: str
     start_date: str
     end_date: str
-    trailer: bytes
+    applied_model_bitmask: bytes
     raw_data: bytes = field(repr=False)
+
+    def check_model_position(self, position: int) -> bool:
+        """Check if model_position (1-based) is set in the applied_model bitmask."""
+        return check_bitmask(self.applied_model_bitmask, position)
 
     @staticmethod
     def parse_230(data: bytes, offset: int = 0) -> 'EngineSpecRecord230':
@@ -1168,7 +1205,7 @@ class EngineSpecRecord230:
             applicable_model=clean(data[9 + 4:88]),
             start_date=clean(data[93:99]),
             end_date=clean(data[99:105]),
-            trailer=data[105:230],
+            applied_model_bitmask=data[105:230],
         )
 
 
@@ -1948,18 +1985,25 @@ class MultilingualPartRecord167:
     Located at 0x0CD41000+
     Encoding: CP437
 
+    The 125-byte applied_position_bitmask encodes which model positions
+    this spec code applies to (EPC3: M_TOKUCHO_KIGOU.APPLIED_POSITION).
+
     Structure:
         0x00 (6):  Model Code (e.g., "B11   ")
         0x06 (11): Spec Code (e.g., "103TW      ")
         0x11 (25): Description (e.g., "WAGON(STEP ROOF)         ")
-        0x2A (125): Trailer/Padding
+        0x2A (125): Applied Position bitmask (EPC3: APPLIED_POSITION, 1000 bits)
     """
     offset: int
     model_code: str
     spec_code: str
     description: str
-    trailer: bytes
+    applied_position_bitmask: bytes
     raw_data: bytes = field(repr=False)
+
+    def check_position(self, position: int) -> bool:
+        """Check if model_position (1-based) is set in the applied_position bitmask."""
+        return check_bitmask(self.applied_position_bitmask, position)
 
     @staticmethod
     def parse_167(data: bytes, offset: int = 0) -> 'MultilingualPartRecord167':
@@ -1971,7 +2015,7 @@ class MultilingualPartRecord167:
             model_code=clean(data[0:6]),
             spec_code=clean(data[6:17]),
             description=clean(data[17:42]),
-            trailer=data[42:167],
+            applied_position_bitmask=data[42:167],
         )
 
 

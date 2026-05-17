@@ -331,7 +331,7 @@ Maps **Body Model Codes** (7 chars) to **Model Codes** (e.g., B11) and a configu
 | 0x00 | 7 | Body Model | e.g., `BD6AY1G`, `SHMDY6S`, `WXEAY2U` |
 | 0x07 | 2 | Constant | Always `0x0001` (Big Endian) |
 | 0x09 | 6 | Model Code | e.g., `B11   `, `S12   ` |
-| 0x0F | 2 | Config Index | BE uint16 (range 0x0001-0x0197, 116 unique values) |
+| 0x0F | 2 | Model Position | BE uint16 (EPC3: MODEL_POSITION) — bit position in APPLIED_MODEL bitmask |
 
 **Validation Status:** ✓ 754 records parsed and validated across 7 blocks.
 
@@ -428,16 +428,16 @@ Full vehicle specification records keyed by VIN. Each record maps a specific VIN
 | 0x26 | 2 | Main Option Code | Main option code (e.g. `NT`) |
 | 0x28 | 1 | Padding | Space |
 | 0x29 | 2 | Binary Flags | Unknown flags |
-| 0x2B | 8 | Date 1 | `YYYYMMDD` (e.g. `20120116`) |
-| 0x33 | 8 | Date 2 | `YYYYMMDD` (e.g. `20120112`) |
-| 0x3B | 8 | Date 3 | `YYYYMMDD` (e.g. `20120112`) |
+| 0x2B | 8 | Body Production Date | `YYYYMMDD` — EPC3: BD_SEISAN_YMD |
+| 0x33 | 8 | Engine Production Date | `YYYYMMDD` — EPC3: EG_SEISAN_YMD |
+| 0x3B | 8 | Trans Production Date | `YYYYMMDD` — EPC3: TM_SEISAN_YMD |
 | 0x43 | 2 | Destination Code | Market/destination (e.g. `U5`) |
 
 **Notes:**
 - Records are contiguous; parsing stops when VIN fails validation
 - Color/trim/option codes were previously treated as a single 9-byte "spec_code" field
 - Destination code indicates target market (e.g. `U5` = US market)
-- Three date fields may represent production, shipping, and registration dates
+- Three date fields are body, engine, and transmission production dates (confirmed by EPC3 M_SYARYO)
 
 **Validation:** Parse records from VIN pointer targets and verify model/body/color combinations match known Subaru specifications.
 
@@ -472,7 +472,7 @@ Defines part applicability per model: which parts apply to which engine/body/tri
 | 0x06 | 7 | Group/Category | Callout code (e.g. `H505301`, `98201A`, `14878`) |
 | 0x0D | 12 | Part ID | Part number (e.g. `98271FE090OE`, `42162AC190`) |
 | 0x19 | 3 | Padding | Spaces |
-| 0x1C | 1 | Date Flag | Letter code A-H indicating validity period type |
+| 0x1C | 1 | Model Year Version | Letter code A-H (EPC3: NENKAI) — indexes into ModelYearRecord44 |
 | 0x1D | 16 | Date Range | `YYYYMMDDYYYYMMDD` (start + end, e.g. `1997100119990531`) |
 | 0x2D | 19 | Destination Codes | Market/destination codes (e.g. `C0U4`, `U5U6`, spaces if universal) |
 | 0x40 | 64 | Spec Logic | Boolean expression for applicability (e.g. `EJ22# +EJ25D`, `S +W`) |
@@ -486,10 +486,10 @@ Defines part applicability per model: which parts apply to which engine/body/tri
 | 0xF0 | 2 | Figure Page | Page within figure (e.g. `04`) or spaces |
 | 0xF2 | 44 | Secondary Ref | Binder cross-ref code (e.g. `B20`) at start, mostly spaces |
 | 0x11E | 4 | Market Code | Locale code (e.g. `C`, `T`, `ND`, `MI`, `GL`) |
-| 0x122 | 15 | Bitmask | Binary flags — 5 active bytes at offsets 290–291, 302–304; rest zero |
+| 0x122 | 15 | Option Position | EPC3: OPTION_POSITION — option applicability bitmask |
 | 0x131 | 109 | Padding | Always zeros |
-| 0x19E | 2 | Marker | `0x00` + `0x2A` (`*`, 84%) or `0x20` (` `, 16%) |
-| 0x1A0 | 25 | Feature Mask | `0x40` (`@`) fill when marker=`*`; single flag byte when marker=` ` |
+| 0x19E | 2 | Option Flag | `0x00` + `0x2A` (`*`) or `0x20` (` `) — EPC3: OP_FLG (`*` = has option condition) |
+| 0x1A0 | 25 | Line Options | EPC3: LINE_OP1..LINE_OP5 (5×5 bytes) — `0x40` fill when active |
 | 0x1B9 | 15 | Supplier Code | Distribution/supplier code (e.g. `SSPCQ`, `COWPX`, `SUNRO`) or spaces |
 | 0x1C8 | 10 | Padding | Trailing spaces |
 
@@ -667,7 +667,8 @@ Offset  Size  Field
 0x00    6     Model Code (e.g., "B11   ")
 0x06    1     Category/Type byte
 0x07    17    Term/Text (e.g., "AUTO", "AXLE", "5X20")
-0x18    4     Metadata/Flags
+0x18    2     Display Order (BE uint16) — EPC3: HYOUZI_ORDER
+0x1A    2     Metadata tail
 ```
 
 **Examples:**
@@ -678,7 +679,7 @@ Offset  Size  Field
 **Notes:**
 - Category byte appears to group related terms
 - Terms are left-aligned with space padding
-- Metadata may indicate term usage context or references
+- Display order (bytes 24-25) controls sort order in the UI (EPC3: HYOUZI_ORDER)
 
 **Validation:** Cross-reference terms with part descriptions and technical documentation.
 
@@ -1019,12 +1020,18 @@ Offset  Size  Field               Description
 0x58    5     Padding             Usually spaces
 0x5D    6     Start Date          Production start (YYYYMM)
 0x63    6     End Date            Production end (YYYYMM)
-0x69    125   Trailer/Metadata    Binary metadata
+0x69    125   Applied Model bitmask   EPC3: APPLIED_MODEL (1000-bit bitmask)
 ```
+
+**Applied Model Bitmask (125 bytes at 0x69):**
+
+Binary bitmask encoding which model positions this figure page applies to. Each bit corresponds to a `model_position` from BodyModelRecord17. Position 1 = MSB of byte 0. This is the binary equivalent of EPC3's `M_ILLUST_NARROW.APPLIED_MODEL` (stored as 250-char hex string in EPC3).
+
+**Validated:** For G11 STI (model_position=5), 481 of 704 records have bit 5 set, with 98.5% agreement against text-based spec logic filtering.
 
 **Notes:**
 - Date fields are ASCII strings (e.g., "199310").
-- The trailer contains binary data that might link to further specifications or engine-specific part modifications.
+- The `applicable_model` text field (0x0D) and `applied_model_bitmask` (0x69) encode the same applicability — text for display, bitmask for fast filtering.
 
 **Validation:** Engine types match the production periods known for the respective Subaru models.
 
@@ -1207,7 +1214,7 @@ Offset  Size  Field
 **Record size:** 167 bytes
 **Encoding:** CP437
 
-Appears to be mono-lingual (English) descriptions with spec codes.
+Spec code definitions with applied position bitmask (EPC3: M_TOKUCHO_KIGOU).
 Located in blocks around `0x0CD41000`.
 
 ```
@@ -1216,8 +1223,12 @@ Offset  Size  Field
 0x00    6     Model Code (e.g., "B11   ")
 0x06    11    Spec Code (e.g., "103TW      ")
 0x11    25    Description (e.g., "WAGON(STEP ROOF)         ")
-0x2A    125   Trailer/Padding
+0x2A    125   Applied Position bitmask (EPC3: APPLIED_POSITION, 1000 bits)
 ```
+
+**Applied Position Bitmask (125 bytes at 0x2A):**
+
+Binary bitmask encoding which model positions this spec code applies to. Same encoding as EngineSpecRecord230's applied_model_bitmask (position 1 = MSB of byte 0). Equivalent to EPC3's `M_TOKUCHO_KIGOU.APPLIED_POSITION`.
 
 ### Multilingual Part Records (180-byte Type) (0x0CD45000+) - **NEW**
 

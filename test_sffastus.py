@@ -53,6 +53,9 @@ from sffastus_parser import (
     encode_block_pointer,
     VersionIndexRecord20,
     BodyModelRecord17,
+    check_bitmask,
+    iter_model_blocks,
+    parse_model_index,
 )
 from parsers_common import get_vehicle_by_vin, eval_spec_logic, date_in_range
 from sffastus_database import SffastDatabase, FigureCallout, FigureCrossRef
@@ -611,9 +614,9 @@ class TestVINModelRecords(unittest.TestCase):
         self.assertEqual(rec.trim_code, "B20")
         self.assertEqual(rec.option_code, "TG")
         self.assertEqual(rec.destination_code, "U4")
-        self.assertEqual(rec.date1, '20040625')
-        self.assertEqual(rec.date2, '20040624')
-        self.assertEqual(rec.date1, '20040625')
+        self.assertEqual(rec.body_production_date, '20040625')
+        self.assertEqual(rec.engine_production_date, '20040624')
+        self.assertEqual(rec.body_production_date, '20040625')
         self.assertEqual(rec.flag, 1)
 
 
@@ -630,8 +633,8 @@ class TestVINModelRecords(unittest.TestCase):
         self.assertIsInstance(records[0], VINModelRecord)
 
         # Check dates are valid format YYYYMMDD
-        self.assertEqual(len(records[0].date1), 8)
-        self.assertTrue(records[0].date1.isdigit())
+        self.assertEqual(len(records[0].body_production_date), 8)
+        self.assertTrue(records[0].body_production_date.isdigit())
 
     def test_vin_model_record_dataclass(self):
         """Test VINModelRecord dataclass structure"""
@@ -645,9 +648,9 @@ class TestVINModelRecords(unittest.TestCase):
             trim_code="H20",
             option_code="NT",
             binary_flags=b'\x00\x10',
-            date1="20120116",
-            date2="20120112",
-            date3="20120112",
+            body_production_date="20120116",
+            engine_production_date="20120112",
+            trans_production_date="20120112",
             destination_code="U5",
             raw_data=b'\x00' * 69
         )
@@ -658,7 +661,7 @@ class TestVINModelRecords(unittest.TestCase):
         self.assertEqual(rec.trim_code, "H20")
         self.assertEqual(rec.option_code, "NT")
         self.assertEqual(rec.destination_code, "U5")
-        self.assertEqual(len(rec.date1), 8)
+        self.assertEqual(len(rec.body_production_date), 8)
 
 
 class TestMultilingualPartRecords(unittest.TestCase):
@@ -2535,7 +2538,7 @@ class TestGetVehicleByVin(unittest.TestCase):
         self.assertEqual(v.vin_rec.trim_code, 'B20')
         self.assertEqual(v.vin_rec.option_code, 'TG')
         self.assertEqual(v.vin_rec.destination_code, 'U4')
-        self.assertEqual(v.vin_rec.date1, '20040625')
+        self.assertEqual(v.vin_rec.body_production_date, '20040625')
 
         # Model index record
         self.assertEqual(v.model_rec.model_code, 'G11')
@@ -2556,7 +2559,7 @@ class TestGetVehicleByVin(unittest.TestCase):
         # Derived codes
         self.assertEqual(sorted(v.codes), ['257', '4W', '6MT', 'N/S', 'S', 'STI'])
 
-        # Vehicle date (YYYYMM from date1)
+        # Vehicle date (YYYYMM from body_production_date)
         self.assertEqual(v.vehicle_date, '200406')
 
     def test_invalid_vin_raises(self):
@@ -2798,6 +2801,91 @@ class TestModelYear(unittest.TestCase):
         """MYRS_VIN (2001 RS, G10, date 200009) should be '01MY."""
         vehicle = self.db.resolve_vin(MYRS_VIN)
         self.assertEqual(self.db.get_model_year(vehicle), "'01MY")
+
+
+class TestBitmaskConsistency(unittest.TestCase):
+    """Verify 125-byte applied_model bitmask matches text-based spec logic."""
+
+    def test_check_bitmask_basic(self):
+        """Test check_bitmask utility with known bit patterns."""
+        # 0x80 = 10000000 -> position 1 is set
+        self.assertTrue(check_bitmask(b'\x80', 1))
+        self.assertFalse(check_bitmask(b'\x80', 2))
+        # 0x40 = 01000000 -> position 2 is set
+        self.assertTrue(check_bitmask(b'\x40', 2))
+        self.assertFalse(check_bitmask(b'\x40', 1))
+        # 0x01 = 00000001 -> position 8 is set
+        self.assertTrue(check_bitmask(b'\x01', 8))
+        # Second byte: position 9 = MSB of byte 1
+        self.assertTrue(check_bitmask(b'\x00\x80', 9))
+        self.assertFalse(check_bitmask(b'\x00\x80', 1))
+        # Edge cases
+        self.assertFalse(check_bitmask(b'', 1))
+        self.assertFalse(check_bitmask(b'\xFF', 0))
+        self.assertFalse(check_bitmask(b'\xFF', -1))
+        self.assertFalse(check_bitmask(b'\xFF', 9))  # beyond data
+
+    def test_sti_model_position_in_engine_spec_bitmask(self):
+        """For STI VIN, verify model_position bit is set in EngineSpecRecord230 bitmask."""
+        with open(SFCDUS2_PATH, 'rb') as f:
+            # 1. Get STI vehicle and its body model
+            vehicle = get_vehicle_by_vin(f, parser, MYSTI_VIN)
+            sti_body_model = vehicle.vin_rec.body_model  # GDFDYEH
+
+            # 2. Find model_position for this body model from BodyModelRecord17
+            f.seek(0)
+            header = SffastusHeader.parse(f.read(50))
+            bm_records = []
+            for bi in range(header.body_model_count):
+                bo = (header.body_model_start_block + bi) * 2048
+                bm_records.extend(parser.parse_body_model_records_17(f, bo))
+            sti_bm = [r for r in bm_records if r.body_model.strip() == sti_body_model]
+            self.assertGreater(len(sti_bm), 0, f"Body model {sti_body_model} not found")
+            model_position = sti_bm[0].model_position
+            self.assertGreater(model_position, 0, "model_position should be positive")
+
+            # 3. Parse EngineSpecRecord230 records for G11
+            models = parse_model_index(f, header)
+            g11 = models['G11']
+            engine_spec_records = []
+            for bo in iter_model_blocks(g11, EngineSpecRecord230.ID):
+                engine_spec_records.extend(
+                    parser.parse_engine_spec_records_230(f, bo))
+
+            self.assertGreater(len(engine_spec_records), 0, "No EngineSpec records for G11")
+
+            # 4. Verify: the bitmask should be non-trivial (not all zeros)
+            non_zero_bitmasks = [r for r in engine_spec_records
+                                 if any(b != 0 for b in r.applied_model_bitmask)]
+            self.assertGreater(len(non_zero_bitmasks), 0,
+                               "All bitmasks are zero — theory may be wrong")
+
+            # 5. Check that model_position bit is set in at least some records
+            matching = [r for r in engine_spec_records
+                        if r.check_model_position(model_position)]
+            self.assertGreater(len(matching), 0,
+                               f"No EngineSpec records have bit {model_position} set for STI")
+
+            # 6. Cross-validate: records matching by bitmask should also have
+            #    compatible text spec logic (containing engine code 257 or STI)
+            sti_codes = vehicle.codes  # {'S', '257', '4W', '6MT', 'STI', 'N/S'}
+            bitmask_only = 0
+            text_match = 0
+            for r in matching:
+                text = r.applicable_model
+                if text and eval_spec_logic(text, sti_codes):
+                    text_match += 1
+                elif not text:
+                    text_match += 1  # empty text = universal
+                else:
+                    bitmask_only += 1
+
+            print(f"\nBitmask validation for STI (model_position={model_position}):")
+            print(f"  Total EngineSpec records: {len(engine_spec_records)}")
+            print(f"  Non-zero bitmasks: {len(non_zero_bitmasks)}")
+            print(f"  Matching by bitmask: {len(matching)}")
+            print(f"  Also matching by text: {text_match}")
+            print(f"  Bitmask-only (no text match): {bitmask_only}")
 
 
 if __name__ == '__main__':

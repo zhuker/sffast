@@ -281,7 +281,7 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     codes = set()
     for s in matching_specs:
         codes |= get_vehicle_codes(s)
-    vehicle_date = vin_rec.date1[:6]
+    vehicle_date = vin_rec.body_production_date[:6]
 
     return Vehicle(vin_rec=vin_rec, model_rec=model_rec, spec=spec,
                        codes=codes, vehicle_date=vehicle_date)

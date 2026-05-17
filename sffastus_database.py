@@ -1,7 +1,7 @@
-"""SffastDatabase - high-level read-only interface to a Subaru FAST2 sffastus file.
+"""SffastDatabase - FAST2 sffastus binary implementation of SubaruPartsDatabase.
 
 Encapsulates parser creation, file handle, VIN resolution, figure image extraction,
-and callout coordinate loading behind a simple API.
+and callout coordinate loading behind the SubaruPartsDatabase interface.
 
 All model block data is lazy-loaded and cached on first access.
 
@@ -19,7 +19,6 @@ import math
 import re
 import struct
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, List, Optional
 
@@ -54,84 +53,22 @@ from parsers_common import (
     Vehicle,
 )
 
+from parts_database import (
+    SubaruPartsDatabase,
+    FigurePage,
+    BulletinMatch,
+    ItcaChainLink,
+    PartMatch,
+    FigureCallout,
+    FigureCrossRef,
+)
+
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 640
 
 DEFAULT_SFFASTUS = "SFCDUS2/sffastus"
 DEFAULT_FIGNAME = "SFCDUS2/sffastpg/win/figname.txt"
 DEFAULT_ITCA = ["SFCDUS1/ITCA_DATA.TXT", "SFCDUS2/itca_data.txt", "SFCDUS3/itca_data.txt"]
-
-
-@dataclass
-class FigurePage:
-    """An applicable figure page for a vehicle."""
-    figure: str        # figure code, e.g. "940"
-    page: str          # page code, e.g. "01"
-    type: str          # 'figure' | 'bulletin'
-
-
-@dataclass
-class BulletinMatch:
-    """A bulletin page reachable through a vehicle's ITCA interchangeability chain."""
-    figure: str            # bulletin figure code (e.g. "911")
-    page: str              # bulletin page code (e.g. "41")
-    bulletin_part: str     # part number embedded in the bulletin spec
-    source_figure: str     # figure where the triggering part appears
-    source_page: str       # page where the triggering part appears
-    source_callout: str    # callout code on that page
-    source_part: str       # vehicle's Cat466 part number on that callout
-    itca_code: Optional[ItcaCode]  # ITCA code on the interchangeable record (None if direct match)
-
-
-@dataclass
-class ItcaChainLink:
-    """A single hop in an ITCA supersession chain."""
-    part_number: str              # supersedes_to part number
-    code: ItcaCode                # ITCA condition code
-    bulletin_figure: str = ''     # bulletin figure code (e.g. "004") or ''
-    bulletin_page: str = ''       # bulletin page code (e.g. "40") or ''
-    bulletin_label: str = ''      # bulletin label (e.g. "I&S BULLETIN COVER-OIL SEPR") or ''
-
-
-@dataclass
-class PartMatch:
-    """A part matched to a figure callout."""
-    part_number: str   # Cat466 part_id or Inv199 part_number
-    description: str   # resolved via lookup_part_desc (PG185 + ITCA fallback)
-    variant: str       # '' or 'A'-'H' (spec logic variant prefix)
-    usage_notes: str   # from Cat466 (or '')
-    part_spec: str     # from Cat466 (or '')
-    itca_chain: Optional[List[ItcaChainLink]] = None
-    bulletin_figure: str = ''     # bulletin for this part itself ('' if none)
-    bulletin_page: str = ''
-    bulletin_label: str = ''
-
-
-@dataclass
-class FigureCallout:
-    """A single callout on a figure image."""
-    callout_code: str  # callout code (e.g. "94088A", "W130076", "42037BA")
-    variant: str       # variant letter (e.g. "A", "B") or '' if none
-    px_x: int          # pixel X on 1280x640 image
-    px_y: int          # pixel Y on 1280x640 image
-    description: str   # English description (PG185 desc_en or Inv199 name_en)
-    parts: List[PartMatch]  # matched parts (deduped); empty if unmatched
-    source: str        # 'part_group' | 'inventory'
-
-    @property
-    def code(self) -> str:
-        """Legacy accessor: 'callout_code variant' or just 'callout_code'."""
-        if self.variant:
-            return f'{self.callout_code} {self.variant}'
-        return self.callout_code
-
-
-@dataclass
-class FigureCrossRef:
-    """A cross-reference arrow on a figure image."""
-    ref_figure: str    # target figure code
-    px_x: int
-    px_y: int
 
 
 def _make_g4_tiff(raw_data: bytes, width: int, height: int) -> bytes:
@@ -155,8 +92,8 @@ def _make_g4_tiff(raw_data: bytes, width: int, height: int) -> bytes:
     return header + raw_data + ifd
 
 
-class SffastDatabase:
-    """High-level read-only interface to a Subaru FAST2 sffastus data file."""
+class SffastDatabase(SubaruPartsDatabase):
+    """FAST2 sffastus binary implementation of SubaruPartsDatabase."""
 
     def __init__(self, f: BinaryIO, parser: SffastusBlockParser, header: SffastusHeader,
                  models: dict[str, ModelIndexRecord288],
