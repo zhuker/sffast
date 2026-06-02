@@ -56,6 +56,7 @@ from sffastus_parser import (
     check_bitmask,
     iter_model_blocks,
     parse_model_index,
+    detect_region_profile,
 )
 from parsers_common import get_vehicle_by_vin, eval_spec_logic, date_in_range
 from sffastus_database import SffastDatabase, FigureCallout, FigureCrossRef
@@ -2886,6 +2887,129 @@ class TestBitmaskConsistency(unittest.TestCase):
             print(f"  Matching by bitmask: {len(matching)}")
             print(f"  Also matching by text: {text_match}")
             print(f"  Bitmask-only (no text match): {bitmask_only}")
+
+
+JDM_PATH = "SFCDJDM/sffasta"  # 30804SF disc, copied from converted ISO (gitignored)
+JDM_CHASSIS = "BE5002001"     # Legacy BE5, B12
+
+
+class TestJDMRegion(unittest.TestCase):
+    """JDM (Japan-market) database support: region detection, model index,
+    record-size/language collapse, Cat496, and chassis VIN resolution.
+
+    Requires SFCDJDM/sffasta (the converted 30804SF disc). Per project policy a
+    missing data file must FAIL (FileNotFoundError), not skip.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = SffastDatabase.open(JDM_PATH)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+
+    def test_region_detected_jdm(self):
+        """Region auto-detection identifies the JDM profile (420-byte model rec)."""
+        self.assertEqual(self.db._profile.name, 'JDM')
+        self.assertEqual(self.db._profile.model_record_size, 420)
+        self.assertEqual(self.db._profile.encoding, 'cp932')
+        self.assertEqual(self.db._profile.num_languages, 1)
+
+    def test_model_index_jdm(self):
+        """All JDM models parse, with Shift-JIS names decoded."""
+        self.assertIn('B12', self.db._models)
+        self.assertGreaterEqual(len(self.db._models), 14)
+        b12 = self.db.get_model('B12')
+        self.assertEqual(b12.model_code, 'B12')
+        self.assertEqual(b12.model_name, 'ﾚｶﾞｼｲ')  # Legacy in half-width katakana
+        self.assertEqual(b12.start_date, '199711')
+
+    def test_same_size_record_jdm(self):
+        """A no-language record (engine_spec_230) parses at the US size in JDM."""
+        b12 = self.db.get_model('B12')
+        specs = self.db.get_engine_specs(b12)
+        self.assertGreater(len(specs), 0)
+
+    def test_language_collapsed_record_jdm(self):
+        """fig_group_category collapses 4 langs -> 1 (64 B) with Japanese text."""
+        b12 = self.db.get_model('B12')
+        cats = self.db.get_fig_group_categories(b12)
+        self.assertGreater(len(cats), 0)
+        # Description decodes as half-width katakana (engine = ｴﾝｼﾞﾝ)
+        self.assertTrue(any('ｴﾝｼﾞﾝ' in c.desc_en for c in cats))
+        # The other language slots are empty in JDM
+        self.assertEqual(cats[0].desc_de, '')
+
+    def test_part_group_callout_coords_jdm(self):
+        """Part-group callout descriptions + X/Y coordinates parse in JDM."""
+        b12 = self.db.get_model('B12')
+        pgs = self.db.get_part_groups(b12)
+        self.assertGreater(len(pgs), 0)
+        pg = pgs[0]
+        self.assertTrue(pg.desc_en)            # Japanese description present
+        self.assertGreater(pg.x, 0)
+        self.assertGreater(pg.y, 0)
+
+    def test_catalog_496_jdm(self):
+        """JDM catalog parses at 496 B with figure-linked records."""
+        b12 = self.db.get_model('B12')
+        parts = self.db.get_catalog_parts(b12)
+        self.assertGreater(len(parts), 1000)
+        # A known part exists
+        self.assertTrue(any(p.part_id.strip() == '010108200' for p in parts))
+        # figure_ref is US-compatible "<group_letter><nnn>" (e.g. "A004") so the
+        # shared figure_ref[1:] == fig matching works
+        linked = [p for p in parts if len(p.figure_ref) == 4
+                  and p.figure_ref[0].isalpha() and p.figure_ref[1:].isdigit()]
+        self.assertGreater(len(linked), 0)
+
+    def test_callout_parts_linked_jdm(self):
+        """get_fig_callouts populates each callout's parts list for a JDM vehicle."""
+        v = self.db.resolve_vin(JDM_CHASSIS)
+        callouts = self.db.get_fig_callouts(v.model_rec, '004', '02', vehicle=v)
+        self.assertGreater(len(callouts), 0)
+        with_parts = [c for c in callouts if c.parts]
+        self.assertGreater(len(with_parts), 0)
+        # callout 11008 (cylinder block set) -> a real part number
+        c = next((c for c in callouts if c.callout_code == '11008'), None)
+        self.assertIsNotNone(c)
+        self.assertTrue(c.parts and c.parts[0].part_number.startswith('11008'))
+
+    def test_chassis_resolution_jdm(self):
+        """A JDM chassis number resolves to model + spec + production date."""
+        v = self.db.resolve_vin(JDM_CHASSIS)
+        self.assertEqual(v.vin_rec.model_code, 'B12')
+        self.assertEqual(v.vin_rec.body_model, 'BE5A48T')
+        self.assertEqual(v.spec.applied_model, 'BE5-48T')
+        self.assertEqual(v.vehicle_date, '199806')
+        self.assertIn('EJ206', v.codes)
+
+
+class TestRegionProfileDetection(unittest.TestCase):
+    """detect_region_profile selects the right profile and rejects unknowns."""
+
+    def test_us_detected(self):
+        with open(SFCDUS2_PATH, 'rb') as f:
+            hdr = SffastusHeader.parse(f.read(50))
+            f.seek(hdr.model_index_start_block * 2048)
+            prof = detect_region_profile(f.read(2048))
+        self.assertEqual(prof.name, 'US')
+        self.assertEqual(prof.model_record_size, 288)
+
+    def test_jdm_detected(self):
+        with open(JDM_PATH, 'rb') as f:
+            hdr = SffastusHeader.parse(f.read(50))
+            f.seek(hdr.model_index_start_block * 2048)
+            prof = detect_region_profile(f.read(2048))
+        self.assertEqual(prof.name, 'JDM')
+        self.assertEqual(prof.model_record_size, 420)
+
+    def test_unknown_size_raises(self):
+        # A model-record-like block with a trailer date implying an unsupported
+        # size must raise rather than silently mis-parse.
+        with self.assertRaises(ValueError):
+            detect_region_profile(b'Z99   ' + b'\x00' * 2042)
 
 
 if __name__ == '__main__':

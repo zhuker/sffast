@@ -263,7 +263,7 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     if not vin_rec:
         raise LookupError(f"VIN {vin} not found in database")
 
-    models = parse_model_index(f, header)
+    models = parse_model_index(f, header, parser.profile)
     model_rec = models.get(vin_rec.model_code)
     if not model_rec:
         raise LookupError(f"Model {vin_rec.model_code} not found in index")
@@ -272,7 +272,7 @@ def get_vehicle_by_vin(f, parser, vin) -> Vehicle:
     # engine variants across model years (e.g. GME-Y7J: EJ25D, EJ253, EJ251).
     # Union their codes so Cat466 date filtering disambiguates naturally.
     matching_specs = []
-    for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID):
+    for bo in iter_model_blocks(model_rec, ModelSpecRecord103.ID, parser.profile):
         for s in parser.parse_model_spec_records_103(f, bo):
             if body_model_matches_applied(vin_rec.body_model, s.applied_model):
                 matching_specs.append(s)

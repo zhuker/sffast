@@ -43,6 +43,8 @@ from sffastus_parser import (
     ItcaPartsCatalog,
     parse_model_index,
     iter_model_blocks,
+    detect_region_profile,
+    BLOCK_SIZE,
 )
 
 from parsers_common import (
@@ -103,6 +105,7 @@ class SffastDatabase(SubaruPartsDatabase):
         self._header = header
         self._models = models
         self._figname_lookup = figname_lookup
+        self._profile = parser.profile
         self._cache: dict = {}
 
     @classmethod
@@ -131,12 +134,17 @@ class SffastDatabase(SubaruPartsDatabase):
                 itca_records.extend(parse_itca_data(itca_path))
         parts_catalog = ItcaPartsCatalog(itca_records)
 
-        parser = SffastusBlockParser(figure_codes=figure_codes, parts_catalog=parts_catalog)
-
         f = open(sffastus, 'rb')
         header = SffastusHeader.parse(f.read(50))
-        f.seek(0)
-        models = parse_model_index(f, header)
+
+        # Detect market region from the first model-index record, then parse
+        # the model index with the matching profile.
+        f.seek(header.model_index_start_block * BLOCK_SIZE)
+        profile = detect_region_profile(f.read(BLOCK_SIZE))
+
+        parser = SffastusBlockParser(figure_codes=figure_codes, parts_catalog=parts_catalog,
+                                     profile=profile)
+        models = parse_model_index(f, header, profile)
 
         return cls(f, parser, header, models, figname_lookup)
 
@@ -157,7 +165,7 @@ class SffastDatabase(SubaruPartsDatabase):
         key = (model_rec.model_code, record_cls.ID)
         if key not in self._cache:
             records = []
-            for bo in iter_model_blocks(model_rec, record_cls.ID):
+            for bo in iter_model_blocks(model_rec, record_cls.ID, self._profile):
                 records.extend(parse_method(self._f, bo))
             self._cache[key] = records
         return self._cache[key]

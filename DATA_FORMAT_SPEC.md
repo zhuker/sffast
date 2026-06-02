@@ -1775,3 +1775,69 @@ Please verify the following in the Windows app:
 ### Speculative (Needs Validation)
 - source_data_us.txt flag meanings
 - SFMESSDT internal structure
+
+---
+
+## JDM (Japan-market) Region Variant
+
+The `SFFASTA` binary on the JDM discs (`subaru_08_04/*.mdf`, e.g. `30804SF`) is the
+**same container format** as US `sffastus` (magic `00 04 01 00`, same block-pointer
+encoding, **same `MODEL_BLOCK_INDEX` slot→type map**, NULL separator at slot 20). It
+is selected at `open()` by `detect_region_profile()` and carried in a `RegionProfile`.
+Modern clean discs (20710SF, 30804SF) use the **JDM profile**; older 10710SF
+(402-byte model record, 2-byte middle anomaly, 1980s Leone data) is **not supported**.
+
+### Region deltas (US vs JDM)
+
+| Aspect | US | JDM (20710/30804) |
+|--------|----|----|
+| Model-index record size | 288 B (45-slot array) | 420 B (78-slot array) |
+| Text encoding | cp437 | cp932 (Shift-JIS; half-width katakana + ASCII) |
+| Language fields per text record | 4 (EN/DE/FR/ES) | 1 (JP) |
+| Count-pair region start slot | 30 | 52 |
+| Catalog applicability record | 466 B | 496 B (reorganized) |
+| VIN/chassis range record | 38 B (17-char VIN) | 22 B (9-char chassis) |
+| VIN detail record | 69 B | 68 B |
+
+**Model record**: size = `6 (code) + array_len + 102 (shared trailer)`. The 102-byte
+text trailer (series, name, dates, 6 category labels) is byte-identical; only the
+block-pointer array width and encoding differ. Detect size via the trailer's
+`start_date+end_date` (12 ASCII digits after the array): `size = date_offset + 85`.
+
+**Count region**: `MODEL_BLOCK_COUNTS` is expressed against the US baseline (slot 30);
+shift by `profile.count_region_start - 30` to read JDM counts. Slot→type map unchanged.
+
+**Multilingual collapse**: US records carry 4 language fields; JDM carries 1. So
+`US_size − JDM_size = 3 × field_width` (descriptions 40 B, colors 20 B). Exceptions:
+`inventory_199` → 93 (1 name + a 14-B trailer), `glossary` 28→27, `code_index` 33→32
+(−1), `model_spec` 103→111 (head 0x06–0x55 aligns; JDM adds an 8-B tail code).
+`multilingual_part_167` stays 167 (single description + binary bitmask, no collapse).
+JDM record sizes are stored in `JDM_RECORD_SIZES`; reading one language at the English
+offset and placing the trailer at `english_offset + num_languages × width` (see
+`read_langs`).
+
+**Catalog applicability 496** (JDM, reverse-engineered from 30804SF B12): the
+identification head (0x00–0x2D: model_code, callout_code, part_id, model_year_version,
+date) matches US 466. Reorganized fields:
+
+| Offset | Field |
+|--------|-------|
+| 0x2D (45) | spec_logic (US keeps destination_codes here; JDM single-market) |
+| 0xCE (206) | ref_code (7 B) |
+| 0xD4 (213) | volume/book digit (leading char of the figure link) |
+| 0xD5 (214) | figure_ref — US-style `<group_letter><nnn>` e.g. `A039` |
+| 0xDC (220) | figure_page (2 digits) |
+
+`figure_ref` is read at 0xD5 (4 chars, **without** the 0xD4 volume digit) so the
+shared `figure_ref[1:] == fig` matching in `get_fig_callouts`/`get_vin_bulletins`
+works identically to US — this is what links JDM callouts to catalog parts.
+
+**Chassis VIN resolution**: range records are `start(9) + end(9) + LE section(2) +
+index(2)` keyed by chassis numbers (`BE5002001` = 3-char chassis code + 6-digit
+serial). The detail record (68 B): chassis(0x00,9) + flag(0x0A) + model_code(0x0B,6) +
+body_model(0x11,7) + production dates at 0x2C/0x34/0x3C. The body_model's first 7 chars
+(`BE5A48T`) match `ModelSpec.applied_model` (`BE5-48T`) via the existing matcher.
+
+### JDM test data
+`SFCDJDM/sffasta` (the converted 30804SF disc; gitignored). Convert/mount discs with
+`iat -i subaru_08_04/30804SF.mdf -o 30804SF.iso --iso` then `hdiutil attach`.

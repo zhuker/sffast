@@ -21,12 +21,68 @@ SFFASTUS_PATH = "sffastus"
 CHARSET = 'cp437'
 
 
-def clean(b: bytes) -> str:
-    return b.decode(CHARSET, errors='replace').strip()
+def clean(b: bytes, encoding: str = CHARSET) -> str:
+    return b.decode(encoding, errors='replace').strip()
 
 
-def clean_nostrip(b: bytes) -> str:
-    return b.decode(CHARSET, errors='replace')
+def clean_nostrip(b: bytes, encoding: str = CHARSET) -> str:
+    return b.decode(encoding, errors='replace')
+
+
+def read_langs(data: bytes, lang_offset: int, width: int, num_languages: int,
+               encoding: str = CHARSET):
+    """Read the language-description fields of a multilingual record.
+
+    US records carry 4 language fields (EN/DE/FR/ES); JDM carries 1 (JP). Returns
+    (en, de, fr, es, post_offset) where post_offset = lang_offset + num_languages
+    * width is where the record's post-language fields/trailer begin. Languages
+    not present in this region are returned as ''.
+    """
+    vals = ['', '', '', '']
+    for i in range(num_languages):
+        vals[i] = clean(data[lang_offset + i * width:lang_offset + (i + 1) * width], encoding)
+    return vals[0], vals[1], vals[2], vals[3], lang_offset + num_languages * width
+
+
+# --- Region profiles ---------------------------------------------------------
+# The sffastus/SFFASTA binary comes in market variants that share the same
+# container format (magic, block-pointer encoding, MODEL_BLOCK_INDEX slot->type
+# map) but differ in a few fixed ways. A RegionProfile captures every
+# region-varying constant; it is detected once at open() and threaded through
+# parsing. US is the default so existing behavior is unchanged.
+#
+# Differences (US vs modern JDM 20710SF/30804SF):
+#  - model-index record size: 288 (45-slot array) vs 420 (78-slot array)
+#  - text encoding: cp437 vs cp932 (Shift-JIS; half-width katakana + ASCII)
+#  - language fields per text record: 4 (EN/DE/FR/ES) vs 1 (JP)
+#  - count-pair region start slot in the model array: 30 vs 52
+#  - catalog applicability record size: 466 vs 496 (internal layout differs)
+#  - VIN/chassis range record: 38 B / 17-char VIN vs 22 B / 9-char chassis id
+
+US_COUNT_REGION_START = 30  # baseline assumed by MODEL_BLOCK_COUNTS
+
+
+@dataclass(frozen=True)
+class RegionProfile:
+    name: str                       # 'US' | 'JDM'
+    model_record_size: int          # 288 | 420
+    encoding: str                   # 'cp437' | 'cp932'
+    num_languages: int              # 4 | 1
+    count_region_start: int         # first count-pair slot in model array
+    cat_size: int                   # catalog_applicability record size
+    vin_record_size: int            # VIN/chassis range record size
+    vin_id_len: int                 # VIN/chassis identifier length
+    record_sizes: dict = field(default_factory=dict)  # record_id -> JDM size override
+
+    @property
+    def model_array_len(self) -> int:
+        """Length of the model record's block-index array (record minus the
+        6-byte model code and the shared 102-byte text trailer)."""
+        return self.model_record_size - 108
+
+    def size_for(self, record_id: str, default: int) -> int:
+        """Record size for this region (override or the US default)."""
+        return self.record_sizes.get(record_id, default)
 
 
 def check_bitmask(data: bytes, position: int) -> bool:
@@ -72,6 +128,18 @@ def is_valid_subaru_vin(vin: str) -> bool:
     if not vin or len(vin) < 3:
         return False
     return vin.startswith(SUBARU_VIN_PREFIXES)
+
+
+def is_valid_vehicle_id(s: str, profile: Optional['RegionProfile'] = None) -> bool:
+    """Validate a vehicle identifier for the region.
+
+    US uses 17-char Subaru VINs (4S3/JF1/...); JDM uses chassis numbers like
+    'BE5002001' (3-letter chassis code + 6-digit serial).
+    """
+    if profile is not None and profile.name == 'JDM':
+        s = s.strip()
+        return len(s) >= 3 and s[0].isalpha() and s[:profile.vin_id_len].isalnum()
+    return is_valid_subaru_vin(s)
 
 
 def is_valid_subaru_vin_strict(vin: str) -> bool:
@@ -515,14 +583,21 @@ class VINRecord:
 
     @staticmethod
     def parse_38(data: bytes, offset: int = 0) -> 'VINRecord':
-        """Parse a 38-byte VIN range record."""
+        """Parse a 38-byte US VIN range record (17-char VIN start/end)."""
+        return VINRecord.parse_range(data, offset, id_len=17)
+
+    @staticmethod
+    def parse_range(data: bytes, offset: int = 0, id_len: int = 17) -> 'VINRecord':
+        """Parse a VIN/chassis range record: start(id_len) + end(id_len) + LE
+        section(2) + index(2). US id_len=17 (38 B), JDM id_len=9 (22 B)."""
+        p = 2 * id_len
         return VINRecord(
             offset=offset,
             raw_data=data,
-            vin_start=data[0:17].decode(CHARSET, errors='replace').strip('\x00'),
-            vin_end=data[17:34].decode(CHARSET, errors='replace').strip('\x00'),
-            section=struct.unpack('<H', data[34:36])[0],
-            index=struct.unpack('<H', data[36:38])[0],
+            vin_start=data[0:id_len].decode(CHARSET, errors='replace').strip('\x00'),
+            vin_end=data[id_len:2 * id_len].decode(CHARSET, errors='replace').strip('\x00'),
+            section=struct.unpack('<H', data[p:p + 2])[0],
+            index=struct.unpack('<H', data[p + 2:p + 4])[0],
         )
 
 
@@ -581,6 +656,38 @@ class VINModelRecord:
             engine_production_date=clean_nostrip(data[51:59]),
             trans_production_date=clean_nostrip(data[59:67]),
             destination_code=clean_nostrip(data[67:69]),
+        )
+
+    @staticmethod
+    def parse_jdm68(data: bytes, offset: int = 0, encoding: str = 'cp932') -> 'VINModelRecord':
+        """Parse the JDM 68-byte chassis detail record.
+
+        Layout (reverse-engineered from 30804SF/SFFASTA):
+            0x00 (9):  Chassis number (e.g. "BE5002001")
+            0x0A (1):  Flag (0x01)
+            0x0B (6):  Model Code (e.g. "B12   ")
+            0x11 (7):  Body Model (e.g. "BE5A48T") — first 7 chars match the
+                       ModelSpec applied_model grade (e.g. "BE5-48T")
+            0x18..0x21 color/trim/option (best-effort)
+            0x2C (8):  Body production date YYYYMMDD
+            0x34 (8):  Engine production date
+            0x3C (8):  Trans production date
+        """
+        return VINModelRecord(
+            offset=offset,
+            raw_data=data,
+            vin=clean(data[0:9], encoding),
+            flag=data[10],
+            model_code=clean(data[11:17], encoding),
+            body_model=clean(data[17:24], encoding),
+            color_code=clean(data[24:27], encoding),
+            trim_code=clean(data[27:30], encoding),
+            option_code=clean(data[30:33], encoding),
+            binary_flags=data[33:36],
+            body_production_date=clean_nostrip(data[44:52], encoding),
+            engine_production_date=clean_nostrip(data[52:60], encoding),
+            trans_production_date=clean_nostrip(data[60:68], encoding),
+            destination_code='',
         )
 
 
@@ -689,21 +796,19 @@ class MultilingualPartRecord192:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_192(data: bytes, offset: int = 0) -> 'MultilingualPartRecord192':
-        """Parse a 192-byte multilingual part record."""
-
+    def parse_192(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'MultilingualPartRecord192':
+        """Parse a multilingual part record (US 192 B / JDM 72 B)."""
+        en, de, fr, es, post = read_langs(data, 20, 40, num_languages, encoding)
         return MultilingualPartRecord192(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            part_code=clean(data[6:12]),
-            figure_code=clean(data[12:17]),
-            index=clean(data[17:20]),
-            name_en=clean(data[20:60]),
-            name_de=clean(data[60:100]),
-            name_fr=clean(data[100:140]),
-            name_es=clean(data[140:180]),
-            trailer=data[180:192],
+            model_code=clean(data[0:6], encoding),
+            part_code=clean(data[6:12], encoding),
+            figure_code=clean(data[12:17], encoding),
+            index=clean(data[17:20], encoding),
+            name_en=en, name_de=de, name_fr=fr, name_es=es,
+            trailer=data[post:post + 12],
         )
 
 
@@ -742,19 +847,19 @@ class CodeIndexRecord33:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_33(data: bytes, offset: int = 0) -> 'CodeIndexRecord33':
-        """Parse a 33-byte code index record."""
+    def parse_33(data: bytes, offset: int = 0, encoding: str = CHARSET) -> 'CodeIndexRecord33':
+        """Parse a code index record (US 33 B / JDM 32 B)."""
 
         # Don't strip the size_variant field to preserve all data
-        size_variant_raw = clean_nostrip(data[7:22])
+        size_variant_raw = clean_nostrip(data[7:22], encoding)
 
         return CodeIndexRecord33(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
+            model_code=clean(data[0:6], encoding),
             category=data[6],  # Single byte
             size_variant=size_variant_raw,  # Keep as-is, don't strip - 15 bytes
-            code=clean(data[22:29]),  # 7 bytes (was 6 + separator)
+            code=clean(data[22:29], encoding),  # 7 bytes (was 6 + separator)
             metadata=data[29:33],  # 4 bytes
         )
 
@@ -1022,6 +1127,45 @@ class CatalogApplicabilityRecord466:
             line_options=data[0x1A0:0x1B9] if len(data) > 0x1B8 else b'',
         )
 
+    @staticmethod
+    def parse_496(data: bytes, offset: int = 0, encoding: str = 'cp932') -> 'CatalogApplicabilityRecord466':
+        """Parse the JDM 496-byte catalog applicability record.
+
+        The identification/validity head (0x00-0x2D: model_code, callout_code,
+        part_id, model_year_version, date) is identical to the US 466 layout. The
+        remaining fields are reorganized:
+          - spec_logic lives at 0x2D (where US keeps destination_codes); JDM is a
+            single market (Japan) so there are no separate destination codes.
+          - the figure link is a 6-char field at 0xD4: a volume/book digit (0xD4),
+            then a US-style "<group_letter><nnn>" figure_ref (0xD5, e.g. "A039"),
+            with the 2-digit figure page at 0xDC. figure_ref is taken WITHOUT the
+            leading volume digit so the shared `figure_ref[1:] == fig` matching in
+            get_fig_callouts works the same as US.
+        Reverse-engineered from 30804SF/SFFASTA (B12). Fields not present in JDM
+        (usage_notes, part_spec, related_part, supplier_code, options) are blank.
+        """
+        return CatalogApplicabilityRecord466(
+            offset=offset,
+            raw_data=data,
+            model_code=clean(data[0:6], encoding),
+            callout_code=clean(data[6:13], encoding),
+            part_id=clean(data[13:25], encoding),
+            model_year_version=clean(data[28:29], encoding),
+            date=clean(data[29:45], encoding),
+            destination_codes='',
+            spec_logic=clean(data[45:109], encoding),
+            usage_notes='',
+            part_spec='',
+            ref_code=clean(data[206:213], encoding),
+            related_part='',
+            figure_ref=clean(data[214:218], encoding),
+            figure_page=clean(data[220:222], encoding),
+            supplier_code='',
+            option_flag='',
+            option_position=b'',
+            line_options=b'',
+        )
+
 
 @dataclass
 class GlossaryRecord28:
@@ -1048,15 +1192,15 @@ class GlossaryRecord28:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_28(data: bytes, offset: int = 0) -> 'GlossaryRecord28':
-        """Parse a 28-byte glossary record."""
+    def parse_28(data: bytes, offset: int = 0, encoding: str = CHARSET) -> 'GlossaryRecord28':
+        """Parse a glossary record (US 28 B / JDM 27 B)."""
 
         return GlossaryRecord28(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
+            model_code=clean(data[0:6], encoding),
             category=data[6],  # Single byte
-            term=clean(data[7:24]),  # 17 bytes
+            term=clean(data[7:24], encoding),  # 17 bytes
             display_order=(data[24] << 8) | data[25],
             metadata_tail=data[26:28],
         )
@@ -1090,18 +1234,16 @@ class ColorRecord91:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_91(data: bytes, offset: int = 0) -> 'ColorRecord91':
-        """Parse a 91-byte color record."""
-
+    def parse_91(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                 num_languages: int = 4) -> 'ColorRecord91':
+        """Parse a color record (US 91 B / JDM 31 B). Color names are 20-B fields."""
+        en, de, fr, es, _ = read_langs(data, 10, 20, num_languages, encoding)
         return ColorRecord91(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            paint_code=clean(data[6:10]),  # 4 bytes
-            color_name_en=clean(data[10:30]),  # 20 bytes
-            color_name_de=clean(data[30:50]),  # 20 bytes
-            color_name_fr=clean(data[50:70]),  # 20 bytes
-            color_name_es=clean(data[70:90]),  # 20 bytes
+            model_code=clean(data[0:6], encoding),
+            paint_code=clean(data[6:10], encoding),  # 4 bytes
+            color_name_en=en, color_name_de=de, color_name_fr=fr, color_name_es=es,
         )
 
 
@@ -1138,20 +1280,18 @@ class FIGIllustrationRecord183:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_183(data: bytes, offset: int = 0) -> 'FIGIllustrationRecord183':
-        """Parse a 183-byte FIG illustration record."""
-
+    def parse_183(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'FIGIllustrationRecord183':
+        """Parse a FIG illustration record (US 183 B / JDM 63 B). Descriptions at 13."""
+        en, de, fr, es, post = read_langs(data, 13, 40, num_languages, encoding)
         return FIGIllustrationRecord183(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            fig_group_code=clean(data[6:8]),
-            fig_group_code2=clean(data[8:8 + 5]),
-            desc_en=clean(data[8 + 5:48 + 5]),
-            desc_de=clean(data[48 + 5:88 + 5]),
-            desc_fr=clean(data[88 + 5:128 + 5]),
-            desc_es=clean(data[128 + 5:168 + 5]),
-            trailer=data[168 + 5:183],
+            model_code=clean(data[0:6], encoding),
+            fig_group_code=clean(data[6:8], encoding),
+            fig_group_code2=clean(data[8:8 + 5], encoding),
+            desc_en=en, desc_de=de, desc_fr=fr, desc_es=es,
+            trailer=data[post:post + 10],
         )
 
 
@@ -1317,25 +1457,26 @@ class InventoryRecord199:
     name_fr: str
     name_es: str
     raw_data: bytes = field(repr=False)
+    trailer: bytes = b''  # JDM carries a 14-byte trailer after the single name
 
     @staticmethod
-    def parse_199(data: bytes, offset: int = 0) -> 'InventoryRecord199':
-        """Parse a 199-byte inventory record."""
-
+    def parse_199(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'InventoryRecord199':
+        """Parse an inventory record (US 199 B / JDM 93 B). Names are 40-B fields
+        starting at 0x27; JDM has a 14-B trailer after the single name."""
+        en, de, fr, es, post = read_langs(data, 39, 40, num_languages, encoding)
         return InventoryRecord199(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            figure=clean(data[6:11]),
-            figure_page=clean(data[11:13]),
-            part_number=clean(data[13:28]),
+            model_code=clean(data[0:6], encoding),
+            figure=clean(data[6:11], encoding),
+            figure_page=clean(data[11:13], encoding),
+            part_number=clean(data[13:28], encoding),
             x=struct.unpack('>H', data[28:30])[0],
             y=struct.unpack('>H', data[30:32])[0],
-            part_code=clean(data[32:39]),
-            name_en=clean(data[39:79]),
-            name_de=clean(data[79:119]),
-            name_fr=clean(data[119:159]),
-            name_es=clean(data[159:199]),
+            part_code=clean(data[32:39], encoding),
+            name_en=en, name_de=de, name_fr=fr, name_es=es,
+            trailer=data[post:],
         )
 
 
@@ -1370,20 +1511,18 @@ class MultilingualPartRecord182:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_182(data: bytes, offset: int = 0) -> 'MultilingualPartRecord182':
-        """Parse a 182-byte multilingual part record."""
-
+    def parse_182(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'MultilingualPartRecord182':
+        """Parse a multilingual part record (US 182 B / JDM 62 B). Names at 18."""
+        en, de, fr, es, post = read_langs(data, 18, 40, num_languages, encoding)
         return MultilingualPartRecord182(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            part_code=clean(data[6:13]),
-            figure=clean(data[13:18]),
-            name_en=clean(data[18:58]),
-            name_de=clean(data[58:98]),
-            name_fr=clean(data[98:138]),
-            name_es=clean(data[138:178]),
-            trailer=data[178:182],
+            model_code=clean(data[0:6], encoding),
+            part_code=clean(data[6:13], encoding),
+            figure=clean(data[13:18], encoding),
+            name_en=en, name_de=de, name_fr=fr, name_es=es,
+            trailer=data[post:post + 4],
         )
 
 
@@ -1433,22 +1572,22 @@ class PartGroupRecord185:
         return self.callout_code
 
     @staticmethod
-    def parse_185(data: bytes, offset: int = 0) -> 'PartGroupRecord185':
-        """Parse a 185-byte part group description record."""
+    def parse_185(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'PartGroupRecord185':
+        """Parse a part group description record (US 185 B / JDM 65 B). Descriptions
+        at 21; X/Y callout coordinates follow the language fields."""
+        en, de, fr, es, post = read_langs(data, 21, 40, num_languages, encoding)
         return PartGroupRecord185(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            figure=clean(data[6:9]),
-            figure_page=clean(data[9:13]),
-            callout_code=clean(data[13:20]),
-            variant=clean(data[20:21]),
-            desc_en=clean(data[21:61]),
-            desc_de=clean(data[61:101]),
-            desc_fr=clean(data[101:141]),
-            desc_es=clean(data[141:181]),
-            x=struct.unpack('>H', data[181:183])[0],
-            y=struct.unpack('>H', data[183:185])[0],
+            model_code=clean(data[0:6], encoding),
+            figure=clean(data[6:9], encoding),
+            figure_page=clean(data[9:13], encoding),
+            callout_code=clean(data[13:20], encoding),
+            variant=clean(data[20:21], encoding),
+            desc_en=en, desc_de=de, desc_fr=fr, desc_es=es,
+            x=struct.unpack('>H', data[post:post + 2])[0],
+            y=struct.unpack('>H', data[post + 2:post + 4])[0],
         )
 
 
@@ -1473,15 +1612,15 @@ class VariantGlossaryRecord81:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_81(data: bytes, offset: int = 0) -> 'VariantGlossaryRecord81':
+    def parse_81(data: bytes, offset: int = 0, encoding: str = CHARSET) -> 'VariantGlossaryRecord81':
         """Parse an 81-byte variant glossary record."""
 
         return VariantGlossaryRecord81(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            variant_code=clean(data[6:21]),
-            description=clean(data[21:81]),
+            model_code=clean(data[0:6], encoding),
+            variant_code=clean(data[6:21], encoding),
+            description=clean(data[21:81], encoding),
         )
 
 
@@ -1775,10 +1914,12 @@ class FIGGroupCategoryRecord184:
         return decode_fig_data_pointer(self.ptr2)
 
     @staticmethod
-    def parse_184(data: bytes, offset: int = 0) -> 'FIGGroupCategoryRecord184':
-        """Parse a 184-byte FIG group category record."""
-
-        trailer = data[168:184]
+    def parse_184(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'FIGGroupCategoryRecord184':
+        """Parse a FIG group category record (US 184 B / JDM 64 B). Descriptions at
+        8; the 16-B binary trailer (figure_count/record_count + pointers) follows."""
+        en, de, fr, es, post = read_langs(data, 8, 40, num_languages, encoding)
+        trailer = data[post:post + 16]
         trailer_constant = struct.unpack('>H', trailer[0:2])[0]
         trailer_record_index = struct.unpack('>H', trailer[2:4])[0]
         ptr1 = trailer[4:8]
@@ -1789,12 +1930,9 @@ class FIGGroupCategoryRecord184:
         return FIGGroupCategoryRecord184(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            fig_group_code=clean(data[6:8]),
-            desc_en=clean(data[8:48]),
-            desc_de=clean(data[48:88]),
-            desc_fr=clean(data[88:128]),
-            desc_es=clean(data[128:168]),
+            model_code=clean(data[0:6], encoding),
+            fig_group_code=clean(data[6:8], encoding),
+            desc_en=en, desc_de=de, desc_fr=fr, desc_es=es,
             trailer=trailer,
             trailer_constant=trailer_constant,
             trailer_record_index=trailer_record_index,
@@ -1846,10 +1984,11 @@ class ModelSpecRecord103:
         return 'MT' in self.transmission
 
     @staticmethod
-    def parse_103(data: bytes, offset: int = 0) -> 'ModelSpecRecord103':
+    def parse_103(data: bytes, offset: int = 0, encoding: str = CHARSET) -> 'ModelSpecRecord103':
         """
         Parses fixed-width Subaru model data, automatically stripping whitespace padding.
         Uses wider windows to capture variable length fields (e.g. '5MT' vs 'MT').
+        US 103 B / JDM 111 B (the head fields 0x06-0x55 align; JDM adds a tail code).
         """
 
         # Parsing Logic based on observed B11/G11/B13 offsets
@@ -1858,19 +1997,19 @@ class ModelSpecRecord103:
             raw_data=data,
 
             # Fixed Header
-            model_code=clean(data[0:6]),
-            production_period=clean(data[6:21]),
-            applied_model=clean(data[21:39]),  # Expanded to catch long codes
+            model_code=clean(data[0:6], encoding),
+            production_period=clean(data[6:21], encoding),
+            applied_model=clean(data[21:39], encoding),  # Expanded to catch long codes
 
             # Variable Specs (Offsets adjusted for wider capture)
-            body_config=clean(data[39:47]),  # Window for "S", "W", "WOBK"
-            engine=clean(data[47:55]),  # Window for "EJ22EZ", "257"
-            drivetrain=clean(data[55:63]),  # Window for "F4WD", "4W"
-            transmission=clean(data[63:71]),  # Window for "MT", "5MT", "6MT"
-            trim_level=clean(data[71:79]),  # Window for "L", "STI", "25GT"
-            spec_option=clean(data[79:85]),  # Window for "N/S"
+            body_config=clean(data[39:47], encoding),  # Window for "S", "W", "WOBK"
+            engine=clean(data[47:55], encoding),  # Window for "EJ22EZ", "257"
+            drivetrain=clean(data[55:63], encoding),  # Window for "F4WD", "4W"
+            transmission=clean(data[63:71], encoding),  # Window for "MT", "5MT", "6MT"
+            trim_level=clean(data[71:79], encoding),  # Window for "L", "STI", "25GT"
+            spec_option=clean(data[79:85], encoding),  # Window for "N/S"
 
-            _padding=clean(data[85:])
+            _padding=clean(data[85:], encoding)
         )
 
 
@@ -1953,26 +2092,38 @@ class ModelIndexRecord288:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_288(data: bytes, offset: int = 0) -> 'ModelIndexRecord288':
-        """Parse a 288-byte model index record."""
+    def parse_288(data: bytes, offset: int = 0,
+                  profile: Optional['RegionProfile'] = None) -> 'ModelIndexRecord288':
+        """Parse a model index record.
+
+        The block-index array width varies by region (US 180 B / JDM 312 B), but
+        the 102-byte text trailer is identical and sits at the end of the record.
+        Field offsets are therefore expressed relative to the trailer start
+        (T = record_size - 102 = 6 + array_len).
+        """
+        if profile is None:
+            profile = US_PROFILE
+        enc = profile.encoding
+        array_len = profile.model_array_len
+        T = 6 + array_len  # trailer start (186 for US 288, 318 for JDM 420)
 
         return ModelIndexRecord288(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            block_index_array=data[6:186],  # 180 bytes
-            series_code=clean(data[186:188]),  # 0xBA
-            model_name=clean(data[188:203]),  # 0xBC
-            start_date=clean(data[203:209]),  # 0xCB
-            end_date=clean(data[209:215]),  # 0xD1
-            features=clean(data[215:215 + 8]),  # 0xD7
-            category1=clean(data[215 + 8:215 + 8 + 8]),  # 0xE5
-            category2=clean(data[215 + 8 + 8:215 + 8 + 8 + 8]),  # 0xED
-            category3=clean(data[215 + 8 + 8 + 8:215 + 8 + 8 + 8 + 8]),  # 0xF5
-            category4=clean(data[215 + 8 + 8 + 8 + 8:215 + 8 + 8 + 8 + 8 + 8]),  # 0xFD
-            category5=clean(data[215 + 8 + 8 + 8 + 8 + 8:215 + 8 + 8 + 8 + 8 + 8 + 8]),  # 0x105
-            category6=clean(data[215 + 8 + 8 + 8 + 8 + 8 + 8:215 + 8 + 8 + 8 + 8 + 8 + 8 + 8]),  # 0x10D
-            trailer=data[215 + 8 + 8 + 8 + 8 + 8 + 8 + 8:],  # 11 bytes padding
+            model_code=clean(data[0:6], enc),
+            block_index_array=data[6:6 + array_len],
+            series_code=clean(data[T:T + 2], enc),
+            model_name=clean(data[T + 2:T + 17], enc),
+            start_date=clean(data[T + 17:T + 23], enc),
+            end_date=clean(data[T + 23:T + 29], enc),
+            features=clean(data[T + 29:T + 37], enc),
+            category1=clean(data[T + 37:T + 45], enc),
+            category2=clean(data[T + 45:T + 53], enc),
+            category3=clean(data[T + 53:T + 61], enc),
+            category4=clean(data[T + 61:T + 69], enc),
+            category5=clean(data[T + 69:T + 77], enc),
+            category6=clean(data[T + 77:T + 85], enc),
+            trailer=data[T + 85:],
         )
 
 
@@ -2006,15 +2157,16 @@ class MultilingualPartRecord167:
         return check_bitmask(self.applied_position_bitmask, position)
 
     @staticmethod
-    def parse_167(data: bytes, offset: int = 0) -> 'MultilingualPartRecord167':
-        """Parse a 167-byte multilingual part record."""
+    def parse_167(data: bytes, offset: int = 0, encoding: str = CHARSET) -> 'MultilingualPartRecord167':
+        """Parse a 167-byte multilingual part record (single description + bitmask;
+        same size in both regions)."""
 
         return MultilingualPartRecord167(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            spec_code=clean(data[6:17]),
-            description=clean(data[17:42]),
+            model_code=clean(data[0:6], encoding),
+            spec_code=clean(data[6:17], encoding),
+            description=clean(data[17:42], encoding),
             applied_position_bitmask=data[42:167],
         )
 
@@ -2048,19 +2200,17 @@ class MultilingualPartRecord180:
     raw_data: bytes = field(repr=False)
 
     @staticmethod
-    def parse_180(data: bytes, offset: int = 0) -> 'MultilingualPartRecord180':
-        """Parse a 180-byte multilingual part record."""
-
+    def parse_180(data: bytes, offset: int = 0, encoding: str = CHARSET,
+                  num_languages: int = 4) -> 'MultilingualPartRecord180':
+        """Parse a multilingual part record (US 180 B / JDM 60 B). Names at 13."""
+        en, de, fr, es, post = read_langs(data, 13, 40, num_languages, encoding)
         return MultilingualPartRecord180(
             offset=offset,
             raw_data=data,
-            model_code=clean(data[0:6]),
-            part_code=clean(data[6:13]),
-            name_en=clean(data[13:53]),
-            name_de=clean(data[53:93]),
-            name_fr=clean(data[93:133]),
-            name_es=clean(data[133:173]),
-            trailer=data[173:180],
+            model_code=clean(data[0:6], encoding),
+            part_code=clean(data[6:13], encoding),
+            name_en=en, name_de=de, name_fr=fr, name_es=es,
+            trailer=data[post:post + 7],
         )
 
 
@@ -2097,9 +2247,11 @@ class SffastusBlockParser:
     improve block type disambiguation.
     """
 
-    def __init__(self, figure_codes: Optional[set] = None, parts_catalog: Optional[ItcaPartsCatalog] = None) -> None:
+    def __init__(self, figure_codes: Optional[set] = None, parts_catalog: Optional[ItcaPartsCatalog] = None,
+                 profile: Optional['RegionProfile'] = None) -> None:
         self.figure_codes = figure_codes or set()
         self.parts_catalog = parts_catalog
+        self.profile = profile if profile is not None else US_PROFILE
 
     def _is_model_code_block(self, data: bytes, record_size: int, *,
                              allow_asterisk: bool = False,
@@ -2482,40 +2634,57 @@ class SffastusBlockParser:
             count += 1
         return records
 
+    def _parse_text(self, f: BinaryIO, start_offset: int, record_cls, parse_fn,
+                    max_records=None, verbose=False, validator=None) -> list:
+        """Parse text records that need the region's record size + encoding."""
+        p = self.profile
+        size = p.size_for(record_cls.ID, record_cls.RECORD_SIZE)
+        fn = lambda d, o: parse_fn(d, o, p.encoding)
+        return self._parse_fixed_records(f, start_offset, size, fn, max_records, verbose, validator)
+
+    def _parse_ml(self, f: BinaryIO, start_offset: int, record_cls, parse_fn,
+                  max_records=None, verbose=False, validator=None) -> list:
+        """Parse multilingual records: region size + encoding + language count
+        (US carries 4 language fields, JDM 1)."""
+        p = self.profile
+        size = p.size_for(record_cls.ID, record_cls.RECORD_SIZE)
+        fn = lambda d, o: parse_fn(d, o, p.encoding, p.num_languages)
+        return self._parse_fixed_records(f, start_offset, size, fn, max_records, verbose, validator)
+
     def parse_code_index_records_33(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[CodeIndexRecord33]:
-        return self._parse_fixed_records(f, start_offset, CodeIndexRecord33.RECORD_SIZE, CodeIndexRecord33.parse_33,
-                                         max_records, verbose)
+        return self._parse_text(f, start_offset, CodeIndexRecord33, CodeIndexRecord33.parse_33,
+                                max_records, verbose)
 
     def parse_glossary_records_28(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                   verbose: bool = False) -> List[GlossaryRecord28]:
-        return self._parse_fixed_records(f, start_offset, GlossaryRecord28.RECORD_SIZE, GlossaryRecord28.parse_28,
-                                         max_records, verbose)
+        return self._parse_text(f, start_offset, GlossaryRecord28, GlossaryRecord28.parse_28,
+                                max_records, verbose)
 
     def parse_color_records_91(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                verbose: bool = False) -> List[ColorRecord91]:
-        return self._parse_fixed_records(f, start_offset, ColorRecord91.RECORD_SIZE, ColorRecord91.parse_91,
-                                         max_records, verbose)
+        return self._parse_ml(f, start_offset, ColorRecord91, ColorRecord91.parse_91,
+                              max_records, verbose)
 
     def parse_part_group_records_185(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[PartGroupRecord185]:
-        return self._parse_fixed_records(f, start_offset, PartGroupRecord185.RECORD_SIZE, PartGroupRecord185.parse_185,
-                                         max_records, verbose)
+        return self._parse_ml(f, start_offset, PartGroupRecord185, PartGroupRecord185.parse_185,
+                              max_records, verbose)
 
     def parse_variant_glossary_records_81(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                           verbose: bool = False) -> List[VariantGlossaryRecord81]:
-        return self._parse_fixed_records(f, start_offset, VariantGlossaryRecord81.RECORD_SIZE,
-                                         VariantGlossaryRecord81.parse_81, max_records, verbose)
+        return self._parse_text(f, start_offset, VariantGlossaryRecord81, VariantGlossaryRecord81.parse_81,
+                                max_records, verbose)
 
     def parse_multilingual_part_records_182(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord182]:
-        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord182.RECORD_SIZE,
-                                         MultilingualPartRecord182.parse_182, max_records, verbose)
+        return self._parse_ml(f, start_offset, MultilingualPartRecord182, MultilingualPartRecord182.parse_182,
+                              max_records, verbose)
 
     def parse_inventory_records_199(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[InventoryRecord199]:
-        return self._parse_fixed_records(f, start_offset, InventoryRecord199.RECORD_SIZE, InventoryRecord199.parse_199,
-                                         max_records, verbose)
+        return self._parse_ml(f, start_offset, InventoryRecord199, InventoryRecord199.parse_199,
+                              max_records, verbose)
 
     def parse_engine_spec_records_230(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[EngineSpecRecord230]:
@@ -2524,8 +2693,14 @@ class SffastusBlockParser:
 
     def parse_catalog_applicability_records_466(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                                 verbose: bool = False) -> List[CatalogApplicabilityRecord466]:
-        return self._parse_fixed_records(f, start_offset, CatalogApplicabilityRecord466.RECORD_SIZE,
-                                         CatalogApplicabilityRecord466.parse_466, max_records, verbose)
+        # The catalog record is reorganized (not just resized) between regions, so
+        # dispatch on cat_size to the matching field map.
+        p = self.profile
+        if p.cat_size == 496:
+            parse_fn = lambda d, o: CatalogApplicabilityRecord466.parse_496(d, o, p.encoding)
+        else:
+            parse_fn = CatalogApplicabilityRecord466.parse_466
+        return self._parse_fixed_records(f, start_offset, p.cat_size, parse_fn, max_records, verbose)
 
     def parse_body_model_records_17(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                     verbose: bool = False) -> List[BodyModelRecord17]:
@@ -2620,18 +2795,18 @@ class SffastusBlockParser:
 
     def parse_fig_illustration_records_183(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                            verbose: bool = False) -> List[FIGIllustrationRecord183]:
-        return self._parse_fixed_records(f, start_offset, FIGIllustrationRecord183.RECORD_SIZE,
-                                         FIGIllustrationRecord183.parse_183, max_records, verbose)
+        return self._parse_ml(f, start_offset, FIGIllustrationRecord183, FIGIllustrationRecord183.parse_183,
+                              max_records, verbose)
 
     def parse_fig_group_category_records_184(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                              verbose: bool = False) -> List[FIGGroupCategoryRecord184]:
-        return self._parse_fixed_records(f, start_offset, FIGGroupCategoryRecord184.RECORD_SIZE,
-                                         FIGGroupCategoryRecord184.parse_184, max_records, verbose)
+        return self._parse_ml(f, start_offset, FIGGroupCategoryRecord184, FIGGroupCategoryRecord184.parse_184,
+                              max_records, verbose)
 
     def parse_model_spec_records_103(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                      verbose: bool = False) -> List[ModelSpecRecord103]:
-        return self._parse_fixed_records(f, start_offset, ModelSpecRecord103.RECORD_SIZE, ModelSpecRecord103.parse_103,
-                                         max_records, verbose)
+        return self._parse_text(f, start_offset, ModelSpecRecord103, ModelSpecRecord103.parse_103,
+                                max_records, verbose)
 
     def parse_model_index_records_288(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                       verbose: bool = False) -> List[ModelIndexRecord288]:
@@ -2645,18 +2820,20 @@ class SffastusBlockParser:
 
     def parse_multilingual_part_records_167(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord167]:
-        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord167.RECORD_SIZE,
-                                         MultilingualPartRecord167.parse_167, max_records, verbose)
+        # 167 has a single description field + a binary bitmask (no 4->1 collapse),
+        # so it only needs the region encoding, not the language count.
+        return self._parse_text(f, start_offset, MultilingualPartRecord167, MultilingualPartRecord167.parse_167,
+                                max_records, verbose)
 
     def parse_multilingual_part_records_180(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord180]:
-        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord180.RECORD_SIZE,
-                                         MultilingualPartRecord180.parse_180, max_records, verbose)
+        return self._parse_ml(f, start_offset, MultilingualPartRecord180, MultilingualPartRecord180.parse_180,
+                              max_records, verbose)
 
     def parse_multilingual_part_records_192(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                             verbose: bool = False) -> List[MultilingualPartRecord192]:
-        return self._parse_fixed_records(f, start_offset, MultilingualPartRecord192.RECORD_SIZE,
-                                         MultilingualPartRecord192.parse_192, max_records, verbose)
+        return self._parse_ml(f, start_offset, MultilingualPartRecord192, MultilingualPartRecord192.parse_192,
+                              max_records, verbose)
 
     def detect_vin_record_type(self, data: bytes) -> str:
         """
@@ -2701,9 +2878,16 @@ class SffastusBlockParser:
 
     def parse_vin_model_records(self, f: BinaryIO, start_offset: int, max_records: Optional[int] = None,
                                 verbose: bool = False) -> List[VINModelRecord]:
-        return self._parse_fixed_records(f, start_offset, 69, VINModelRecord.parse_69, max_records, verbose,
-                                         validator=lambda d: is_valid_subaru_vin(
-                                             d[0:17].decode(CHARSET, errors='replace').strip('\x00')))
+        p = self.profile
+        idl = p.vin_id_len
+        if p.name == 'JDM':
+            size, parse_fn = 68, lambda d, o: VINModelRecord.parse_jdm68(d, o, p.encoding)
+        else:
+            size, parse_fn = 69, VINModelRecord.parse_69
+        return self._parse_fixed_records(
+            f, start_offset, size, parse_fn, max_records, verbose,
+            validator=lambda d: is_valid_vehicle_id(
+                d[0:idl].decode(p.encoding, errors='replace').strip('\x00'), p))
 
     def parse_vin_blocks(self, f: BinaryIO, start_offset: int = 0x800, max_records: Optional[int] = None,
                          verbose: bool = False) -> List[VINRecord]:
@@ -2735,15 +2919,15 @@ class SffastusBlockParser:
                 break
 
             offset = f.tell()
-            data = f.read(VINRecord.RECORD_SIZE)
+            data = f.read(self.profile.vin_record_size)
 
-            if len(data) < VINRecord.RECORD_SIZE:
+            if len(data) < self.profile.vin_record_size:
                 break
 
-            record = VINRecord.parse_38(data, offset)
+            record = VINRecord.parse_range(data, offset, self.profile.vin_id_len)
 
-            # Validate - must be a valid Subaru VIN
-            if not is_valid_subaru_vin(record.vin_start):
+            # Validate - must be a valid vehicle id for the region
+            if not is_valid_vehicle_id(record.vin_start, self.profile):
                 break
 
             records.append(record)
@@ -3319,40 +3503,104 @@ MODEL_BLOCK_COUNTS = {
 }
 
 
-def parse_model_index(f: BinaryIO, header: SffastusHeader) -> dict[str, ModelIndexRecord288]:
+# Known region profiles, keyed by detected model-record size.
+US_PROFILE = RegionProfile(
+    name='US', model_record_size=288, encoding='cp437', num_languages=4,
+    count_region_start=30, cat_size=466, vin_record_size=38, vin_id_len=17,
+)
+# JDM record-size overrides (verified by record tiling on 30804SF/SFFASTA).
+# Multilingual records collapse 4 language fields (EN/DE/FR/ES) to 1 (JP):
+# size = US_size - 3*field_width, except inventory which gains a 14-byte trailer.
+# glossary/code_index shrink by 1; model_spec gains an 8-byte tail code.
+JDM_RECORD_SIZES = {
+    'color_record_91': 31,
+    'fig_group_category_184': 64,
+    'fig_illustration_183': 63,
+    'part_group_185': 65,
+    'inventory_199': 93,
+    'multilingual_part_182': 62,
+    'multilingual_part_180': 60,
+    'multilingual_part_192': 72,
+    'glossary_record_28': 27,
+    'code_index_record_33': 32,
+    'model_spec_103': 111,
+    # catalog_applicability size comes from profile.cat_size (496)
+}
+JDM_PROFILE = RegionProfile(
+    name='JDM', model_record_size=420, encoding='cp932', num_languages=1,
+    count_region_start=52, cat_size=496, vin_record_size=22, vin_id_len=9,
+    record_sizes=JDM_RECORD_SIZES,
+)
+REGION_PROFILES = {p.model_record_size: p for p in (US_PROFILE, JDM_PROFILE)}
+
+
+def detect_region_profile(first_model_block: bytes) -> RegionProfile:
+    """Detect the RegionProfile from the first model-index record.
+
+    The model record's size is a per-file constant. We find it by anchoring on
+    the text trailer's start_date+end_date (12 consecutive ASCII digits that
+    follow the binary block-pointer array): record_size = date_offset + 85.
+    The detected size selects a known profile from REGION_PROFILES.
+
+    Raises ValueError if the size does not match a supported profile.
+    """
+    import re
+    if not (first_model_block[0:1].isalpha() and first_model_block[3:6] == b'   '):
+        raise ValueError("Block does not start with a model code; not a model index block")
+    m = re.search(rb'(?<![0-9])[0-9]{6}[0-9]{6}', first_model_block[100:])
+    if not m:
+        raise ValueError("Could not locate model-record date trailer for region detection")
+    record_size = 100 + m.start() + 85
+    profile = REGION_PROFILES.get(record_size)
+    if profile is None:
+        raise ValueError(
+            f"Unsupported model-record size {record_size}; "
+            f"known: {sorted(REGION_PROFILES)}")
+    return profile
+
+
+def parse_model_index(f: BinaryIO, header: SffastusHeader,
+                      profile: Optional['RegionProfile'] = None) -> dict[str, ModelIndexRecord288]:
     """Parse all ModelIndexRecord288 entries from the model index area.
 
-    Handles inter-block padding (7 records per 2KB block, 32 bytes padding).
+    Records are a fixed per-file size (profile.model_record_size); they are
+    block-aligned and do not span 2KB block boundaries (the block tail is
+    zero-padded when a full record does not fit).
     """
+    if profile is None:
+        profile = US_PROFILE
+    rec_size = profile.model_record_size
     models = {}
     offset = header.model_index_start_block * BLOCK_SIZE
-    records_per_block = BLOCK_SIZE // 288  # 7
+    records_per_block = BLOCK_SIZE // rec_size
     for block_idx in range(header.model_index_count):
         block_offset = offset + block_idx * BLOCK_SIZE
         for i in range(records_per_block):
-            rec_offset = block_offset + i * 288
+            rec_offset = block_offset + i * rec_size
             f.seek(rec_offset)
-            data = f.read(288)
-            if len(data) < 288:
+            data = f.read(rec_size)
+            if len(data) < rec_size:
                 return models
-            mc = clean(data[0:6])
+            mc = clean(data[0:6], profile.encoding)
             if not mc or not mc[0].isalnum():
-                return models
-            rec = ModelIndexRecord288.parse_288(data, rec_offset)
+                break  # padding at block tail; next record starts at next block
+            rec = ModelIndexRecord288.parse_288(data, rec_offset, profile)
             models[rec.model_code] = rec
     return models
 
 
-def get_model_block_section(model_rec: ModelIndexRecord288, block_type_id: str) -> Tuple[int, int]:
+def get_model_block_section(model_rec: ModelIndexRecord288, block_type_id: str,
+                            profile: Optional['RegionProfile'] = None) -> Tuple[int, int]:
     """Get (file_offset, block_count) for a block type from a ModelIndexRecord288.
 
-    Args:
-        model_rec: ModelIndexRecord288 instance
-        block_type_id: string ID (e.g., CatalogApplicabilityRecord466.ID)
+    The slot->type map (MODEL_BLOCK_INDEX) is shared across regions, but the
+    count-pair region starts at a region-specific slot (profile.count_region_start);
+    MODEL_BLOCK_COUNTS is expressed against the US baseline and shifted here.
 
-    Returns:
-        (offset, count) tuple, or (0, 0) if not found.
+    Returns (offset, count), or (0, 0) if not found.
     """
+    if profile is None:
+        profile = US_PROFILE
     idx = MODEL_BLOCK_INDEX.get(block_type_id)
     if idx is None:
         return (0, 0)
@@ -3365,11 +3613,12 @@ def get_model_block_section(model_rec: ModelIndexRecord288, block_type_id: str) 
     block_num = decode_block_pointer(ptr_bytes)
     file_offset = block_num * BLOCK_SIZE
 
-    # Get block count from count pairs
+    # Get block count from count pairs (count region shifted per region)
     count_info = MODEL_BLOCK_COUNTS.get(idx)
     if count_info is None:
         return (file_offset, 0)
     count_entry_idx, hi_lo = count_info
+    count_entry_idx += profile.count_region_start - US_COUNT_REGION_START
     count_bytes = arr[count_entry_idx * 4: count_entry_idx * 4 + 4]
     if hi_lo == 'hi':
         count = (count_bytes[0] << 8) | count_bytes[1]
@@ -3379,17 +3628,10 @@ def get_model_block_section(model_rec: ModelIndexRecord288, block_type_id: str) 
     return (file_offset, count)
 
 
-def iter_model_blocks(model_rec: ModelIndexRecord288, block_type_id: str) -> Generator[int, None, None]:
-    """Yield block offsets for a block type from a ModelIndexRecord288.
-
-    Args:
-        model_rec: ModelIndexRecord288 instance
-        block_type_id: string ID (e.g., CatalogApplicabilityRecord466.ID)
-
-    Yields:
-        int: absolute file offset for each block
-    """
-    offset, count = get_model_block_section(model_rec, block_type_id)
+def iter_model_blocks(model_rec: ModelIndexRecord288, block_type_id: str,
+                      profile: Optional['RegionProfile'] = None) -> Generator[int, None, None]:
+    """Yield block offsets for a block type from a ModelIndexRecord288."""
+    offset, count = get_model_block_section(model_rec, block_type_id, profile)
     for i in range(count):
         yield offset + i * BLOCK_SIZE
 
